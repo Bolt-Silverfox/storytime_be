@@ -124,17 +124,7 @@ const envSchema = z
     ),
     PASSWORDLESS_PEPPER: z.preprocess(
       (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-      z
-        .string()
-        .min(32, 'PASSWORDLESS_PEPPER must be at least 32 characters')
-        .refine(
-          (v) =>
-            !/change.?me|replace|placeholder|your[-_ ]/i.test(v) &&
-            new Set(v).size >= 16 &&
-            !isPeriodic(v),
-          'PASSWORDLESS_PEPPER must not be a placeholder',
-        )
-        .optional(),
+      z.string().optional(),
     ),
   })
   .refine(
@@ -152,14 +142,28 @@ const envSchema = z
         'Firebase credentials must be either all provided or all omitted (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)',
     },
   )
-  .refine(
-    (data) => !data.PASSWORDLESS_LOGIN_ENABLED || data.PASSWORDLESS_PEPPER,
-    {
-      message:
+  .superRefine((data, ctx) => {
+    if (!data.PASSWORDLESS_LOGIN_ENABLED) return;
+    const pepper = data.PASSWORDLESS_PEPPER;
+    const issue = (message: string) =>
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ['PASSWORDLESS_PEPPER'],
+      });
+    if (!pepper) {
+      issue(
         'PASSWORDLESS_PEPPER is required when PASSWORDLESS_LOGIN_ENABLED is true',
-      path: ['PASSWORDLESS_PEPPER'],
-    },
-  );
+      );
+    } else if (pepper.length < 32) {
+      issue('PASSWORDLESS_PEPPER must be at least 32 characters');
+    } else if (
+      /change.?me|replace|placeholder|your[-_ ]/i.test(pepper) ||
+      isPeriodic(pepper)
+    ) {
+      issue('PASSWORDLESS_PEPPER looks like a placeholder or repeating value');
+    }
+  });
 
 export type EnvConfig = z.infer<typeof envSchema>;
 

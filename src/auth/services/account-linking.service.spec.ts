@@ -88,6 +88,24 @@ describe('AccountLinkingService', () => {
     },
   );
 
+  it.each([
+    ['linkGoogle', 'linkGoogleAccountIfUnset', 'google-sub'],
+    ['linkApple', 'linkAppleAccountIfUnset', 'apple-sub'],
+  ] as const)(
+    '%s ties the write to the caller session',
+    async (method, repoFn, sub) => {
+      authRepository[repoFn].mockResolvedValue({ count: 1 });
+
+      await service[method]('user-1', 'token', 'session-9');
+
+      expect(authRepository[repoFn]).toHaveBeenCalledWith(
+        'user-1',
+        sub,
+        'session-9',
+      );
+    },
+  );
+
   describe('getLinkedAccounts', () => {
     it('should throw NotFoundException when user does not exist', async () => {
       authRepository.findUserLinkedAccountInfo.mockResolvedValue(null);

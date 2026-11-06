@@ -19,6 +19,7 @@ import {
 import {
   PASSWORDLESS_CODE_TTL_SECONDS,
   PASSWORDLESS_GLOBAL_KEY,
+  PASSWORDLESS_KNOWN_NETWORK_TTL_SECONDS,
   PASSWORDLESS_INVALID_MESSAGE,
   PASSWORDLESS_LIMITS,
   PASSWORDLESS_RESEND_AFTER_SECONDS,
@@ -110,6 +111,8 @@ export class PasswordlessService {
       ) {
         return result;
       }
+      const knownNetworkKey = this.knownNetworkKey(emailHash, ip);
+      const knownNetwork = (await this.throttle.peek(knownNetworkKey)) > 0;
       const dayNetworkKey = `pwl:req:email:${emailHash}:net:${this.hmac(ipBlock(ip))}:d`;
       const dayEmailKey = `pwl:req:email:${emailHash}:d`;
       const [dayNetwork, dayEmail, globalCount] = await Promise.all([
@@ -118,8 +121,9 @@ export class PasswordlessService {
         this.throttle.peek(PASSWORDLESS_GLOBAL_KEY),
       ]);
       if (
-        dayNetwork >= L.requestPerEmailDayPerNetwork.max ||
-        dayEmail >= L.requestPerEmailDay.max
+        !knownNetwork &&
+        (dayNetwork >= L.requestPerEmailDayPerNetwork.max ||
+          dayEmail >= L.requestPerEmailDay.max)
       ) {
         this.logger.error(
           `Passwordless daily send cap hit for email hash ${emailHash.slice(0, 12)}`,
@@ -184,6 +188,10 @@ export class PasswordlessService {
     const emailHash = this.hmac(emailNormalized);
     await this.enforceVerifyLimits(ip, emailHash);
 
+    if (await this.failedAttemptCapReached(emailHash)) {
+      throw this.invalid();
+    }
+
     const now = new Date();
     const challengeId = await this.challenges.findOpenIdByEmail(
       emailNormalized,
@@ -212,7 +220,7 @@ export class PasswordlessService {
 
     const consumedEmail = await this.challenges.consumeById(challengeId, now);
     if (!consumedEmail) throw this.invalid();
-    return this.completeLogin(consumedEmail, challengeId, guestSessionId);
+    return this.completeLogin(consumedEmail, challengeId, ip, guestSessionId);
   }
 
   async consume(
@@ -226,12 +234,13 @@ export class PasswordlessService {
       new Date(),
     );
     if (!consumedEmail) throw this.invalid();
-    return this.completeLogin(consumedEmail, undefined, guestSessionId);
+    return this.completeLogin(consumedEmail, undefined, ip, guestSessionId);
   }
 
   private async completeLogin(
     emailNormalized: string,
     challengeId: string | undefined,
+    ip: string | undefined,
     guestSessionId?: string,
   ): Promise<PasswordlessLoginResult> {
     const { user, isNewUser, newlyVerified } =
@@ -246,6 +255,15 @@ export class PasswordlessService {
     const numberOfKids = await this.authRepository.countKidsByParentId(user.id);
     const userDto = new UserDto({ ...user, numberOfKids });
     const tokenData = await this.tokenService.createTokenPair(userDto);
+
+    await this.throttle
+      .mark(
+        this.knownNetworkKey(this.hmac(emailNormalized), ip),
+        PASSWORDLESS_KNOWN_NETWORK_TTL_SECONDS,
+      )
+      .catch(() => {
+        this.logger.error('Passwordless throttle store unavailable');
+      });
 
     if (isNewUser) {
       this.eventEmitter.emit(AppEvents.USER_REGISTERED, {
@@ -344,6 +362,22 @@ export class PasswordlessService {
       if (error instanceof HttpException) throw error;
       this.logger.error('Passwordless throttle store unavailable');
     }
+  }
+
+  private async failedAttemptCapReached(emailHash: string): Promise<boolean> {
+    try {
+      return (
+        (await this.throttle.peek(`pwl:fail:email:${emailHash}`)) >=
+        PASSWORDLESS_LIMITS.failedVerifyPerEmailDay.max
+      );
+    } catch {
+      this.logger.error('Passwordless throttle store unavailable');
+      return false;
+    }
+  }
+
+  private knownNetworkKey(emailHash: string, ip: string | undefined): string {
+    return `pwl:known:${emailHash}:${this.hmac(ipBlock(ip))}`;
   }
 
   private async recordFailure(emailHash: string): Promise<void> {

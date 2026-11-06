@@ -11,6 +11,10 @@ return n
 export class PasswordlessThrottleService {
   constructor(private readonly redis: RedisService) {}
 
+  async mark(key: string, ttlSeconds: number): Promise<void> {
+    await this.redis.client.set(key, '1', 'EX', ttlSeconds);
+  }
+
   async peek(key: string): Promise<number> {
     return Number((await this.redis.client.get(key)) ?? 0);
   }

@@ -166,6 +166,11 @@ export class OAuthService {
     }
 
     if (!user) {
+      if (emailVerified !== true) {
+        throw new BadRequestException(
+          'Email not verified. Please check your inbox.',
+        );
+      }
       ({ user } = await findOrCreateParentByVerifiedEmail(
         {
           authRepository: this.authRepository,
@@ -174,7 +179,7 @@ export class OAuthService {
         {
           email,
           name,
-          emailVerified: emailVerified === true,
+          emailVerified: true,
           googleId,
           appleId,
         },

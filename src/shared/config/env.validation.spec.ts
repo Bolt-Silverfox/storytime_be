@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { Test } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { validateEnv } from './env.validation';
@@ -154,6 +156,64 @@ describe('validateEnv', () => {
       ).toThrow('Invalid environment variables');
     });
 
+    it('ignores the pepper entirely while the flag is off', () => {
+      for (const junk of ['short', 'changeme', 'a'.repeat(40)]) {
+        expect(() =>
+          validateEnv({
+            ...base,
+            PASSWORDLESS_LOGIN_ENABLED: 'false',
+            PASSWORDLESS_PEPPER: junk,
+          }),
+        ).not.toThrow();
+      }
+    });
+
+    it('names the real problem in the log instead of always saying placeholder', () => {
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation();
+      expect(() =>
+        validateEnv({
+          ...base,
+          PASSWORDLESS_LOGIN_ENABLED: 'true',
+          PASSWORDLESS_PEPPER: 'short',
+        }),
+      ).toThrow('Invalid environment variables');
+      const logged = JSON.stringify(errorSpy.mock.calls);
+      expect(logged).toContain('at least 32');
+      expect(logged).not.toContain('placeholder');
+      errorSpy.mockRestore();
+    });
+
+    it.each([16, 32, 48])(
+      'accepts every random %i byte hex pepper',
+      (bytes) => {
+        for (let i = 0; i < 2000; i++) {
+          const pepper = crypto.randomBytes(bytes).toString('hex');
+          if (pepper.length < 32) continue;
+          expect(() =>
+            validateEnv({
+              ...base,
+              PASSWORDLESS_LOGIN_ENABLED: 'true',
+              PASSWORDLESS_PEPPER: pepper,
+            }),
+          ).not.toThrow();
+        }
+      },
+    );
+
+    it('accepts random base64 peppers', () => {
+      for (let i = 0; i < 2000; i++) {
+        expect(() =>
+          validateEnv({
+            ...base,
+            PASSWORDLESS_LOGIN_ENABLED: 'true',
+            PASSWORDLESS_PEPPER: crypto.randomBytes(32).toString('base64'),
+          }),
+        ).not.toThrow();
+      }
+    });
+
     it('accepts the flag with a long pepper', () => {
       const env = validateEnv({
         ...base,
@@ -171,7 +231,6 @@ describe('validateEnv', () => {
       'your-pepper-goes-here-0000000000000000',
       'a'.repeat(40),
       'ab'.repeat(20),
-      'aabbabbaabbbababaabbbabbabaababbabab',
       'abcdefgh'.repeat(5),
       'abcdefghij1234567890'.repeat(2),
     ])('rejects the placeholder pepper %s', (placeholder) => {

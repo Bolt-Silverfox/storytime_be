@@ -50,36 +50,29 @@ export async function findOrCreateParentByVerifiedEmail(
     }
 
     const takeover = emailVerified && !existing.isEmailVerified;
-    const hardened: {
-      passwordHash?: string;
-      hasLocalPassword?: boolean;
-      pinHash?: string | null;
-      biometricsEnabled?: boolean;
-      googleId?: string | null;
-      appleId?: string | null;
-      onboardingStatus?: string;
-    } = {};
     if (takeover) {
-      await authRepository.deleteAllUserSessions(existing.id);
-      hardened.passwordHash = await passwordService.hashPassword(
+      const passwordHash = await passwordService.hashPassword(
         crypto.randomBytes(16).toString('hex'),
       );
-      hardened.hasLocalPassword = false;
-      hardened.pinHash = null;
-      hardened.biometricsEnabled = false;
-      hardened.googleId = googleId ?? null;
-      hardened.appleId = appleId ?? null;
-      await authRepository.deleteAllUserDeviceTokens(existing.id);
-      if (onboardingStatus) hardened.onboardingStatus = onboardingStatus;
+      const user = await authRepository.takeOverUnverifiedAccount(existing.id, {
+        passwordHash,
+        hasLocalPassword: false,
+        pinHash: null,
+        biometricsEnabled: false,
+        isEmailVerified: true,
+        googleId: googleId ?? null,
+        appleId: appleId ?? null,
+        ...(onboardingStatus ? { onboardingStatus } : {}),
+      });
+      return { user, isNewUser: false, newlyVerified: true };
     }
 
     const user = await authRepository.updateUserWithRelations(existing.id, {
       isEmailVerified: emailVerified ? true : existing.isEmailVerified,
       googleId: googleId || existing.googleId,
       appleId: appleId || existing.appleId,
-      ...hardened,
     });
-    return { user, isNewUser: false, newlyVerified: takeover };
+    return { user, isNewUser: false, newlyVerified: false };
   }
 
   const randomPassword = crypto.randomBytes(16).toString('hex');

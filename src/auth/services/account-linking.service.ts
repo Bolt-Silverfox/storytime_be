@@ -71,7 +71,7 @@ export class AccountLinkingService {
     };
   }
 
-  async linkGoogle(userId: string, idToken: string) {
+  async linkGoogle(userId: string, idToken: string, sessionId?: string) {
     if (!this.googleClient) {
       throw new ServiceUnavailableException('Google client not configured');
     }
@@ -111,6 +111,7 @@ export class AccountLinkingService {
       updated = await this.authRepository.linkGoogleAccountIfUnset(
         userId,
         googleId,
+        sessionId,
       );
     } catch (err) {
       if (
@@ -140,7 +141,7 @@ export class AccountLinkingService {
     };
   }
 
-  async linkApple(userId: string, idToken: string) {
+  async linkApple(userId: string, idToken: string, sessionId?: string) {
     const APPLE_CLIENT_ID = this.configService.get<string>('APPLE_CLIENT_ID');
     const APPLE_SERVICE_ID = this.configService.get<string>('APPLE_SERVICE_ID');
     const audiences = [APPLE_CLIENT_ID, APPLE_SERVICE_ID].filter(Boolean);
@@ -171,6 +172,7 @@ export class AccountLinkingService {
       updated = await this.authRepository.linkAppleAccountIfUnset(
         userId,
         appleId,
+        sessionId,
       );
     } catch (err) {
       if (

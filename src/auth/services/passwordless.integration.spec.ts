@@ -353,4 +353,72 @@ maybe('PasswordlessService against Postgres', () => {
       ),
     ).toEqual({ count: 1 });
   });
+
+  it('refuses a link tied to a session that no longer exists', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const user = await prisma.user.create({
+      data: {
+        email: `pwl-it-s-${stamp}@example.com`,
+        passwordHash: 'h',
+        isEmailVerified: true,
+      },
+    });
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        token: `pwl-it-ls-${stamp}`,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+
+    expect(
+      await authRepo.linkGoogleAccountIfUnset(
+        user.id,
+        `pwl-it-g3-${stamp}`,
+        'missing-session',
+      ),
+    ).toEqual({ count: 0 });
+    expect(
+      await authRepo.linkGoogleAccountIfUnset(
+        user.id,
+        `pwl-it-g3-${stamp}`,
+        session.id,
+      ),
+    ).toEqual({ count: 1 });
+  });
+
+  it('never lets a link in flight during a takeover attach the attacker identity', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    for (let round = 0; round < 12; round++) {
+      const stamp = `${process.pid}-${++n}`;
+      const email = `pwl-it-race-${stamp}@example.com`;
+      const attacker = await prisma.user.create({
+        data: { email, passwordHash: 'attacker-hash', isEmailVerified: false },
+      });
+      const session = await prisma.session.create({
+        data: {
+          userId: attacker.id,
+          token: `pwl-it-rs-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+      const { code } = await issue(email);
+
+      await Promise.all([
+        service.verify(email, code, '27.0.0.1'),
+        authRepo.linkGoogleAccountIfUnset(
+          attacker.id,
+          `pwl-it-atk-${stamp}`,
+          session.id,
+        ),
+      ]);
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: attacker.id },
+      });
+      expect(after.isEmailVerified).toBe(true);
+      expect(after.googleId).toBeNull();
+    }
+  });
 });

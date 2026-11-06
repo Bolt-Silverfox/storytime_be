@@ -13,6 +13,7 @@ import { NotificationPreferenceService } from '@/notification/services/notificat
 import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
+import appleSigninAuth from 'apple-signin-auth';
 
 // Mock google-auth-library
 jest.mock('google-auth-library', () => ({
@@ -53,8 +54,7 @@ describe('OAuthService', () => {
       findUserByEmail: jest.fn(),
       updateUser: jest.fn(),
       updateUserWithRelations: jest.fn(),
-      deleteAllUserSessions: jest.fn(),
-      deleteAllUserDeviceTokens: jest.fn(),
+      takeOverUnverifiedAccount: jest.fn(),
       createUser: jest.fn(),
       findAvatarByUrl: jest.fn(),
       createAvatar: jest.fn(),
@@ -159,6 +159,10 @@ describe('OAuthService', () => {
         });
         authRepository.findUserByGoogleId.mockResolvedValue(null);
         authRepository.findUserByEmail.mockResolvedValue(attackerOwned);
+        authRepository.takeOverUnverifiedAccount.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
         authRepository.updateUserWithRelations.mockResolvedValue({
           ...attackerOwned,
           isEmailVerified: true,
@@ -171,35 +175,28 @@ describe('OAuthService', () => {
         });
       });
 
-      it('revokes every existing session and replaces the password before verifying', async () => {
+      it('revokes sessions, device tokens and credentials in one repository call, hashing the password first', async () => {
         await service.loginWithGoogleIdToken('valid-token');
 
-        expect(authRepository.deleteAllUserSessions).toHaveBeenCalledWith(
-          'victim-account',
-        );
-        const update = authRepository.updateUserWithRelations.mock.calls[0];
-        expect(update[0]).toBe('victim-account');
-        expect(update[1]).toMatchObject({
+        const call = authRepository.takeOverUnverifiedAccount.mock.calls[0];
+        expect(call[0]).toBe('victim-account');
+        expect(call[1]).toMatchObject({
           isEmailVerified: true,
           hasLocalPassword: false,
+          passwordHash: 'rotated-hash',
           googleId: 'google-victim',
           appleId: null,
           pinHash: null,
           biometricsEnabled: false,
         });
-        expect(authRepository.deleteAllUserDeviceTokens).toHaveBeenCalledWith(
-          'victim-account',
-        );
-        expect(update[1].passwordHash).toBeDefined();
-        expect(update[1].passwordHash).not.toBe('attacker-chosen-hash');
         expect(
-          authRepository.deleteAllUserSessions.mock.invocationCallOrder[0],
+          passwordService.hashPassword.mock.invocationCallOrder[0],
         ).toBeLessThan(
-          authRepository.updateUserWithRelations.mock.invocationCallOrder[0],
+          authRepository.takeOverUnverifiedAccount.mock.invocationCallOrder[0],
         );
       });
 
-      it('drops a Google id the attacker linked earlier when the owner arrives through Google', async () => {
+      it('drops ids the attacker linked earlier when the owner arrives through Google', async () => {
         authRepository.findUserByEmail.mockResolvedValue({
           ...attackerOwned,
           googleId: 'attacker-google-sub',
@@ -207,7 +204,7 @@ describe('OAuthService', () => {
         });
         await service.loginWithGoogleIdToken('valid-token');
 
-        const data = authRepository.updateUserWithRelations.mock.calls[0][1];
+        const data = authRepository.takeOverUnverifiedAccount.mock.calls[0][1];
         expect(data.googleId).toBe('google-victim');
         expect(data.appleId).toBeNull();
       });
@@ -219,10 +216,83 @@ describe('OAuthService', () => {
         });
         await service.loginWithGoogleIdToken('valid-token');
 
-        expect(authRepository.deleteAllUserSessions).not.toHaveBeenCalled();
+        expect(authRepository.takeOverUnverifiedAccount).not.toHaveBeenCalled();
         expect(
           authRepository.updateUserWithRelations.mock.calls[0][1],
         ).not.toHaveProperty('passwordHash');
+      });
+    });
+
+    describe('provider reports the email as unverified', () => {
+      const existing = {
+        ...mockUser,
+        id: 'verified-owner',
+        email: 'owner@example.com',
+        isEmailVerified: true,
+        googleId: 'owner-google-sub',
+      };
+
+      beforeEach(() => {
+        authRepository.findUserByGoogleId.mockResolvedValue(null);
+        authRepository.findUserByAppleId.mockResolvedValue(null);
+        authRepository.findUserByEmail.mockResolvedValue(existing);
+      });
+
+      const expectUntouched = () => {
+        expect(authRepository.findUserByEmail).not.toHaveBeenCalled();
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+        expect(authRepository.takeOverUnverifiedAccount).not.toHaveBeenCalled();
+        expect(authRepository.createUser).not.toHaveBeenCalled();
+        expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      };
+
+      it('refuses Google without matching, linking or issuing tokens', async () => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'attacker-sub',
+            email: 'owner@example.com',
+            email_verified: false,
+          }),
+        });
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expectUntouched();
+      });
+
+      it.each(['false', false, undefined])(
+        'refuses Apple when email_verified is %p',
+        async (flag) => {
+          (appleSigninAuth.verifyIdToken as jest.Mock).mockResolvedValue({
+            sub: 'attacker-apple',
+            email: 'owner@example.com',
+            email_verified: flag,
+          });
+
+          await expect(
+            service.loginWithAppleIdToken('valid-token'),
+          ).rejects.toBeInstanceOf(BadRequestException);
+          expectUntouched();
+        },
+      );
+
+      it('still accepts Apple when email_verified is the string true', async () => {
+        (appleSigninAuth.verifyIdToken as jest.Mock).mockResolvedValue({
+          sub: 'owner-apple',
+          email: 'owner@example.com',
+          email_verified: 'true',
+        });
+        authRepository.updateUserWithRelations.mockResolvedValue(existing);
+        authRepository.countKidsByParentId.mockResolvedValue(0);
+        tokenService.createTokenPair.mockResolvedValue({
+          jwt: 'j',
+          refreshToken: 'r',
+        });
+
+        await expect(
+          service.loginWithAppleIdToken('valid-token'),
+        ).resolves.toBeDefined();
       });
     });
   });

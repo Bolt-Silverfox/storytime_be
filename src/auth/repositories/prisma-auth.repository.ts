@@ -197,30 +197,37 @@ export class PrismaAuthRepository implements IAuthRepository {
   async linkGoogleAccountIfUnset(
     userId: string,
     googleId: string,
+    sessionId?: string,
   ): Promise<{ count: number }> {
-    return this.prisma.user.updateMany({
-      where: {
-        id: userId,
-        googleId: null,
-        isDeleted: false,
-        isEmailVerified: true,
-      },
-      data: { googleId },
-    });
+    return this.linkProviderIfUnset(userId, 'googleId', googleId, sessionId);
   }
 
   async linkAppleAccountIfUnset(
     userId: string,
     appleId: string,
+    sessionId?: string,
   ): Promise<{ count: number }> {
-    return this.prisma.user.updateMany({
-      where: {
-        id: userId,
-        appleId: null,
-        isDeleted: false,
-        isEmailVerified: true,
-      },
-      data: { appleId },
+    return this.linkProviderIfUnset(userId, 'appleId', appleId, sessionId);
+  }
+
+  private linkProviderIfUnset(
+    userId: string,
+    field: 'googleId' | 'appleId',
+    value: string,
+    sessionId?: string,
+  ): Promise<{ count: number }> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      return tx.user.updateMany({
+        where: {
+          id: userId,
+          [field]: null,
+          isDeleted: false,
+          isEmailVerified: true,
+          ...(sessionId ? { auth: { some: { id: sessionId } } } : {}),
+        },
+        data: { [field]: value },
+      });
     });
   }
 
@@ -271,6 +278,22 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async deleteAllUserDeviceTokens(userId: string): Promise<void> {
     await this.prisma.deviceToken.deleteMany({ where: { userId } });
+  }
+
+  async takeOverUnverifiedAccount(
+    id: string,
+    data: Parameters<IAuthRepository['takeOverUnverifiedAccount']>[1],
+  ): Promise<UserWithProfileAndAvatar> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR UPDATE`;
+      await tx.session.deleteMany({ where: { userId: id } });
+      await tx.deviceToken.deleteMany({ where: { userId: id } });
+      return tx.user.update({
+        where: { id },
+        data: data as Parameters<typeof tx.user.update>[0]['data'],
+        include: { profile: true, avatar: true },
+      });
+    });
   }
 
   async deleteOtherSessions(

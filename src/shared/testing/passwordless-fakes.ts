@@ -206,6 +206,14 @@ export class InMemoryAuthRepository {
     return Promise.resolve();
   };
 
+  takeOverUnverifiedAccount = (id: string, data: Partial<User>) => {
+    const u = this.users.find((x) => x.id === id)!;
+    this.sessions = this.sessions.filter((s) => s.userId !== id);
+    this.deviceTokens = this.deviceTokens.filter((t) => t.userId !== id);
+    Object.assign(u, data);
+    return Promise.resolve(u);
+  };
+
   findUserByGoogleId = (googleId: string) =>
     Promise.resolve(this.users.find((u) => u.googleId === googleId) ?? null);
 

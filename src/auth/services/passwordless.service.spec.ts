@@ -387,19 +387,34 @@ describe('PasswordlessService', () => {
       expect(repo.rows).toHaveLength(0);
     });
 
-    it('limits verification to 10 tries per email per 15 minutes with 429', async () => {
+    it('lets the owner sign in from another network while a stranger is throttled, without moving the clock', async () => {
       const { service, captured } = build();
-      await service.request('a@example.com', '1.1.1.1');
       const results: unknown[] = [];
-      for (let i = 0; i < 11; i++) {
+      for (let i = 0; i < 22; i++) {
         results.push(
           await service
-            .verify('a@example.com', wrongCode(captured[0].code), `20.0.0.${i}`)
+            .verify('owner@example.com', '123456', '66.66.66.6')
             .catch((e: HttpException) => e.getStatus()),
         );
       }
-      expect(results.slice(0, 10).every((r) => r === 400)).toBe(true);
-      expect(results[10]).toBe(429);
+      expect(results.slice(0, 20).every((r) => r === 400)).toBe(true);
+      expect(results[21]).toBe(429);
+
+      await service.request('owner@example.com', '203.0.113.5');
+      await expect(
+        service.verify('owner@example.com', captured[0].code, '203.0.113.5'),
+      ).resolves.toBeDefined();
+    });
+
+    it('still throttles one email across many networks at a high ceiling', async () => {
+      const { service } = build();
+      let last: unknown;
+      for (let i = 0; i < 101; i++) {
+        last = await service
+          .verify('a@example.com', '123456', `20.${i}.0.1`)
+          .catch((e: HttpException) => e.getStatus());
+      }
+      expect(last).toBe(429);
     });
 
     it('limits verify and consume together to 20 per IP per 15 minutes with 429', async () => {
@@ -762,14 +777,14 @@ describe('PasswordlessService', () => {
       expect(captured[10].email).toBe('owner@example.com');
     });
 
-    it('applies a 30 per day ceiling per address across networks', async () => {
+    it('applies a 60 per day ceiling per address across networks', async () => {
       const errorSpy = quiet();
       const { service, captured } = build();
-      for (let i = 0; i < 33; i++) {
+      for (let i = 0; i < 63; i++) {
         await service.request('target@example.com', `10.${i}.0.1`);
         jest.advanceTimersByTime(13 * 60_000);
       }
-      expect(captured).toHaveLength(30);
+      expect(captured).toHaveLength(60);
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('daily'));
     });
 
@@ -807,7 +822,7 @@ describe('PasswordlessService', () => {
       );
     });
 
-    it('lets the correct code win after 20 failed guesses against real challenges, and logs the cap', async () => {
+    it('rejects further code verifies after 20 failed guesses but the link still signs in', async () => {
       const errorSpy = quiet();
       const { service, captured } = build();
       for (let round = 0; round < 4; round++) {
@@ -829,13 +844,58 @@ describe('PasswordlessService', () => {
       );
 
       await service.request('target@example.com', '1.1.1.1');
+      const latest = captured[captured.length - 1];
+      await expectGeneric(
+        service.verify('target@example.com', latest.code, '41.0.0.1'),
+      );
       await expect(
+        service.consume(latest.linkToken, '41.0.0.1'),
+      ).resolves.toBeDefined();
+    });
+
+    it('does not count a wrong code against the address when the challenge turns out to be unusable', async () => {
+      quiet();
+      const { service, captured, repo, redis } = build();
+      await service.request('target@example.com', '1.1.1.1');
+      jest.spyOn(repo, 'recordAttempt').mockResolvedValueOnce(null);
+
+      await expectGeneric(
         service.verify(
           'target@example.com',
-          captured[captured.length - 1].code,
-          '41.0.0.1',
+          wrongCode(captured[0].code),
+          '40.0.0.1',
         ),
-      ).resolves.toBeDefined();
+      );
+
+      const key = `pwl:fail:email:${nodeCrypto.createHmac('sha256', PEPPER).update('target@example.com').digest('hex')}`;
+      expect(await redis.client.get(key)).toBeNull();
+    });
+
+    it('keeps the daily send backstop from being burned by strangers on a network the owner already signed in from', async () => {
+      quiet();
+      const { service, captured } = build();
+      await service.request('owner@example.com', '203.0.113.5');
+      await service.verify(
+        'owner@example.com',
+        captured[0].code,
+        '203.0.113.5',
+      );
+      jest.advanceTimersByTime(13 * 60_000);
+
+      for (let net = 0; net < 8; net++) {
+        for (let i = 0; i < 10; i++) {
+          await service.request('owner@example.com', `10.${net}.0.1`);
+          jest.advanceTimersByTime(13 * 60_000);
+        }
+      }
+      const before = captured.length;
+      jest.advanceTimersByTime(61 * 60_000);
+      await service.request('owner@example.com', '198.51.100.9');
+      expect(captured).toHaveLength(before);
+
+      jest.advanceTimersByTime(61 * 60_000);
+      await service.request('owner@example.com', '203.0.113.77');
+      expect(captured).toHaveLength(before + 1);
     });
 
     it('lets the right code through before the cap is reached', async () => {

@@ -115,10 +115,12 @@ export interface IAuthRepository {
   linkGoogleAccountIfUnset(
     userId: string,
     googleId: string,
+    sessionId?: string,
   ): Promise<{ count: number }>;
   linkAppleAccountIfUnset(
     userId: string,
     appleId: string,
+    sessionId?: string,
   ): Promise<{ count: number }>;
 
   // Session operations
@@ -137,6 +139,19 @@ export interface IAuthRepository {
   deleteSession(id: string): Promise<void>;
   deleteAllUserSessions(userId: string): Promise<void>;
   deleteAllUserDeviceTokens(userId: string): Promise<void>;
+  takeOverUnverifiedAccount(
+    id: string,
+    data: Partial<{
+      passwordHash: string;
+      hasLocalPassword: boolean;
+      pinHash: string | null;
+      biometricsEnabled: boolean;
+      isEmailVerified: boolean;
+      onboardingStatus: string;
+      googleId: string | null;
+      appleId: string | null;
+    }>,
+  ): Promise<UserWithProfileAndAvatar>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
 
   // Security / IP tracking operations

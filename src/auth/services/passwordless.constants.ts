@@ -13,11 +13,13 @@ export const PASSWORDLESS_LIMITS = {
   requestPerEmailHour: { windowMs: HOUR_MS, max: 5 },
   requestPerIp: { windowMs: 15 * MINUTE_MS, max: 10 },
   requestPerEmailDayPerNetwork: { windowMs: 24 * HOUR_MS, max: 10 },
-  requestPerEmailDay: { windowMs: 24 * HOUR_MS, max: 30 },
+  requestPerEmailDay: { windowMs: 24 * HOUR_MS, max: 60 },
   requestGlobal: { windowMs: HOUR_MS, max: 1000 },
   verifyPerIp: { windowMs: 15 * MINUTE_MS, max: 20 },
-  verifyPerEmail: { windowMs: 15 * MINUTE_MS, max: 10 },
+  verifyPerEmail: { windowMs: 15 * MINUTE_MS, max: 100 },
   failedVerifyPerEmailDay: { windowMs: 24 * HOUR_MS, max: 20 },
 } as const;
 
 export const PASSWORDLESS_GLOBAL_KEY = 'pwl:req:global';
+
+export const PASSWORDLESS_KNOWN_NETWORK_TTL_SECONDS = 90 * 24 * 60 * 60;
