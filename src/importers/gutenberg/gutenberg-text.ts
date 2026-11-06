@@ -315,9 +315,9 @@ export function processGutenbergText(
     if (inContents) {
       const labels = lines.map((l) => contentsLabel(matchForm(l)));
       const isList = labels.every((x) => x !== null);
-      const repeats = isList && labels.some((x) => seenLabels.has(x as string));
+      const repeats = isList && labels.some((x) => seenLabels.has(x));
       if (isList && !repeats) {
-        for (const x of labels) seenLabels.add(x as string);
+        for (const x of labels) seenLabels.add(x);
         inContents = 'in-list';
         continue;
       }
@@ -329,7 +329,7 @@ export function processGutenbergText(
     if (/^contents\b/i.test(m) && /^contents\.?$/i.test(matchForm(lines[0]))) {
       const rest = lines.slice(1).map((l) => contentsLabel(matchForm(l)));
       if (rest.every((x) => x !== null)) {
-        for (const x of rest) seenLabels.add(x as string);
+        for (const x of rest) seenLabels.add(x);
         inContents = rest.length ? 'in-list' : 'expect-list';
         notes.add('table of contents removed');
         continue;

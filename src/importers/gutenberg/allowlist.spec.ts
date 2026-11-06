@@ -81,6 +81,35 @@ describe('allow-list rules', () => {
     ).toThrow(/pre-1931|published/i);
   });
 
+  it.each([NaN, Infinity, 1900.5])(
+    'a translator death year of %s is needs-review, never approved',
+    (deathYear) => {
+      const r = effectiveStatus(
+        base({ translator: { name: 'H', deathYear } }),
+        NOW,
+      );
+      expect(r.status).toBe('needs-review');
+    },
+  );
+
+  it.each([0, 13, 2.5, NaN])(
+    'validateAllowList rejects difficultyLevel %s',
+    (difficultyLevel) => {
+      expect(() => validateAllowList([base({ difficultyLevel })])).toThrow(
+        /difficulty/i,
+      );
+    },
+  );
+
+  it.each([undefined, 1, 12])(
+    'validateAllowList accepts difficultyLevel %s',
+    (difficultyLevel) => {
+      expect(() =>
+        validateAllowList([base({ difficultyLevel })]),
+      ).not.toThrow();
+    },
+  );
+
   it('violence flag alone does not block import but yields an editor note', () => {
     const r = effectiveStatus(base({ flags: ['violence'] }), NOW);
     expect(r).toEqual({

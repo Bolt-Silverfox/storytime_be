@@ -28,6 +28,12 @@ export function effectiveStatus(
         reason: `translator ${e.translator.name}: death year unknown, public-domain status unconfirmed`,
       };
     }
+    if (!Number.isInteger(d)) {
+      return {
+        status: 'needs-review',
+        reason: `translator ${e.translator.name}: death year is not a whole year, public-domain status unconfirmed`,
+      };
+    }
     // life+70: public domain from 1 January of (death year + 71).
     if (now.getUTCFullYear() < d + 71) {
       return {
@@ -61,6 +67,16 @@ export function validateAllowList(list: AllowListEntry[]): void {
       e.ageMin > e.ageMax
     ) {
       throw new Error(`${where}: invalid age band`);
+    }
+    if (
+      e.difficultyLevel !== undefined &&
+      (!Number.isInteger(e.difficultyLevel) ||
+        e.difficultyLevel < 1 ||
+        e.difficultyLevel > 12)
+    ) {
+      throw new Error(
+        `${where}: difficultyLevel must be a whole number 1 to 12`,
+      );
     }
     const pub = [
       e.title,

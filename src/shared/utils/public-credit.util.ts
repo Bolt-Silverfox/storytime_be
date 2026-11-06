@@ -64,7 +64,7 @@ function walk(
   // Cycle guard: provisional answer is the original object.
   seen.set(value, value);
 
-  let result: unknown = value;
+  let result: unknown;
   const toJSON = (value as { toJSON?: unknown }).toJSON;
   if (typeof toJSON === 'function') {
     let json: unknown;
