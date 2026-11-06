@@ -458,6 +458,97 @@ describe('processGutenbergText hardening', () => {
       expect(r.notes.join(' ')).not.toMatch(/table of contents/);
     });
 
+    const AMBIGUOUS = { ok: false, reason: 'table-of-contents-ambiguous' };
+    const long = 'x'.repeat(120);
+
+    it.each([
+      [
+        'a numbered rhyme after a roman list',
+        `CONTENTS\n\nI. Rhymes\n\n1. One, two, buckle my shoe;\n2. Three, four, knock at the door;\n\n${STORY}`,
+      ],
+      [
+        'arabic entries then a chapter heading',
+        `CONTENTS\n\n1. The Dark Wood\n2. The Lantern\n\nCHAPTER I. THE DARK WOOD\n\n${STORY}`,
+      ],
+      [
+        'a numbered list after the contents list',
+        `CONTENTS\n\nI. A\n\nII. B\n\n1) Take the lantern.\n2) Go home.\n\n${STORY}`,
+      ],
+      [
+        'repeated chapter labels under parts',
+        `CONTENTS\n\nPART I.\n\nI. The Hill\nII. Home\n\nPART II.\n\nI. The Sea\n\n${STORY}`,
+      ],
+      [
+        'an all-capitals tail',
+        `CONTENTS\n\nI. A\n\nII. B\n\nAPPENDIX\nNOTES\n\n${STORY}`,
+      ],
+      [
+        'a later entry over 100 characters',
+        `CONTENTS\n\nI. A\n\nII. B\n\nIII. ${long}\n\n${STORY}`,
+      ],
+      [
+        'a first entry over 100 characters',
+        `CONTENTS\n\nI. ${long}\n\n${STORY}`,
+      ],
+      [
+        'a list that skips an ordinal',
+        `CONTENTS\n\nI. A\n\nIII. C\n\n${STORY}`,
+      ],
+      [
+        'dotted page numbers',
+        `CONTENTS\nChapter I ........ 3\nChapter II ....... 9\n\n${STORY}`,
+      ],
+      [
+        'entries without a full stop',
+        `CONTENTS\nI The Dark Wood\nII The Lantern\n\n${STORY}`,
+      ],
+      [
+        'dash after the numeral',
+        `CONTENTS\nI.\u2014The Dark Wood\nII.\u2014The Lantern\n\n${STORY}`,
+      ],
+      [
+        'an over-long entry in the same paragraph',
+        `CONTENTS\nI. A\nII. ${long}\n\n${STORY}`,
+      ],
+      [
+        'Contents: heading with prose',
+        `Contents:\nThe basket spilled.\n\n${STORY}`,
+      ],
+      [
+        'TABLE OF CONTENTS with prose',
+        `TABLE OF CONTENTS\nThe basket spilled.\n\n${STORY}`,
+      ],
+      ['a contents heading with nothing after it', 'CONTENTS'],
+    ])('is ambiguous, never silently shortened: %s', (_n, body) => {
+      expect(contentOf(body)).toEqual(AMBIGUOUS);
+    });
+
+    it.each([
+      ['Contents:', 'I. A\nII. B'],
+      ['TABLE OF CONTENTS', 'I. A\nII. B'],
+      ['CONTENTS.', '1. A\n2. B'],
+      ['contents', 'I. A\nII. B'],
+    ])('removes a %s block with a clean list', (heading, list) => {
+      expect(contentOf(`${heading}\n${list}\n\n${STORY}`)).toBe(STORY);
+    });
+
+    it('removes a clean list that follows the heading in later paragraphs', () => {
+      expect(contentOf(`TABLE OF CONTENTS\n\nI. A\n\nII. B\n\n${STORY}`)).toBe(
+        STORY,
+      );
+    });
+
+    it('keeps numbered stanza paragraphs when there is no contents heading', () => {
+      const body = `I.\n\nII.\n\n${STORY}`;
+      expect(contentOf(body)).toContain(STORY);
+      expect(contentOf(body)).toContain('II.');
+    });
+
+    it('keeps CONTENTS inside a sentence and short dialogue lines', () => {
+      const body = `"Contents under pressure," she said.\n\n"Yes."\n"No."\n\n${STORY}`;
+      expect(contentOf(body)).toContain('Contents under pressure');
+    });
+
     it.each([
       "Transcriber's Note: spelling kept as printed.\n\nMore about the edition.",
       "Transcriber's Notes\n\nMore about the edition.",

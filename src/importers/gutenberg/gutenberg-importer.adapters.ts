@@ -83,6 +83,7 @@ export class PrismaStoryStore implements StoryStorePort {
     const s = await this.prisma.story.findFirst({
       where: { contentHash: hash },
       select: { id: true, isDeleted: true },
+      orderBy: [{ isDeleted: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
     return s ?? null;
   }

@@ -139,8 +139,6 @@ export interface RunOptions {
   allowUnverifiedIds?: boolean;
 }
 
-const DELETED_REASON = 'deleted story holds this source id';
-
 const urlFor = (id: string) => `https://www.gutenberg.org/ebooks/${id}`;
 
 export function buildAttribution(e: AllowListEntry): string {
@@ -246,7 +244,11 @@ export class GutenbergImporter {
     const hash = contentHashOf(processed.content);
     const existing = await this.deps.store.findBySource(entry.ebookId);
     if (existing?.isDeleted) {
-      return { ...withNotes, outcome: 'needs-review', reason: DELETED_REASON };
+      return {
+        ...withNotes,
+        outcome: 'needs-review',
+        reason: 'deleted story holds this source id',
+      };
     }
     if (existing) {
       if (existing.contentHash && existing.contentHash !== hash) {
@@ -263,7 +265,11 @@ export class GutenbergImporter {
     }
     const dupe = await this.deps.store.findByHash(hash);
     if (dupe?.isDeleted) {
-      return { ...withNotes, outcome: 'needs-review', reason: DELETED_REASON };
+      return {
+        ...withNotes,
+        outcome: 'needs-review',
+        reason: 'deleted story holds this content hash',
+      };
     }
     if (dupe) {
       return {

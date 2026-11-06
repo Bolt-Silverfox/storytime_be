@@ -365,7 +365,7 @@ describe('GutenbergImporter', () => {
     expect(r.items[0]).toEqual(
       expect.objectContaining({
         outcome: 'needs-review',
-        reason: 'deleted story holds this source id',
+        reason: 'deleted story holds this content hash',
       }),
     );
   });

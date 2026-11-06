@@ -55,6 +55,7 @@ describe('PrismaStoryStore deleted rows', () => {
     expect(findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         select: expect.objectContaining({ isDeleted: true }),
+        orderBy: [{ isDeleted: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
       }),
     );
   });
