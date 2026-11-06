@@ -415,6 +415,61 @@ describe('processGutenbergText hardening', () => {
     });
   });
 
+  describe('contents and transcriber notes', () => {
+    const contentOf = (body: string) => {
+      const r = processGutenbergText(wrap(body), plain());
+      return r.ok ? r.content : r;
+    };
+
+    it('removes a table of contents spread over several paragraphs', () => {
+      const out = contentOf(
+        `CONTENTS\n\nI. The Dark Wood\n\nII. The Lantern\n\nIII. Home\n\nCHAPTER I. THE DARK WOOD\n\n${STORY}`,
+      );
+      expect(out).toBe(`Chapter I. The Dark Wood\n\n${STORY}`);
+    });
+
+    it('removes a one-paragraph contents block that starts with the heading', () => {
+      const out = contentOf(
+        `CONTENTS\nI. The Dark Wood\nII. The Lantern\n\nCHAPTER I. THE DARK WOOD\n\n${STORY}`,
+      );
+      expect(out).toBe(`Chapter I. The Dark Wood\n\n${STORY}`);
+    });
+
+    it('keeps a story paragraph that follows the contents list', () => {
+      const out = contentOf(
+        `CONTENTS\n\nI. The Dark Wood\n\nII. The Lantern\n\nI went into the wood.\n\n${STORY}`,
+      );
+      expect(out).toBe(`I went into the wood.\n\n${STORY}`);
+    });
+
+    it('fails closed when the paragraph after a contents heading is not a list', () => {
+      expect(contentOf(`CONTENTS\n\nThe Fox\n\n${STORY}`)).toEqual({
+        ok: false,
+        reason: 'table-of-contents-ambiguous',
+      });
+    });
+
+    it('never drops a story paragraph that merely starts with the word Contents', () => {
+      const sentence = 'Contents of the basket spilled across the floor.';
+      const r = processGutenbergText(wrap(`${sentence}\n\n${STORY}`), plain());
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(r.content).toContain(sentence);
+      expect(r.notes.join(' ')).not.toMatch(/table of contents/);
+    });
+
+    it.each([
+      "Transcriber's Note: spelling kept as printed.\n\nMore about the edition.",
+      "Transcriber's Notes\n\nMore about the edition.",
+      'TRANSCRIBER NOTE: Page numbers removed.',
+    ])('an unbracketed transcriber note fails closed: %s', (note) => {
+      expect(contentOf(`${note}\n\n${STORY}`)).toEqual({
+        ok: false,
+        reason: 'transcriber-note-unbracketed',
+      });
+    });
+  });
+
   describe('performance (linear scaling, no quadratic regex)', () => {
     const FACTOR = 8;
     const RUNS = 5;

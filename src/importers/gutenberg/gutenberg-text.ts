@@ -14,6 +14,7 @@ export type ProcessFailure =
   | 'unlisted-translator'
   | 'copyright-signal'
   | 'transcriber-note-unbracketed'
+  | 'table-of-contents-ambiguous'
   | 'residual-reference'
   | 'empty-after-clean'
   | 'oversized';
@@ -185,6 +186,14 @@ const titleCase = (s: string): string =>
     )
     .join(' ');
 
+const CONTENTS_ENTRY =
+  /^(?:(?:chapter|book|part|section|story)\s+)?([ivxlcdm]+|\d+)[.:)](?:\s|$)/i;
+
+const contentsLabel = (line: string): string | null => {
+  const m = CONTENTS_ENTRY.exec(line);
+  return m && line.length <= 100 ? m[1].toLowerCase() : null;
+};
+
 const HEADING = /^(chapter|book|part)\s+([ivxlcdm\d]+)\b\.?\s*(.*)$/i;
 
 /** Linear removal of [Illustration ...]; an unclosed one runs to the end. */
@@ -290,7 +299,8 @@ export function processGutenbergText(
     'hard line wraps rejoined into paragraphs',
   ]);
   const out: string[] = [];
-  let skipNext = false;
+  let inContents: 'expect-list' | 'in-list' | null = null;
+  const seenLabels = new Set<string>();
   let noteDepth = 0;
   const titleLc = matchForm(entry.title).toLowerCase();
 
@@ -302,30 +312,36 @@ export function processGutenbergText(
       noteDepth += count(m, '[') - count(m, ']');
       continue;
     }
-    if (skipNext) {
-      skipNext = false;
-      continue;
+    if (inContents) {
+      const labels = lines.map((l) => contentsLabel(matchForm(l)));
+      const isList = labels.every((x) => x !== null);
+      const repeats = isList && labels.some((x) => seenLabels.has(x as string));
+      if (isList && !repeats) {
+        for (const x of labels) seenLabels.add(x as string);
+        inContents = 'in-list';
+        continue;
+      }
+      if (inContents === 'expect-list') {
+        return { ok: false, reason: 'table-of-contents-ambiguous' };
+      }
+      inContents = null;
     }
-    if (/^contents\.?$/i.test(m)) {
-      skipNext = true;
-      notes.add('table of contents removed');
-      continue;
-    }
-    if (/^contents\b/i.test(m)) {
-      notes.add('table of contents removed');
-      continue;
+    if (/^contents\b/i.test(m) && /^contents\.?$/i.test(matchForm(lines[0]))) {
+      const rest = lines.slice(1).map((l) => contentsLabel(matchForm(l)));
+      if (rest.every((x) => x !== null)) {
+        for (const x of rest) seenLabels.add(x as string);
+        inContents = rest.length ? 'in-list' : 'expect-list';
+        notes.add('table of contents removed');
+        continue;
+      }
     }
     if (/^\[\s*transcriber/i.test(m)) {
       noteDepth = Math.max(0, count(m, '[') - count(m, ']'));
       notes.add('transcriber and producer notes removed');
       continue;
     }
-    if (/^transcriber['’]?s?\s+notes?:?$/i.test(m)) {
-      return { ok: false, reason: 'transcriber-note-unbracketed' };
-    }
     if (/^transcriber['’]?s?\s+notes?\b/i.test(m)) {
-      notes.add('transcriber and producer notes removed');
-      continue;
+      return { ok: false, reason: 'transcriber-note-unbracketed' };
     }
     if (BOILERPLATE_START.test(m)) {
       notes.add('transcriber and producer notes removed');
