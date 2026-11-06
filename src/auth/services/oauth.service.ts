@@ -186,7 +186,14 @@ export class OAuthService {
       ));
     }
 
-    // 4. Handle avatar from OAuth picture
+    // 4. Must be verified
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+
+    // 5. Handle avatar from OAuth picture
     if (picture) {
       let avatar = await this.authRepository.findAvatarByUrl(picture);
 
@@ -203,13 +210,6 @@ export class OAuthService {
           avatarId: avatar.id,
         });
       }
-    }
-
-    // 5. Must be verified
-    if (!user.isEmailVerified) {
-      throw new BadRequestException(
-        'Email not verified. Please check your inbox.',
-      );
     }
 
     // 6. Build response

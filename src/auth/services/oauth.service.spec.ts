@@ -277,6 +277,30 @@ describe('OAuthService', () => {
         },
       );
 
+      it('writes nothing, not even an avatar, for an unverified account found by provider id', async () => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'known-sub',
+            email: 'owner@example.com',
+            email_verified: true,
+            picture: 'https://img.example/a.png',
+          }),
+        });
+        authRepository.findUserByGoogleId.mockResolvedValue({
+          ...existing,
+          isEmailVerified: false,
+          avatarId: null,
+        });
+        authRepository.findAvatarByUrl.mockResolvedValue(null);
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+
+        expect(authRepository.createAvatar).not.toHaveBeenCalled();
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+      });
+
       it('still accepts Apple when email_verified is the string true', async () => {
         (appleSigninAuth.verifyIdToken as jest.Mock).mockResolvedValue({
           sub: 'owner-apple',

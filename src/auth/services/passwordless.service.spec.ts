@@ -853,6 +853,56 @@ describe('PasswordlessService', () => {
       ).resolves.toBeDefined();
     });
 
+    it('compares at most 20 guesses per address per day even when verifies run concurrently', async () => {
+      quiet();
+      const { service, captured } = build();
+      const compare = nodeCrypto.timingSafeEqual as unknown as jest.Mock;
+      for (const used of [4, 4, 4, 4, 3]) {
+        await service.request('target@example.com', '1.1.1.1');
+        const real = captured[captured.length - 1].code;
+        for (let i = 0; i < used; i++) {
+          await expectGeneric(
+            service.verify(
+              'target@example.com',
+              wrongCode(real),
+              `40.0.${i}.1`,
+            ),
+          );
+        }
+        jest.advanceTimersByTime(16 * 60_000);
+      }
+      await service.request('target@example.com', '1.1.1.1');
+      const real = captured[captured.length - 1].code;
+      compare.mockClear();
+
+      await Promise.all(
+        [0, 1, 2, 3, 4].map((i) =>
+          service
+            .verify('target@example.com', wrongCode(real), `41.0.${i}.1`)
+            .catch(() => undefined),
+        ),
+      );
+
+      expect(compare).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not exempt a network that is only known for another address', async () => {
+      quiet();
+      const { service, captured } = build();
+      await service.request('a@example.com', '203.0.113.5');
+      await service.verify('a@example.com', captured[0].code, '203.0.113.5');
+      jest.advanceTimersByTime(13 * 60_000);
+
+      for (let i = 0; i < 12; i++) {
+        await service.request('b@example.com', '203.0.113.5');
+        jest.advanceTimersByTime(13 * 60_000);
+      }
+
+      expect(captured.filter((c) => c.email === 'b@example.com')).toHaveLength(
+        10,
+      );
+    });
+
     it('does not count a wrong code against the address when the challenge turns out to be unusable', async () => {
       quiet();
       const { service, captured, repo, redis } = build();

@@ -188,10 +188,6 @@ export class PasswordlessService {
     const emailHash = this.hmac(emailNormalized);
     await this.enforceVerifyLimits(ip, emailHash);
 
-    if (await this.failedAttemptCapReached(emailHash)) {
-      throw this.invalid();
-    }
-
     const now = new Date();
     const challengeId = await this.challenges.findOpenIdByEmail(
       emailNormalized,
@@ -210,11 +206,13 @@ export class PasswordlessService {
       this.logger.warn(`Passwordless challenge not usable ${challengeId}`);
       throw this.invalid();
     }
+    if (!(await this.withinDailyAttemptCap(emailHash))) {
+      throw this.invalid();
+    }
     if (
       !this.compareHashes(this.codeHash(challengeId, code), attempt.codeHash)
     ) {
       this.logger.warn(`Passwordless wrong code for challenge ${challengeId}`);
-      await this.recordFailure(emailHash);
       throw this.invalid();
     }
 
@@ -364,37 +362,27 @@ export class PasswordlessService {
     }
   }
 
-  private async failedAttemptCapReached(emailHash: string): Promise<boolean> {
+  private async withinDailyAttemptCap(emailHash: string): Promise<boolean> {
+    const cap = PASSWORDLESS_LIMITS.failedVerifyPerEmailDay;
     try {
-      return (
-        (await this.throttle.peek(`pwl:fail:email:${emailHash}`)) >=
-        PASSWORDLESS_LIMITS.failedVerifyPerEmailDay.max
+      const attempts = await this.throttle.hit(
+        `pwl:fail:email:${emailHash}`,
+        cap.windowMs,
       );
+      if (attempts === cap.max) {
+        this.logger.error(
+          `Passwordless failed-attempt cap reached for email hash ${emailHash.slice(0, 12)}`,
+        );
+      }
+      return attempts <= cap.max;
     } catch {
       this.logger.error('Passwordless throttle store unavailable');
-      return false;
+      return true;
     }
   }
 
   private knownNetworkKey(emailHash: string, ip: string | undefined): string {
     return `pwl:known:${emailHash}:${this.hmac(ipBlock(ip))}`;
-  }
-
-  private async recordFailure(emailHash: string): Promise<void> {
-    const cap = PASSWORDLESS_LIMITS.failedVerifyPerEmailDay;
-    try {
-      const failures = await this.throttle.hit(
-        `pwl:fail:email:${emailHash}`,
-        cap.windowMs,
-      );
-      if (failures === cap.max) {
-        this.logger.error(
-          `Passwordless failed-attempt cap reached for email hash ${emailHash.slice(0, 12)}`,
-        );
-      }
-    } catch {
-      this.logger.error('Passwordless throttle store unavailable');
-    }
   }
 
   private invalid(): BadRequestException {

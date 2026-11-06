@@ -98,7 +98,7 @@ maybe('PasswordlessService against Postgres', () => {
     const row = JSON.stringify(await rowFor(email));
     expect(row).not.toContain(linkToken);
     expect(row).not.toContain(`"${code}"`);
-    expect(row).not.toContain('10.');
+    expect(row).not.toMatch(/(?<![\d.])10\.\d+\.0\.1(?![\d.])/);
   });
 
   it('lets exactly one of many parallel verifies with the right code succeed', async () => {
@@ -460,5 +460,73 @@ maybe('PasswordlessService against Postgres', () => {
     });
 
     expect(await link).toEqual({ count: 0 });
+  });
+
+  it('rolls the whole takeover back when its last statement fails', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    await prisma.user.create({
+      data: {
+        email: `pwl-it-dup-${stamp}@example.com`,
+        passwordHash: 'h',
+        googleId: `pwl-it-dup-g-${stamp}`,
+      },
+    });
+    const victim = await prisma.user.create({
+      data: {
+        email: `pwl-it-rb-${stamp}@example.com`,
+        passwordHash: 'attacker-hash',
+        isEmailVerified: false,
+        hasLocalPassword: true,
+        pinHash: 'attacker-pin',
+        biometricsEnabled: true,
+        appleId: `pwl-it-rb-a-${stamp}`,
+      },
+    });
+    await prisma.session.create({
+      data: {
+        userId: victim.id,
+        token: `pwl-it-rb-s-${stamp}`,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+    await prisma.deviceToken.create({
+      data: {
+        userId: victim.id,
+        token: `pwl-it-rb-d-${stamp}`,
+        platform: 'ios',
+      },
+    });
+
+    await expect(
+      authRepo.takeOverUnverifiedAccount(victim.id, {
+        passwordHash: 'rotated',
+        hasLocalPassword: false,
+        pinHash: null,
+        biometricsEnabled: false,
+        isEmailVerified: true,
+        googleId: `pwl-it-dup-g-${stamp}`,
+        appleId: null,
+      }),
+    ).rejects.toThrow();
+
+    const after = await prisma.user.findUniqueOrThrow({
+      where: { id: victim.id },
+    });
+    expect(after).toMatchObject({
+      passwordHash: 'attacker-hash',
+      hasLocalPassword: true,
+      pinHash: 'attacker-pin',
+      biometricsEnabled: true,
+      isEmailVerified: false,
+      googleId: null,
+      appleId: `pwl-it-rb-a-${stamp}`,
+    });
+    expect(await prisma.session.count({ where: { userId: victim.id } })).toBe(
+      1,
+    );
+    expect(
+      await prisma.deviceToken.count({ where: { userId: victim.id } }),
+    ).toBe(1);
   });
 });
