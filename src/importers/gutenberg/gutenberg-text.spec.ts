@@ -416,79 +416,112 @@ describe('processGutenbergText hardening', () => {
   });
 
   describe('performance (linear scaling, no quadratic regex)', () => {
-    const SMALL = 300_000;
     const FACTOR = 8;
     const RUNS = 5;
-    const PROBE_SIZE = 100_000;
-    const PROBE_BUDGET_MS = 200;
-    const MAX_RATIO = 40;
+    const PROBE_DIVISOR = 16;
+    const MAX_RATIO = 32;
     const MIN_DENOMINATOR_MS = 1;
-    const timeOnce = (text: string): number => {
+
+    const cpuMs = (text: string): number => {
       const before = process.cpuUsage();
       processGutenbergText(text, plain());
       const used = process.cpuUsage(before);
       return (used.user + used.system) / 1000;
     };
-    const median = (text: string, limitMs = Infinity, warm = true): number => {
-      if (warm) timeOnce(text);
+    const WARM_UP_TOLERANCE = 3;
+    const warmUpCpuMs = (text: string, budgetMs: number): number => {
+      const first = cpuMs(text);
+      return first >= budgetMs && first < budgetMs * WARM_UP_TOLERANCE
+        ? Math.min(first, cpuMs(text))
+        : first;
+    };
+    const median = (text: string, limitMs = Infinity): number => {
       const samples: number[] = [];
       for (let i = 0; i < RUNS; i++) {
-        samples.push(timeOnce(text));
-        const over = samples.filter((t) => t > limitMs).length;
-        if (over > RUNS / 2)
-          return Math.min(...samples.filter((t) => t > limitMs));
+        samples.push(cpuMs(text));
+        const over = samples.filter((t) => t > limitMs);
+        if (over.length > RUNS / 2) return Math.min(...over);
       }
       samples.sort((a, b) => a - b);
       return samples[Math.floor(RUNS / 2)];
     };
+
     it.each([
-      ['spaces in a paragraph', 20, (n: number) => wrap(`a${' '.repeat(n)}b`)],
+      [
+        'spaces in a paragraph',
+        1_500_000,
+        100,
+        (n: number) => wrap(`a${' '.repeat(n)}b`),
+      ],
       [
         'spaces then newline then spaces',
-        12,
+        900_000,
+        100,
         (n: number) => wrap(`a${' '.repeat(n)}\n${' '.repeat(n)}b`),
       ],
       [
         'eBook followed by spaces',
-        20,
+        1_500_000,
+        100,
         (n: number) => wrap(`eBook${' '.repeat(n)}x`),
       ],
       [
         'many unclosed illustration markers',
-        20,
+        1_500_000,
+        100,
         (n: number) => wrap('[Illustration '.repeat(n / 14)),
       ],
-      ['many newlines', 2, (n: number) => wrap(`a${'\n'.repeat(n)}b`)],
-      ['many underscores', 3, (n: number) => wrap('_a '.repeat(n / 3))],
-      ['many opening brackets', 2, (n: number) => wrap('['.repeat(n))],
-      ['hyphen-ended lines', 2, (n: number) => wrap('abcd-\n'.repeat(n / 5))],
+      [
+        'many newlines',
+        300_000,
+        90,
+        (n: number) => wrap(`a${'\n'.repeat(n)}b`),
+      ],
+      [
+        'many underscores',
+        450_000,
+        80,
+        (n: number) => wrap('_a '.repeat(n / 3)),
+      ],
+      [
+        'many opening brackets',
+        300_000,
+        90,
+        (n: number) => wrap('['.repeat(n)),
+      ],
+      [
+        'hyphen-ended lines',
+        400_000,
+        80,
+        (n: number) => wrap('abcd-\n'.repeat(n / 5)),
+      ],
       [
         'hyphen-ended lines then letters',
-        1,
+        250_000,
+        90,
         (n: number) => wrap('ab-\ncd\n'.repeat(n / 6)),
       ],
       [
         'plain lines in one paragraph',
-        2,
+        300_000,
+        80,
         (n: number) => wrap('word\n'.repeat(n / 5)),
       ],
       [
         'many one-line paragraphs',
-        1,
+        200_000,
+        150,
         (n: number) => wrap('word\n\n'.repeat(n / 6)),
       ],
     ])(
-      '%s: 8x input costs under 40x the cpu time',
-      (_n, scale, make) => {
-        const probeMs = timeOnce(make(PROBE_SIZE));
-        expect(probeMs).toBeLessThan(PROBE_BUDGET_MS);
-        const small = median(make(SMALL * scale));
+      '%s: cpu stays within budget and 8x input costs under 32x',
+      (_n, size, budgetMs, make) => {
+        expect(cpuMs(make(size / PROBE_DIVISOR))).toBeLessThan(budgetMs);
+        const text = make(size);
+        expect(warmUpCpuMs(text, budgetMs)).toBeLessThan(budgetMs);
+        const small = median(text, budgetMs);
         const floor = Math.max(small, MIN_DENOMINATOR_MS);
-        const large = median(
-          make(SMALL * scale * FACTOR),
-          MAX_RATIO * floor,
-          false,
-        );
+        const large = median(make(size * FACTOR), MAX_RATIO * floor);
         expect(large / floor).toBeLessThan(MAX_RATIO);
       },
       120_000,
