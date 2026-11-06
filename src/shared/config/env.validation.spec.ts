@@ -118,4 +118,50 @@ describe('validateEnv', () => {
       expect(nonProdThrottleMultiplier(nodeEnv)).toBe(1);
     });
   });
+
+  describe('passwordless login', () => {
+    const pepper = 'p'.repeat(32);
+
+    it('is off by default and needs no pepper', () => {
+      const env = validateEnv(base);
+      expect(env.PASSWORDLESS_LOGIN_ENABLED).toBe(false);
+      expect(env.PASSWORDLESS_PEPPER).toBeUndefined();
+    });
+
+    it('treats a blank pepper and blank flag as unset', () => {
+      const env = validateEnv({
+        ...base,
+        PASSWORDLESS_PEPPER: '  ',
+        PASSWORDLESS_LOGIN_ENABLED: '',
+      });
+      expect(env.PASSWORDLESS_LOGIN_ENABLED).toBe(false);
+      expect(env.PASSWORDLESS_PEPPER).toBeUndefined();
+    });
+
+    it('refuses to boot when enabled without a pepper', () => {
+      expect(() =>
+        validateEnv({ ...base, PASSWORDLESS_LOGIN_ENABLED: 'true' }),
+      ).toThrow('Invalid environment variables');
+    });
+
+    it('refuses a short pepper', () => {
+      expect(() =>
+        validateEnv({
+          ...base,
+          PASSWORDLESS_LOGIN_ENABLED: 'true',
+          PASSWORDLESS_PEPPER: 'short',
+        }),
+      ).toThrow('Invalid environment variables');
+    });
+
+    it('accepts the flag with a long pepper', () => {
+      const env = validateEnv({
+        ...base,
+        PASSWORDLESS_LOGIN_ENABLED: 'true',
+        PASSWORDLESS_PEPPER: pepper,
+      });
+      expect(env.PASSWORDLESS_LOGIN_ENABLED).toBe(true);
+      expect(env.PASSWORDLESS_PEPPER).toBe(pepper);
+    });
+  });
 });

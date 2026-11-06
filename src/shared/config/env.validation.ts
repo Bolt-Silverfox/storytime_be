@@ -104,6 +104,20 @@ export const envSchema = z
     SENTRY_DSN: z.string().url().optional(),
     SENTRY_RELEASE: z.string().optional(),
     SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).optional(),
+    PASSWORDLESS_LOGIN_ENABLED: z.preprocess(
+      (v) =>
+        typeof v === 'string'
+          ? ['true', '1'].includes(v.trim().toLowerCase())
+          : v,
+      z.boolean().default(false),
+    ),
+    PASSWORDLESS_PEPPER: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z
+        .string()
+        .min(32, 'PASSWORDLESS_PEPPER must be at least 32 characters')
+        .optional(),
+    ),
   })
   .refine(
     (data) => {
@@ -118,6 +132,14 @@ export const envSchema = z
     {
       message:
         'Firebase credentials must be either all provided or all omitted (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)',
+    },
+  )
+  .refine(
+    (data) => !data.PASSWORDLESS_LOGIN_ENABLED || data.PASSWORDLESS_PEPPER,
+    {
+      message:
+        'PASSWORDLESS_PEPPER is required when PASSWORDLESS_LOGIN_ENABLED is true',
+      path: ['PASSWORDLESS_PEPPER'],
     },
   );
 
