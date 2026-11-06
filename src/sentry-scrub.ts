@@ -129,7 +129,7 @@ function decodeKey(raw: string): string {
 function hasNestedSecret(value: string): boolean {
   let cur = value;
   for (let i = 0; i < 4; i++) {
-    if (cur.includes('=') && scrubText(cur, false) !== cur) return true;
+    if (/[=@]/.test(cur) && scrubText(cur, false) !== cur) return true;
     let next: string;
     try {
       next = decodeURIComponent(cur.replace(/\+/g, ' '));
@@ -160,6 +160,9 @@ function scrubQueryString(qs: string): string {
 
 const KEY_VALUE_HEAD =
   /(?<![^\s=:&?#{}()[\],;<>"'])(["']?)([^\s=:&?#{}()[\],;<>"']{1,100})\1(?:[ \t]*(?:=>|[:=])[ \t]*|([ \t]+))/g;
+
+const URL_USERINFO =
+  /(?<![a-z0-9+.-])([a-z][a-z0-9+.-]*(?::|%3A)(?:\/\/|%2F%2F))(?:(?!%2F|%3F|%23)[^\s/?#"'<>])*(@|%40)/gi;
 
 const UNQUOTED_VALUE = /[^\s&,;"'})\]]+/y;
 
@@ -194,10 +197,15 @@ function readValue(text: string, at: number): ValueSpan | null {
 
 function scrubText(text: string, nested = true): string {
   if (text.length > MAX_TEXT) return REDACTED;
-  const src = text.replace(
-    /\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/gi,
-    (_m, scheme: string) => `${scheme} ${REDACTED}`,
-  );
+  const src = text
+    .replace(
+      URL_USERINFO,
+      (_m, head: string, at: string) => `${head}${REDACTED}${at}`,
+    )
+    .replace(
+      /\b(bearer|basic)\s+[A-Za-z0-9._~+/=-]{4,}/gi,
+      (_m, scheme: string) => `${scheme} ${REDACTED}`,
+    );
   let out = '';
   let last = 0;
   for (const m of src.matchAll(KEY_VALUE_HEAD)) {

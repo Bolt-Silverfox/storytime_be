@@ -1,19 +1,8 @@
 import { spawnSync } from 'child_process';
 import * as path from 'path';
+import { S, SENTINELS } from '../test/sentry-scrub-sentinels';
 
-// Mirrors the sentinel values generated in the runner (built at runtime so the
-// literals never appear in stack-frame source context).
-const SENTINELS = [
-  'queryToken',
-  'queryCode',
-  'bodyPassword',
-  'bearer',
-  'cookie',
-  'guest',
-  'apikey',
-  'errQuery',
-  'outgoingToken',
-].map((k) => `sentinel-${k.toLowerCase()}-${k.length}x`);
+const NOT_CAPTURED_WITHOUT_SCRUBBER = [S.bodyPassword];
 
 function spawnRunner(mode: 'scrub' | 'raw' | 'fail') {
   const root = path.resolve(__dirname, '..');
@@ -46,7 +35,10 @@ describe('real HTTP request, default integrations, tracing on (child process)', 
   it('sanity: without the scrubber the library leaks sentinels', () => {
     const out = run('raw');
     expect(out).toContain('hello from request');
-    expect(SENTINELS.filter((s) => out.includes(s)).length).toBeGreaterThan(0);
+    const expectedLeaks = SENTINELS.filter(
+      (s) => !NOT_CAPTURED_WITHOUT_SCRUBBER.includes(s),
+    );
+    expect(expectedLeaks.filter((s) => !out.includes(s))).toEqual([]);
   });
 
   it('with the scrubber no sentinel reaches the transport', () => {

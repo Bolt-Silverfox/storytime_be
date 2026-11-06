@@ -8,23 +8,7 @@ import * as http from 'http';
 import type { AddressInfo } from 'net';
 import * as Sentry from '@sentry/node';
 import { buildSentryOptions } from '../src/sentry-scrub';
-
-// Built at runtime so the literals never appear in source context lines that
-// Sentry attaches to stack frames.
-export const S = Object.fromEntries(
-  [
-    'queryToken',
-    'queryCode',
-    'bodyPassword',
-    'bearer',
-    'cookie',
-    'guest',
-    'apikey',
-    'errQuery',
-    'outgoingToken',
-  ].map((k) => [k, `sentinel-${k.toLowerCase()}-${k.length}x`]),
-) as Record<string, string>;
-export const SENTINELS = Object.values(S);
+import { S } from './sentry-scrub-sentinels';
 
 function call(
   port: number,
