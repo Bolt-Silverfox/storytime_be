@@ -646,7 +646,7 @@ maybe('PasswordlessService against Postgres', () => {
     const result = await findOrCreateParentByVerifiedEmail(
       {
         authRepository: authRepo,
-        passwordService: { hashPassword: () => Promise.resolve('x') } as never,
+        passwordService: { hashPassword: () => Promise.resolve('x') },
       },
       {
         email: mixed.toLowerCase(),
