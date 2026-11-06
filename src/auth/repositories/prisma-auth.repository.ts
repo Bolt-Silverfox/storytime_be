@@ -108,6 +108,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     googleId?: string | null;
     appleId?: string | null;
     isEmailVerified?: boolean;
+    verifyFirstRegisteredAt?: Date;
     profile?: { create: { country: string } };
   }): Promise<UserWithProfileAndAvatar> {
     return this.prisma.user.create({
@@ -330,6 +331,38 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async deleteToken(id: string): Promise<void> {
     await this.prisma.token.delete({ where: { id } });
+  }
+
+  async findLatestUserTokenByType(
+    userId: string,
+    type: TokenType,
+  ): Promise<Token | null> {
+    return this.prisma.token.findFirst({
+      where: { userId, type },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async recordTokenAttempt(
+    id: string,
+    now: Date,
+    maxAttempts: number,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.token.updateMany({
+      where: {
+        id,
+        isDeleted: false,
+        attempts: { lt: maxAttempts },
+        expiresAt: { gt: now },
+      },
+      data: { attempts: { increment: 1 } },
+    });
+    return count === 1;
+  }
+
+  async consumeToken(id: string): Promise<boolean> {
+    const { count } = await this.prisma.token.deleteMany({ where: { id } });
+    return count === 1;
   }
 
   async deleteUserTokensByType(userId: string, type: TokenType): Promise<void> {

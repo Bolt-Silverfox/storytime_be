@@ -121,6 +121,46 @@ describe('validateEnv', () => {
     });
   });
 
+  describe('verify-first registration flags', () => {
+    it('enables v2 by default and leaves v1 sunset and purge off', () => {
+      const env = validateEnv(base);
+      expect(env.REGISTER_V2_ENABLED).toBe(true);
+      expect(env.REGISTER_V1_SUNSET).toBeUndefined();
+      expect(env.STALE_UNVERIFIED_PURGE).toBe('off');
+    });
+
+    it('parses the flags and treats blanks as unset', () => {
+      const env = validateEnv({
+        ...base,
+        REGISTER_V2_ENABLED: 'false',
+        REGISTER_V1_SUNSET: 'Wed, 31 Dec 2026 23:59:59 GMT',
+        STALE_UNVERIFIED_PURGE: 'dry-run',
+      });
+      expect(env.REGISTER_V2_ENABLED).toBe(false);
+      expect(env.REGISTER_V1_SUNSET).toBe('Wed, 31 Dec 2026 23:59:59 GMT');
+      expect(env.STALE_UNVERIFIED_PURGE).toBe('dry-run');
+
+      const blank = validateEnv({
+        ...base,
+        REGISTER_V2_ENABLED: '',
+        REGISTER_V1_SUNSET: ' ',
+        STALE_UNVERIFIED_PURGE: '',
+      });
+      expect(blank.REGISTER_V2_ENABLED).toBe(true);
+      expect(blank.REGISTER_V1_SUNSET).toBeUndefined();
+      expect(blank.STALE_UNVERIFIED_PURGE).toBe('off');
+    });
+
+    it('rejects a sunset that is not a date and an unknown purge mode', () => {
+      expect(() =>
+        validateEnv({ ...base, REGISTER_V1_SUNSET: 'soon' }),
+      ).toThrow('Invalid environment variables');
+      expect(() =>
+        validateEnv({ ...base, STALE_UNVERIFIED_PURGE: 'yes' }),
+      ).toThrow('Invalid environment variables');
+    });
+  });
+
   describe('passwordless login', () => {
     const pepper = 'q7Zk2vX9mP4rT8wL1nB6cD3fG5hJ0sA2';
 

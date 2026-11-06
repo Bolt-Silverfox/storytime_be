@@ -37,6 +37,7 @@ export const makeUser = (overrides: Partial<User> = {}): User => ({
   createdAt: FIXTURE_NOW,
   updatedAt: FIXTURE_NOW,
   lastLoginAt: null,
+  verifyFirstRegisteredAt: null,
   pinHash: null,
   biometricsEnabled: false,
   isSuspended: false,
@@ -100,6 +101,7 @@ export const makeToken = (overrides: Partial<Token> = {}): Token => ({
   createdAt: FIXTURE_NOW,
   isDeleted: false,
   deletedAt: null,
+  attempts: 0,
   ...overrides,
 });
 

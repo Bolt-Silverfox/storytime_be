@@ -122,6 +122,29 @@ const envSchema = z
           : v,
       z.boolean().default(false),
     ),
+    REGISTER_V2_ENABLED: z.preprocess(
+      (v) =>
+        typeof v === 'string'
+          ? v.trim() === ''
+            ? undefined
+            : ['true', '1'].includes(v.trim().toLowerCase())
+          : v,
+      z.boolean().default(true),
+    ),
+    REGISTER_V1_SUNSET: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z
+        .string()
+        .refine(
+          (v) => !Number.isNaN(Date.parse(v)),
+          'REGISTER_V1_SUNSET must be an HTTP-date',
+        )
+        .optional(),
+    ),
+    STALE_UNVERIFIED_PURGE: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.enum(['off', 'dry-run', 'on']).default('off'),
+    ),
     PASSWORDLESS_PEPPER: z.preprocess(
       (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
       z.string().optional(),

@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   CompleteProfileDto,
@@ -11,6 +12,7 @@ import {
   UserDto,
   RegisterDto,
   LoginResponseDto,
+  RegisterV2ResponseDto,
 } from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { PasswordService } from './password.service';
@@ -40,6 +42,31 @@ export class OnboardingService {
   ) {}
 
   async register(data: RegisterDto): Promise<LoginResponseDto | null> {
+    const user = await this.createUnverifiedAccount(data);
+    const tokenData = await this.tokenService.createTokenPair(user);
+
+    return {
+      user: new UserDto({ ...user, numberOfKids: 0 }),
+      jwt: tokenData.jwt,
+      refreshToken: tokenData.refreshToken,
+    };
+  }
+
+  async registerV2(data: RegisterDto): Promise<RegisterV2ResponseDto> {
+    const user = await this.createUnverifiedAccount(data, {
+      verifyFirstRegisteredAt: new Date(),
+    });
+
+    return {
+      user: new UserDto({ ...user, numberOfKids: 0 }),
+      requiresEmailVerification: true,
+    };
+  }
+
+  private async createUnverifiedAccount(
+    data: RegisterDto,
+    extra: { verifyFirstRegisteredAt?: Date } = {},
+  ) {
     const existingUser = await this.authRepository.findUserByEmail(data.email);
     if (existingUser) {
       throw new ResourceAlreadyExistsException('User', 'email', data.email);
@@ -64,6 +91,7 @@ export class OnboardingService {
       passwordHash: hashedPassword,
       role: role.toString(),
       onboardingStatus: OnboardingStatus.account_created,
+      ...extra,
     });
 
     // side-effects (notification preferences, etc.) are handled by activity-log and notification-preference listeners
@@ -103,19 +131,16 @@ export class OnboardingService {
     });
     this.eventEmitter.emit('admin.sse.stats', { trigger: 'user_created' });
 
-    const tokenData = await this.tokenService.createTokenPair(user);
-
-    return {
-      user: new UserDto({ ...user, numberOfKids: 0 }),
-      jwt: tokenData.jwt,
-      refreshToken: tokenData.refreshToken,
-    };
+    return user;
   }
 
   async completeProfile(userId: string, data: CompleteProfileDto) {
     const user = await this.authRepository.findUserByIdWithProfile(userId);
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+    if (!user.isEmailVerified) {
+      throw new ForbiddenException('Email not verified');
     }
     if (user.onboardingStatus === OnboardingStatus.pin_setup) {
       throw new BadRequestException('Onboarding already completed');

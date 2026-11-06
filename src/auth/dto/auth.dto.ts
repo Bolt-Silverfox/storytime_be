@@ -305,6 +305,36 @@ export class LoginResponseDto {
   refreshToken: string;
 }
 
+export class RegisterV2ResponseDto {
+  @ApiProperty({ type: UserDto })
+  user: UserDto;
+
+  @ApiProperty({ example: true })
+  requiresEmailVerification: true;
+}
+
+export class VerifyEmailV2Dto {
+  @ApiProperty({ example: 'test@gmail.com' })
+  @IsEmail()
+  @IsNotEmpty()
+  @SanitizeEmail()
+  email: string;
+
+  @ApiProperty({
+    example: '123456',
+    description: 'The verification code received via email',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  token: string;
+}
+
+export class VerifyEmailV2ResponseDto extends LoginResponseDto {
+  @ApiProperty({ example: 'Email verified successfully' })
+  message: string;
+}
+
 export class RefreshTokenDto {
   @ApiProperty({ description: 'Refresh token', example: 'eyJhbGci...' })
   @IsString()

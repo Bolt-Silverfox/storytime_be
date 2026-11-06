@@ -20,6 +20,7 @@ import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { applyApiPrefix } from './shared/config/api-prefix';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -121,7 +122,7 @@ async function bootstrap() {
 
   // 1. GLOBAL SETUP (Prefix, CORS, Security, Compression)
 
-  app.setGlobalPrefix('api/v1');
+  applyApiPrefix(app);
 
   // Enable gzip/deflate compression for responses > 1KB
   app.use(
