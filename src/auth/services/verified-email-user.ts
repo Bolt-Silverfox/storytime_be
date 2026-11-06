@@ -5,6 +5,7 @@ import type {
   UserWithProfileAndAvatar,
 } from '../repositories';
 import type { PasswordService } from './password.service';
+import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
 
 export interface VerifiedEmailInput {
   email: string;
@@ -49,28 +50,36 @@ export async function findOrCreateParentByVerifiedEmail(
       };
     }
 
-    const takeover = emailVerified && !existing.isEmailVerified;
-    if (takeover) {
+    let current = existing;
+    if (emailVerified && !existing.isEmailVerified) {
       const passwordHash = await passwordService.hashPassword(
         crypto.randomBytes(16).toString('hex'),
       );
-      const user = await authRepository.takeOverUnverifiedAccount(existing.id, {
-        passwordHash,
-        hasLocalPassword: false,
-        pinHash: null,
-        biometricsEnabled: false,
-        isEmailVerified: true,
-        googleId: googleId ?? null,
-        appleId: appleId ?? null,
-        ...(onboardingStatus ? { onboardingStatus } : {}),
-      });
-      return { user, isNewUser: false, newlyVerified: true };
+      try {
+        const user = await authRepository.takeOverUnverifiedAccount(
+          existing.id,
+          {
+            passwordHash,
+            hasLocalPassword: false,
+            pinHash: null,
+            biometricsEnabled: false,
+            isEmailVerified: true,
+            googleId: googleId ?? null,
+            appleId: appleId ?? null,
+            ...(onboardingStatus ? { onboardingStatus } : {}),
+          },
+        );
+        return { user, isNewUser: false, newlyVerified: true };
+      } catch (error) {
+        if (!(error instanceof AccountAlreadyVerifiedError)) throw error;
+        current = (await authRepository.findUserById(existing.id)) ?? existing;
+      }
     }
 
-    const user = await authRepository.updateUserWithRelations(existing.id, {
-      isEmailVerified: emailVerified ? true : existing.isEmailVerified,
-      googleId: googleId || existing.googleId,
-      appleId: appleId || existing.appleId,
+    const user = await authRepository.updateUserWithRelations(current.id, {
+      isEmailVerified: emailVerified ? true : current.isEmailVerified,
+      googleId: current.googleId || googleId || null,
+      appleId: current.appleId || appleId || null,
     });
     return { user, isNewUser: false, newlyVerified: false };
   }

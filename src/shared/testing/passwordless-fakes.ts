@@ -1,3 +1,4 @@
+import { AccountAlreadyVerifiedError } from '@/auth/repositories/account-already-verified.error';
 import type { User, Profile, Avatar, Session } from '@prisma/client';
 import type {
   ILoginChallengeRepository,
@@ -112,13 +113,23 @@ export class InMemoryRedis {
       );
     },
     eval: (
-      _script: string,
+      script: string,
       _numKeys: number,
       key: string,
       ttlMs: string,
     ): Promise<number> => {
       if (this.down) return Promise.reject(new Error('redis down'));
       const now = Date.now();
+      if (script.includes("'DECR'")) {
+        const live = this.store.get(key);
+        const current = live && live.expiresAt > now ? live.n : 0;
+        if (current - 1 < 0) {
+          this.store.set(key, { n: 0, expiresAt: now + Number(ttlMs) });
+          return Promise.resolve(0);
+        }
+        this.store.set(key, { n: current - 1, expiresAt: live!.expiresAt });
+        return Promise.resolve(current - 1);
+      }
       const cur = this.store.get(key);
       if (!cur || cur.expiresAt <= now) {
         this.store.set(key, { n: 1, expiresAt: now + Number(ttlMs) });
@@ -228,6 +239,9 @@ export class InMemoryAuthRepository {
 
   takeOverUnverifiedAccount = (id: string, data: Partial<User>) => {
     const u = this.users.find((x) => x.id === id)!;
+    if (u.isEmailVerified) {
+      return Promise.reject(new AccountAlreadyVerifiedError());
+    }
     this.sessions = this.sessions.filter((s) => s.userId !== id);
     this.deviceTokens = this.deviceTokens.filter((t) => t.userId !== id);
     Object.assign(u, data);

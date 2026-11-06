@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AccountAlreadyVerifiedError } from './account-already-verified.error';
 import type {
   User,
   Profile,
@@ -9,7 +10,10 @@ import type {
   LearningExpectation,
   UserIP,
 } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { TokenType } from '../dto/auth.dto';
+
+export { AccountAlreadyVerifiedError };
 import {
   IAuthRepository,
   IAuthRepositoryTransaction,
@@ -32,15 +36,15 @@ export class PrismaAuthRepository implements IAuthRepository {
   }
 
   async findUserByEmailInsensitive(email: string): Promise<User | null> {
-    const matches = await this.prisma.user.findMany({
-      where: { email: { equals: email, mode: 'insensitive' } },
-      orderBy: { createdAt: 'asc' },
-    });
-    const rank = (user: User) =>
-      (user.isEmailVerified ? 2 : 0) + (user.email === email ? 1 : 0);
-    return matches.reduce<User | null>(
-      (best, user) => (best === null || rank(user) > rank(best) ? user : best),
-      null,
+    const matches = await this.prisma.$queryRaw<User[]>(
+      Prisma.sql`SELECT * FROM "users" WHERE lower("email") = lower(${email}) ORDER BY "createdAt" ASC, "id" ASC`,
+    );
+    const verified = matches.find((user) => user.isEmailVerified);
+    return (
+      verified ??
+      matches.find((user) => user.email === email) ??
+      matches[0] ??
+      null
     );
   }
 
@@ -294,9 +298,13 @@ export class PrismaAuthRepository implements IAuthRepository {
       await tx.session.deleteMany({ where: { userId: id } });
       await tx.deviceToken.deleteMany({ where: { userId: id } });
       await tx.token.deleteMany({ where: { userId: id } });
-      return tx.user.update({
+      const { count } = await tx.user.updateMany({
+        where: { id, isEmailVerified: false },
+        data: data as Parameters<typeof tx.user.updateMany>[0]['data'],
+      });
+      if (count === 0) throw new AccountAlreadyVerifiedError();
+      return tx.user.findUniqueOrThrow({
         where: { id },
-        data: data as Parameters<typeof tx.user.update>[0]['data'],
         include: { profile: true, avatar: true },
       });
     });

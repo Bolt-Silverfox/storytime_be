@@ -325,8 +325,9 @@ jobs:
         shell: bash
         env:
           PASSWORDLESS_TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/storytime_test
+          PASSWORDLESS_TEST_REDIS_URL: redis://localhost:6379
         run: |
-          pnpm exec jest src/auth/services/passwordless.integration.spec.ts --runInBand --ci 2>&1 | tee passwordless-integration.log
+          pnpm exec jest src/auth/services/passwordless.integration.spec.ts src/auth/services/passwordless-throttle.redis.spec.ts --runInBand --ci 2>&1 | tee passwordless-integration.log
           if grep -Eq "^Tests:.*(failed|skipped|todo)" passwordless-integration.log; then
             echo "::error::Passwordless integration spec failed or was skipped"
             exit 1

@@ -7,15 +7,21 @@ if n == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
 return n
 `;
 
+const DECR_CLAMPED = `
+local n = redis.call('DECR', KEYS[1])
+if n < 0 then
+  redis.call('SET', KEYS[1], '0', 'PX', ARGV[1])
+  return 0
+end
+return n
+`;
+
 @Injectable()
 export class PasswordlessThrottleService {
   constructor(private readonly redis: RedisService) {}
 
   async release(key: string, windowMs: number): Promise<void> {
-    const remaining = await this.redis.client.decr(key);
-    if (remaining < 0) {
-      await this.redis.client.set(key, '0', 'PX', windowMs);
-    }
+    await this.redis.client.eval(DECR_CLAMPED, 1, key, String(windowMs));
   }
 
   async mark(key: string, ttlSeconds: number): Promise<void> {

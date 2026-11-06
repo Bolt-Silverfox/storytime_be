@@ -13,6 +13,7 @@ import { NotificationPreferenceService } from '@/notification/services/notificat
 import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
+import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
 import appleSigninAuth from 'apple-signin-auth';
 
 // Mock google-auth-library
@@ -55,6 +56,7 @@ describe('OAuthService', () => {
       updateUser: jest.fn(),
       updateUserWithRelations: jest.fn(),
       takeOverUnverifiedAccount: jest.fn(),
+      findUserById: jest.fn(),
       createUser: jest.fn(),
       findAvatarByUrl: jest.fn(),
       createAvatar: jest.fn(),
@@ -196,6 +198,27 @@ describe('OAuthService', () => {
         ).toBeLessThan(
           authRepository.takeOverUnverifiedAccount.mock.invocationCallOrder[0],
         );
+      });
+
+      it('falls back to a plain verified sign-in when the account was verified between the read and the takeover', async () => {
+        const verifiedNow = {
+          ...attackerOwned,
+          isEmailVerified: true,
+          googleId: 'owner-google',
+        };
+        authRepository.takeOverUnverifiedAccount.mockRejectedValue(
+          new AccountAlreadyVerifiedError(),
+        );
+        authRepository.findUserById.mockResolvedValue(verifiedNow);
+        authRepository.updateUserWithRelations.mockResolvedValue(verifiedNow);
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).resolves.toBeDefined();
+
+        const data = authRepository.updateUserWithRelations.mock.calls[0][1];
+        expect(data).not.toHaveProperty('passwordHash');
+        expect(data.googleId).toBe('owner-google');
       });
 
       it('drops ids the attacker linked earlier when the owner arrives through Google', async () => {
