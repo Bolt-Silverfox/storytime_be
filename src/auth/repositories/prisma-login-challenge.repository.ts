@@ -100,9 +100,15 @@ export class PrismaLoginChallengeRepository implements ILoginChallengeRepository
     return rows[0]?.emailNormalized ?? null;
   }
 
-  async deleteExpiredBefore(cutoff: Date): Promise<number> {
-    const res = await this.prisma.loginChallenge.deleteMany({
+  async deleteExpiredBefore(cutoff: Date, limit: number): Promise<number> {
+    const batch = await this.prisma.loginChallenge.findMany({
       where: { expiresAt: { lt: cutoff } },
+      select: { id: true },
+      take: limit,
+    });
+    if (batch.length === 0) return 0;
+    const res = await this.prisma.loginChallenge.deleteMany({
+      where: { id: { in: batch.map((r) => r.id) } },
     });
     return res.count;
   }

@@ -11,6 +11,10 @@ return n
 export class PasswordlessThrottleService {
   constructor(private readonly redis: RedisService) {}
 
+  async peek(key: string): Promise<number> {
+    return Number((await this.redis.client.get(key)) ?? 0);
+  }
+
   async hit(key: string, windowMs: number): Promise<number> {
     const count = await this.redis.client.eval(
       INCR_WITH_EXPIRY,

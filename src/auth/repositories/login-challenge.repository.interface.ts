@@ -19,5 +19,5 @@ export interface ILoginChallengeRepository {
     linkTokenHash: string,
     now: Date,
   ): Promise<string | null>;
-  deleteExpiredBefore(cutoff: Date): Promise<number>;
+  deleteExpiredBefore(cutoff: Date, limit: number): Promise<number>;
 }

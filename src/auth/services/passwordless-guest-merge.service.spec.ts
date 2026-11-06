@@ -13,6 +13,7 @@ function build(history: Record<string, unknown> | null) {
         Promise.resolve(ids.filter((i) => i !== 'gone').map((id) => ({ id }))),
       ),
     upsertUserStoryProgress: jest.fn().mockResolvedValue(undefined),
+    deleteGuestSession: jest.fn().mockResolvedValue(undefined),
   };
   const service = new PasswordlessGuestMergeService(
     guestSessions as never,
@@ -91,5 +92,17 @@ describe('PasswordlessGuestMergeService', () => {
       0,
       false,
     );
+  });
+
+  it('retires the guest session after carrying it over so it cannot be claimed again', async () => {
+    const { service, guestSessions } = build({ s1: {} });
+    await service.carryOver('u1', GUEST, true);
+    expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
+  });
+
+  it('still retires the session when nothing is left to copy', async () => {
+    const { service, guestSessions } = build({});
+    await service.carryOver('u1', GUEST, true);
+    expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
   });
 });

@@ -323,7 +323,7 @@ describe('PasswordlessService', () => {
       events.on('admin.sse.activity', (p) => seen.push(p));
       await service.request('a@example.com', '1.1.1.1');
       await service.verify('a@example.com', captured[0].code, '3.3.3.3');
-      expect(seen).toEqual([expect.objectContaining({ type: 'LOGIN' })]);
+      expect(seen).toContainEqual(expect.objectContaining({ type: 'LOGIN' }));
     });
   });
 
@@ -491,6 +491,247 @@ describe('PasswordlessService', () => {
         ),
       );
       expect(guestMerge.carryOver).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('pre-account takeover', () => {
+    async function seedAttackerAccount(
+      authRepo: InMemoryAuthRepository,
+      email: string,
+      flags: Record<string, boolean> = {},
+    ) {
+      const user = await authRepo.createUser({
+        email,
+        passwordHash: 'attacker-chosen-hash',
+        role: 'parent',
+        isEmailVerified: false,
+      });
+      Object.assign(user, flags);
+      await authRepo.createSession({
+        userId: user.id,
+        token: 'attacker-refresh',
+        expiresAt: new Date(),
+      });
+      authRepo.created.length = 0;
+      return user;
+    }
+
+    it('kills the attacker sessions and password when the owner signs in to an unverified account', async () => {
+      const { service, captured, authRepo } = build();
+      const user = await seedAttackerAccount(authRepo, 'victim@example.com');
+      await service.request('victim@example.com', '1.1.1.1');
+
+      const res = await service.verify(
+        'victim@example.com',
+        captured[0].code,
+        '3.3.3.3',
+      );
+
+      expect(res.isNewUser).toBe(false);
+      expect(authRepo.sessions.map((s) => s.token)).not.toContain(
+        'attacker-refresh',
+      );
+      expect(authRepo.sessions).toHaveLength(1);
+      expect(user.passwordHash).not.toBe('attacker-chosen-hash');
+      expect(user.hasLocalPassword).toBe(false);
+      expect(user.isEmailVerified).toBe(true);
+      expect(user.onboardingStatus).toBe('email_verified');
+    });
+
+    it('does the same through the link', async () => {
+      const { service, captured, authRepo } = build();
+      const user = await seedAttackerAccount(authRepo, 'victim@example.com');
+      await service.request('victim@example.com', '1.1.1.1');
+      await service.consume(captured[0].linkToken, '3.3.3.3');
+      expect(authRepo.sessions.map((s) => s.token)).not.toContain(
+        'attacker-refresh',
+      );
+      expect(user.passwordHash).not.toBe('attacker-chosen-hash');
+    });
+
+    it('leaves the password and other sessions of an already verified account alone', async () => {
+      const { service, captured, authRepo } = build();
+      const user = await seedAttackerAccount(authRepo, 'owner@example.com');
+      user.isEmailVerified = true;
+      await service.request('owner@example.com', '1.1.1.1');
+      await service.verify('owner@example.com', captured[0].code, '3.3.3.3');
+      expect(user.passwordHash).toBe('attacker-chosen-hash');
+      expect(authRepo.sessions.map((s) => s.token)).toContain(
+        'attacker-refresh',
+      );
+    });
+
+    it.each(['isSuspended', 'isDeleted'])(
+      'does not verify or touch a %s account before refusing',
+      async (flag) => {
+        const { service, captured, authRepo } = build();
+        const user = await seedAttackerAccount(
+          authRepo,
+          'blocked@example.com',
+          { [flag]: true },
+        );
+        await service.request('blocked@example.com', '1.1.1.1');
+        await expectGeneric(
+          service.verify('blocked@example.com', captured[0].code, '3.3.3.3'),
+        );
+        expect(user.isEmailVerified).toBe(false);
+        expect(user.passwordHash).toBe('attacker-chosen-hash');
+        expect(authRepo.sessions.map((s) => s.token)).toContain(
+          'attacker-refresh',
+        );
+      },
+    );
+  });
+
+  describe('email case', () => {
+    it('signs a mixed-case stored account in without creating a duplicate', async () => {
+      const { service, captured, authRepo } = build();
+      await authRepo.createUser({
+        email: 'Mixed@Example.com',
+        passwordHash: 'h',
+        role: 'parent',
+        isEmailVerified: true,
+      });
+      authRepo.created.length = 0;
+      await service.request('mixed@example.com', '1.1.1.1');
+
+      const res = await service.verify(
+        'mixed@example.com',
+        captured[0].code,
+        '3.3.3.3',
+      );
+
+      expect(res.isNewUser).toBe(false);
+      expect(authRepo.users).toHaveLength(1);
+      expect(authRepo.created).toHaveLength(0);
+    });
+  });
+
+  describe('registration events', () => {
+    it('emits the register-path events for a new user', async () => {
+      const { service, captured, events } = build();
+      const seen: string[] = [];
+      for (const name of [
+        'user.registered',
+        'admin.sse.activity',
+        'admin.sse.stats',
+      ]) {
+        events.on(name, () => seen.push(name));
+      }
+      await service.request('new@example.com', '1.1.1.1');
+      await service.verify('new@example.com', captured[0].code, '3.3.3.3');
+      expect(seen).toEqual(
+        expect.arrayContaining(['user.registered', 'admin.sse.stats']),
+      );
+      expect(seen.filter((n) => n === 'admin.sse.activity')).toHaveLength(2);
+    });
+
+    it('emits email verified for a previously unverified account and nothing for a verified one', async () => {
+      const { service, captured, events, authRepo } = build();
+      const seen: string[] = [];
+      events.on('user.email_verified', () => seen.push('verified'));
+      events.on('user.registered', () => seen.push('registered'));
+      await authRepo.createUser({
+        email: 'a@example.com',
+        passwordHash: 'h',
+        role: 'parent',
+        isEmailVerified: false,
+      });
+      await authRepo.createUser({
+        email: 'b@example.com',
+        passwordHash: 'h',
+        role: 'parent',
+        isEmailVerified: true,
+      });
+      await service.request('a@example.com', '1.1.1.1');
+      await service.verify('a@example.com', captured[0].code, '3.3.3.3');
+      await service.request('b@example.com', '1.1.1.2');
+      await service.verify('b@example.com', captured[1].code, '3.3.3.4');
+      expect(seen).toEqual(['verified']);
+    });
+  });
+
+  describe('global send ceiling', () => {
+    it('is consumed only by real sends, not by refused or dropped requests', async () => {
+      const { service, captured, redis } = build();
+      for (let i = 0; i < 60; i++) {
+        await service
+          .request('flood@example.com', '9.9.9.9')
+          .catch(() => undefined);
+      }
+      expect(await redis.client.get('pwl:req:global')).toBe(
+        String(captured.length),
+      );
+      await service.request('fresh@example.com', '8.8.8.8');
+      expect(captured[captured.length - 1]).toMatchObject({
+        email: 'fresh@example.com',
+      });
+    });
+
+    it('logs at error level when the ceiling trips', async () => {
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation();
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      const { service, redis } = build();
+      for (let i = 0; i < 1000; i++) {
+        await redis.client.eval('', 1, 'pwl:req:global', '3600000');
+      }
+      await service.request('a@example.com', '1.1.1.1');
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('ceiling'));
+    });
+  });
+
+  describe('long-term caps per email', () => {
+    it('stops sending after 10 emails to one address in a day, with an error log', async () => {
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation();
+      jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      const { service, captured } = build();
+      for (let i = 0; i < 12; i++) {
+        await service.request('target@example.com', '1.1.1.1');
+        jest.advanceTimersByTime(13 * 60_000);
+      }
+      expect(captured).toHaveLength(10);
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('daily'));
+    });
+
+    it('blocks further verification, even with the right code, after 20 failures in a day', async () => {
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation();
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+      jest.spyOn(Logger.prototype, 'log').mockImplementation();
+      const { service, captured } = build();
+      for (let i = 0; i < 20; i++) {
+        await expectGeneric(
+          service.verify('target@example.com', '123456', `40.0.0.${i}`),
+        );
+        if (i % 9 === 8) jest.advanceTimersByTime(16 * 60_000);
+      }
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('failed-attempt cap'),
+      );
+      jest.advanceTimersByTime(16 * 60_000);
+      await service.request('target@example.com', '1.1.1.1');
+      await expect(
+        service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+      ).rejects.toMatchObject({ status: 429 });
+    });
+
+    it('lets the right code through before the cap is reached', async () => {
+      const { service, captured } = build();
+      for (let i = 0; i < 5; i++) {
+        await expectGeneric(
+          service.verify('target@example.com', '123456', `40.0.0.${i}`),
+        );
+      }
+      await service.request('target@example.com', '1.1.1.1');
+      await expect(
+        service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+      ).resolves.toBeDefined();
     });
   });
 });

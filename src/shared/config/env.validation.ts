@@ -116,6 +116,12 @@ export const envSchema = z
       z
         .string()
         .min(32, 'PASSWORDLESS_PEPPER must be at least 32 characters')
+        .refine(
+          (v) =>
+            !/change.?me|replace|placeholder|your[-_ ]/i.test(v) &&
+            new Set(v).size > 1,
+          'PASSWORDLESS_PEPPER must not be a placeholder',
+        )
         .optional(),
     ),
   })

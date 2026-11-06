@@ -31,6 +31,13 @@ export class PrismaAuthRepository implements IAuthRepository {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
+  async findUserByEmailInsensitive(email: string): Promise<User | null> {
+    return this.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   async findUserByEmailWithRelations(
     email: string,
   ): Promise<UserWithProfileAvatarAndKidCount | null> {
@@ -130,6 +137,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     id: string,
     data: Partial<{
       passwordHash: string;
+      hasLocalPassword: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;

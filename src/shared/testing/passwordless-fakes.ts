@@ -90,7 +90,7 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
     return r ? this.consumeById(r.id, now) : Promise.resolve(null);
   }
 
-  deleteExpiredBefore(cutoff: Date): Promise<number> {
+  deleteExpiredBefore(cutoff: Date, _limit: number): Promise<number> {
     const before = this.rows.length;
     this.rows = this.rows.filter(
       (r) => r.expiresAt.getTime() >= cutoff.getTime(),
@@ -104,6 +104,13 @@ export class InMemoryRedis {
   down = false;
 
   client = {
+    get: (key: string): Promise<string | null> => {
+      if (this.down) return Promise.reject(new Error('redis down'));
+      const cur = this.store.get(key);
+      return Promise.resolve(
+        cur && cur.expiresAt > Date.now() ? String(cur.n) : null,
+      );
+    },
     eval: (
       _script: string,
       _numKeys: number,
@@ -180,6 +187,17 @@ export class InMemoryAuthRepository {
     } as unknown as User & { profile: Profile | null; avatar: Avatar | null };
     this.users.push(u);
     return Promise.resolve(u);
+  };
+
+  findUserByEmailInsensitive = (email: string) =>
+    Promise.resolve(
+      this.users.find((u) => u.email.toLowerCase() === email.toLowerCase()) ??
+        null,
+    );
+
+  deleteAllUserSessions = (userId: string) => {
+    this.sessions = this.sessions.filter((s) => s.userId !== userId);
+    return Promise.resolve();
   };
 
   countKidsByParentId = () => Promise.resolve(0);

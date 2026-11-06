@@ -212,4 +212,44 @@ maybe('PasswordlessService against Postgres', () => {
     });
     expect(old.invalidatedAt).not.toBeNull();
   });
+
+  it('finds a mixed-case stored account without creating a duplicate', async () => {
+    const stamp = `${process.pid}-${++n}`;
+    const stored = `Pwl-It-Mixed-${stamp}@Example.com`;
+    const created = await prisma.user.create({
+      data: { email: stored, passwordHash: 'h', isEmailVerified: true },
+    });
+    const lower = stored.toLowerCase();
+    const { code } = await issue(lower);
+    const res = await service.verify(lower, code, '25.0.0.1');
+    expect(res.isNewUser).toBe(false);
+    expect(res.user.id).toBe(created.id);
+    expect(
+      await prisma.user.count({
+        where: { email: { equals: lower, mode: 'insensitive' } },
+      }),
+    ).toBe(1);
+    await prisma.user.deleteMany({ where: { id: created.id } });
+  });
+
+  it('purges expired challenges in bounded batches', async () => {
+    const repo = new PrismaLoginChallengeRepository(prisma as never);
+    const email = emailFor();
+    const old = new Date(Date.now() - 3 * 86_400_000);
+    await prisma.loginChallenge.createMany({
+      data: Array.from({ length: 5 }, (_, i) => ({
+        emailNormalized: email,
+        codeHash: 'x',
+        linkTokenHash: `purge-${process.pid}-${n}-${i}`,
+        expiresAt: old,
+      })),
+    });
+    const cutoff = new Date(Date.now() - 86_400_000);
+    expect(await repo.deleteExpiredBefore(cutoff, 2)).toBe(2);
+    expect(await repo.deleteExpiredBefore(cutoff, 2)).toBe(2);
+    expect(await repo.deleteExpiredBefore(cutoff, 2)).toBeGreaterThanOrEqual(1);
+    expect(
+      await prisma.loginChallenge.count({ where: { emailNormalized: email } }),
+    ).toBe(0);
+  });
 });

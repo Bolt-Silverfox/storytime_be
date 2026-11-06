@@ -33,6 +33,7 @@ describe('OAuthService', () => {
   let service: OAuthService;
   let authRepository: jest.Mocked<IAuthRepository>;
   let tokenService: jest.Mocked<TokenService>;
+  let passwordService: jest.Mocked<PasswordService>;
   let googleClient: { verifyIdToken: jest.Mock };
 
   const mockUser: UserWithProfileAndAvatar = {
@@ -51,6 +52,8 @@ describe('OAuthService', () => {
       findUserByAppleId: jest.fn(),
       findUserByEmail: jest.fn(),
       updateUser: jest.fn(),
+      updateUserWithRelations: jest.fn(),
+      deleteAllUserSessions: jest.fn(),
       createUser: jest.fn(),
       findAvatarByUrl: jest.fn(),
       createAvatar: jest.fn(),
@@ -100,6 +103,7 @@ describe('OAuthService', () => {
     service = module.get<OAuthService>(OAuthService);
     authRepository = module.get(AUTH_REPOSITORY);
     tokenService = module.get(TokenService);
+    passwordService = module.get(PasswordService);
   });
 
   describe('loginWithGoogleIdToken', () => {
@@ -132,6 +136,73 @@ describe('OAuthService', () => {
       expect(authRepository.findUserByGoogleId).toHaveBeenCalledWith(
         'google-123',
       );
+    });
+
+    describe('pre-registered unverified account', () => {
+      const attackerOwned = {
+        ...mockUser,
+        id: 'victim-account',
+        email: 'victim@example.com',
+        isEmailVerified: false,
+        googleId: null,
+        passwordHash: 'attacker-chosen-hash',
+      };
+
+      beforeEach(() => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'google-victim',
+            email: 'victim@example.com',
+            email_verified: true,
+          }),
+        });
+        authRepository.findUserByGoogleId.mockResolvedValue(null);
+        authRepository.findUserByEmail.mockResolvedValue(attackerOwned);
+        authRepository.updateUserWithRelations.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
+        authRepository.countKidsByParentId.mockResolvedValue(0);
+        passwordService.hashPassword.mockResolvedValue('rotated-hash');
+        tokenService.createTokenPair.mockResolvedValue({
+          jwt: 'j',
+          refreshToken: 'r',
+        });
+      });
+
+      it('revokes every existing session and replaces the password before verifying', async () => {
+        await service.loginWithGoogleIdToken('valid-token');
+
+        expect(authRepository.deleteAllUserSessions).toHaveBeenCalledWith(
+          'victim-account',
+        );
+        const update = authRepository.updateUserWithRelations.mock.calls[0];
+        expect(update[0]).toBe('victim-account');
+        expect(update[1]).toMatchObject({
+          isEmailVerified: true,
+          hasLocalPassword: false,
+        });
+        expect(update[1].passwordHash).toBeDefined();
+        expect(update[1].passwordHash).not.toBe('attacker-chosen-hash');
+        expect(
+          authRepository.deleteAllUserSessions.mock.invocationCallOrder[0],
+        ).toBeLessThan(
+          authRepository.updateUserWithRelations.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('leaves sessions and password alone for an already verified account', async () => {
+        authRepository.findUserByEmail.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
+        await service.loginWithGoogleIdToken('valid-token');
+
+        expect(authRepository.deleteAllUserSessions).not.toHaveBeenCalled();
+        expect(
+          authRepository.updateUserWithRelations.mock.calls[0][1],
+        ).not.toHaveProperty('passwordHash');
+      });
     });
   });
 });

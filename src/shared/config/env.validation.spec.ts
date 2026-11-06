@@ -120,7 +120,7 @@ describe('validateEnv', () => {
   });
 
   describe('passwordless login', () => {
-    const pepper = 'p'.repeat(32);
+    const pepper = 'q7Zk2vX9mP4rT8wL1nB6cD3fG5hJ0sA2';
 
     it('is off by default and needs no pepper', () => {
       const env = validateEnv(base);
@@ -162,6 +162,22 @@ describe('validateEnv', () => {
       });
       expect(env.PASSWORDLESS_LOGIN_ENABLED).toBe(true);
       expect(env.PASSWORDLESS_PEPPER).toBe(pepper);
+    });
+
+    it.each([
+      'changeme'.padEnd(40, 'x'),
+      'CHANGE-ME-please-change-me-now-1234567',
+      'replace-with-a-real-pepper-value-123456',
+      'your-pepper-goes-here-0000000000000000',
+      'a'.repeat(40),
+    ])('rejects the placeholder pepper %s', (placeholder) => {
+      expect(() =>
+        validateEnv({
+          ...base,
+          PASSWORDLESS_LOGIN_ENABLED: 'true',
+          PASSWORDLESS_PEPPER: placeholder,
+        }),
+      ).toThrow('Invalid environment variables');
     });
   });
 });

@@ -7,7 +7,7 @@ import {
 
 const UUID_V4_LIKE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const CLAIM_TTL_SECONDS = 7 * 24 * 60 * 60;
+const CLAIM_TTL_SECONDS = 30 * 24 * 60 * 60;
 
 @Injectable()
 export class PasswordlessGuestMergeService {
@@ -39,9 +39,10 @@ export class PasswordlessGuestMergeService {
     if (!history) return;
 
     const storyIds = Object.keys(history).slice(0, GUEST_STORY_LIMIT);
-    if (storyIds.length === 0) return;
-
-    const existing = await this.guestSessions.getStoryDetailsByIds(storyIds);
+    const existing =
+      storyIds.length > 0
+        ? await this.guestSessions.getStoryDetailsByIds(storyIds)
+        : [];
     for (const story of existing) {
       await this.guestSessions.upsertUserStoryProgress(
         userId,
@@ -50,6 +51,7 @@ export class PasswordlessGuestMergeService {
         false,
       );
     }
+    await this.guestSessions.deleteGuestSession(guestSessionId);
     this.logger.log(
       `Carried over ${existing.length} guest stories for user ${userId.slice(0, 8)}`,
     );

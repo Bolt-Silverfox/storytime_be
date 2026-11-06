@@ -13,6 +13,8 @@ export interface VerifiedEmailInput {
   googleId?: string;
   appleId?: string;
   onboardingStatus?: string;
+  refuseInactive?: boolean;
+  matchEmailCaseInsensitively?: boolean;
 }
 
 export interface VerifiedEmailDeps {
@@ -20,22 +22,55 @@ export interface VerifiedEmailDeps {
   passwordService: Pick<PasswordService, 'hashPassword'>;
 }
 
+export interface VerifiedEmailResult {
+  user: UserWithProfileAndAvatar;
+  isNewUser: boolean;
+  newlyVerified: boolean;
+}
+
 export async function findOrCreateParentByVerifiedEmail(
   deps: VerifiedEmailDeps,
   input: VerifiedEmailInput,
-): Promise<{ user: UserWithProfileAndAvatar; isNewUser: boolean }> {
+): Promise<VerifiedEmailResult> {
   const { authRepository, passwordService } = deps;
   const { email, name, emailVerified, googleId, appleId, onboardingStatus } =
     input;
 
-  const existing = await authRepository.findUserByEmail(email);
+  const existing = input.matchEmailCaseInsensitively
+    ? await authRepository.findUserByEmailInsensitive(email)
+    : await authRepository.findUserByEmail(email);
+
   if (existing) {
+    if (input.refuseInactive && (existing.isSuspended || existing.isDeleted)) {
+      return {
+        user: { ...existing, profile: null, avatar: null },
+        isNewUser: false,
+        newlyVerified: false,
+      };
+    }
+
+    const takeover = emailVerified && !existing.isEmailVerified;
+    const hardened: {
+      passwordHash?: string;
+      hasLocalPassword?: boolean;
+      onboardingStatus?: string;
+    } = {};
+    if (takeover) {
+      await authRepository.deleteAllUserSessions(existing.id);
+      hardened.passwordHash = await passwordService.hashPassword(
+        crypto.randomBytes(16).toString('hex'),
+      );
+      hardened.hasLocalPassword = false;
+      if (onboardingStatus) hardened.onboardingStatus = onboardingStatus;
+    }
+
     const user = await authRepository.updateUserWithRelations(existing.id, {
+      ...hardened,
       isEmailVerified: emailVerified ? true : existing.isEmailVerified,
       googleId: googleId || existing.googleId,
       appleId: appleId || existing.appleId,
     });
-    return { user, isNewUser: false };
+    return { user, isNewUser: false, newlyVerified: takeover };
   }
 
   const randomPassword = crypto.randomBytes(16).toString('hex');
@@ -56,5 +91,5 @@ export async function findOrCreateParentByVerifiedEmail(
       },
     },
   });
-  return { user, isNewUser: true };
+  return { user, isNewUser: true, newlyVerified: false };
 }

@@ -54,6 +54,7 @@ export type LinkableProviderField = 'googleId' | 'appleId';
 export interface IAuthRepository {
   // User operations
   findUserByEmail(email: string): Promise<User | null>;
+  findUserByEmailInsensitive(email: string): Promise<User | null>;
   findUserByEmailWithRelations(
     email: string,
   ): Promise<UserWithProfileAvatarAndKidCount | null>;
@@ -92,6 +93,7 @@ export interface IAuthRepository {
     id: string,
     data: Partial<{
       passwordHash: string;
+      hasLocalPassword: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;
