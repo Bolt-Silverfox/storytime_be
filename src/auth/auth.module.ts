@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { AuthV2Controller } from './auth-v2.controller';
 import { VerifyFirstService } from './services/verify-first.service';
+import { StaleUnverifiedPurgeService } from './services/stale-unverified-purge.service';
+import { PrismaStaleUnverifiedRepository } from './repositories/prisma-stale-unverified.repository';
 import { RegisterV2EnabledGuard } from './guards/register-v2-enabled.guard';
 import { RegisterV1DeprecationInterceptor } from './interceptors/v1-deprecation.interceptor';
 import { AuthService } from './auth.service';
@@ -53,6 +55,8 @@ import { AUTH_REPOSITORY, PrismaAuthRepository } from './repositories';
     GoogleOAuthStrategy,
     EmailVerificationService,
     VerifyFirstService,
+    StaleUnverifiedPurgeService,
+    PrismaStaleUnverifiedRepository,
     RegisterV2EnabledGuard,
     RegisterV1DeprecationInterceptor,
     {
