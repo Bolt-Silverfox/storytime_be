@@ -1,8 +1,14 @@
-import { ForbiddenException, INestApplication } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  INestApplication,
+} from '@nestjs/common';
 import request from 'supertest';
 import { RewardController } from './reward.controller';
 import { RewardService } from './reward.service';
 import {
+  ALICE,
+  ALICE_DELETED_KID,
   ALICE_KID,
   BOB,
   BOB_KID,
@@ -116,6 +122,46 @@ describe('RewardController authorization', () => {
       .get(`/rewards/redemption/${REWARD_ID}`)
       .set('Authorization', bearer('alice'))
       .expect(200);
+  });
+
+  it("refuses reading or updating another parent's reward by id", async () => {
+    await http()
+      .get(`/rewards/${REWARD_ID}`)
+      .set('Authorization', bearer('bob'))
+      .expect(403);
+    await http()
+      .get(`/rewards/${REWARD_ID}`)
+      .set('Authorization', bearer('alice'))
+      .expect(200);
+
+    const controller = app.get(RewardController);
+    const asUser = (userId: string) =>
+      ({ authUserData: { userId, userRole: 'user' } }) as never;
+    await expect(
+      controller.update(REWARD_ID, {}, asUser(BOB)),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(rewards.update).not.toHaveBeenCalled();
+    await controller.update(REWARD_ID, {}, asUser(ALICE));
+    expect(rewards.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a soft-deleted kid even for its parent', async () => {
+    await http()
+      .get(`/rewards/kid/${ALICE_DELETED_KID}`)
+      .set('Authorization', bearer('alice'))
+      .expect(403);
+    expect(rewards.findByKid).not.toHaveBeenCalled();
+  });
+
+  it('create with no kidId is rejected before any write, for users and admins', async () => {
+    const controller = app.get(RewardController);
+    for (const userRole of ['user', 'admin']) {
+      const req = { authUserData: { userId: ALICE, userRole } } as never;
+      await expect(
+        controller.create({ name: 'n', points: 1 } as never, req),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    }
+    expect(rewards.create).not.toHaveBeenCalled();
   });
 
   it('rejects creating, redeeming or approving against a kid the caller does not own', async () => {

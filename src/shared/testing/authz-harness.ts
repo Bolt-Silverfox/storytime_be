@@ -11,6 +11,7 @@ export const BOB = '22222222-2222-4222-8222-222222222222';
 export const ADMIN = '33333333-3333-4333-8333-333333333333';
 export const ALICE_KID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 export const BOB_KID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+export const ALICE_DELETED_KID = 'dddddddd-0000-4ddd-8ddd-dddddddddddd';
 
 const PAYLOADS: Record<string, JwtPayload> = {
   alice: payload(ALICE, 'user'),
@@ -19,8 +20,9 @@ const PAYLOADS: Record<string, JwtPayload> = {
 };
 
 const KIDS = [
-  { id: ALICE_KID, parentId: ALICE },
-  { id: BOB_KID, parentId: BOB },
+  { id: ALICE_KID, parentId: ALICE, isDeleted: false },
+  { id: BOB_KID, parentId: BOB, isDeleted: false },
+  { id: ALICE_DELETED_KID, parentId: ALICE, isDeleted: true },
 ];
 
 function payload(userId: string, userRole: string): JwtPayload {
@@ -66,12 +68,19 @@ export async function createAuthzApp(
     },
     kid: {
       findFirst: jest.fn(
-        ({ where }: { where: { id: string; parentId?: string } }) =>
+        ({
+          where,
+        }: {
+          where: { id: unknown; parentId?: string; isDeleted?: boolean };
+        }) =>
           Promise.resolve(
             KIDS.find(
               (k) =>
                 k.id === where.id &&
-                (where.parentId === undefined || k.parentId === where.parentId),
+                (where.parentId === undefined ||
+                  k.parentId === where.parentId) &&
+                (where.isDeleted === undefined ||
+                  k.isDeleted === where.isDeleted),
             ) ?? null,
           ),
       ),

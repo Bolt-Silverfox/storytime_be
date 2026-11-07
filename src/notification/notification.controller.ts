@@ -6,6 +6,7 @@ import {
   Param,
   Body,
   Delete,
+  ParseArrayPipe,
   Query,
   UseGuards,
   Req,
@@ -48,7 +49,14 @@ export class NotificationController {
   @ApiResponse({ status: 201, type: [NotificationPreferenceDto] })
   async create(
     @Req() req: AuthenticatedRequest,
-    @Body() dtos: CreateNotificationPreferenceDto[],
+    @Body(
+      new ParseArrayPipe({
+        items: CreateNotificationPreferenceDto,
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      }),
+    )
+    dtos: CreateNotificationPreferenceDto[],
   ) {
     const scoped: CreateNotificationPreferenceDto[] = [];
     for (const dto of dtos) {

@@ -1,4 +1,8 @@
-import { ForbiddenException, INestApplication } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  INestApplication,
+} from '@nestjs/common';
 import request from 'supertest';
 import { ReportsController } from './reports.controller';
 import { ReportsService } from './reports.service';
@@ -89,6 +93,17 @@ describe('ReportsController authorization', () => {
     expect(screenTime.getDailyLimitStatus).not.toHaveBeenCalled();
     await http().get(url).set('Authorization', bearer('alice')).expect(200);
     await http().get(url).set('Authorization', bearer('admin')).expect(200);
+  });
+
+  it('starting a screen-time session with no kidId is rejected before any write', async () => {
+    const controller = app.get(ReportsController);
+    for (const userRole of ['user', 'admin']) {
+      const req = { authUserData: { userId: ALICE, userRole } } as never;
+      await expect(
+        controller.startScreenTime({} as never, req),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    }
+    expect(screenTime.startScreenTimeSession).not.toHaveBeenCalled();
   });
 
   it('ending or starting a screen-time session needs ownership of its kid', async () => {

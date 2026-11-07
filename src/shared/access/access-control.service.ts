@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import { JwtPayload } from '@/shared/guards/auth.guard';
 
@@ -11,6 +15,12 @@ export interface OwnerRef {
 export class AccessControlService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private assertId(value: unknown, label: string): asserts value is string {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new BadRequestException(`Invalid ${label} id`);
+    }
+  }
+
   isAdmin(auth: JwtPayload): boolean {
     return auth.userRole === 'admin';
   }
@@ -22,12 +32,14 @@ export class AccessControlService {
   }
 
   assertSelfOrAdmin(auth: JwtPayload, userId: string): void {
+    this.assertId(userId, 'user');
     if (!this.isAdmin(auth) && auth.userId !== userId) {
       throw new ForbiddenException('You can only access your own data');
     }
   }
 
   async assertKidAccess(auth: JwtPayload, kidId: string): Promise<void> {
+    this.assertId(kidId, 'kid');
     if (this.isAdmin(auth)) return;
     const kid = await this.prisma.kid.findFirst({
       where: { id: kidId, parentId: auth.userId, isDeleted: false },

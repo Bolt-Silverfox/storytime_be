@@ -6,6 +6,7 @@ import {
   ALICE,
   ALICE_KID,
   BOB,
+  BOB_KID,
   bearer,
   createAuthzApp,
 } from '@/shared/testing/authz-harness';
@@ -116,7 +117,7 @@ describe('NotificationController (preferences) authorization', () => {
   });
 
   it('refuses creating a preference for another user and binds the default to the session', async () => {
-    const body = { type: 'push', category: 'NewStory', enabled: true };
+    const body = { type: 'push', category: 'NEW_LOGIN', enabled: true };
     await http()
       .post('/notification-preferences')
       .set('Authorization', bearer('alice'))
@@ -132,5 +133,41 @@ describe('NotificationController (preferences) authorization', () => {
     expect(notifications.create).toHaveBeenCalledWith(
       expect.objectContaining({ userId: ALICE }),
     );
+  });
+
+  describe('POST /notification-preferences body validation and kid ownership', () => {
+    const valid = { type: 'push', category: 'NEW_LOGIN', enabled: true };
+    const post = (who: 'alice' | 'admin', body: unknown) =>
+      http()
+        .post('/notification-preferences')
+        .set('Authorization', bearer(who))
+        .send(body as object);
+
+    it("refuses a preference for another parent's kid", async () => {
+      await post('alice', [{ ...valid, kidId: BOB_KID }]).expect(403);
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a preference for own kid', async () => {
+      await post('alice', [{ ...valid, kidId: ALICE_KID }]).expect(201);
+      expect(notifications.create).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['a non-array body', valid],
+      ['an extra property', [{ ...valid, role: 'admin' }]],
+      ['an unknown enum value', [{ ...valid, type: 'carrier-pigeon' }]],
+      ['a string boolean', [{ ...valid, enabled: 'false' }]],
+      ['an operator object as kidId', [{ ...valid, kidId: { not: 'z' } }]],
+      [
+        'an in-list object as kidId',
+        [{ ...valid, kidId: { in: [BOB_KID, ALICE_KID] } }],
+      ],
+      ['a non-uuid userId', [{ ...valid, userId: 'not-a-uuid' }]],
+    ])('rejects %s with 400 before touching the service', async (_l, body) => {
+      await post('alice', body).expect(400);
+      await post('admin', body).expect(400);
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
   });
 });
