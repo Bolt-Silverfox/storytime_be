@@ -1,3 +1,4 @@
+import { maskSourceFieldsForPublic } from '@/shared/utils/public-credit.util';
 import {
   Controller,
   Get,
@@ -174,6 +175,7 @@ export class GuestStoryController {
       story.id,
       story.textContent,
     );
+    const masked = maskSourceFieldsForPublic(story);
 
     return {
       id: story.id,
@@ -201,8 +203,8 @@ export class GuestStoryController {
       authorName: story.authorName ?? null,
       licenseCode: story.licenseCode ?? null,
       licenseUrl: story.licenseUrl ?? null,
-      sourceName: story.sourceName ?? null,
-      sourceUrl: story.sourceUrl ?? null,
+      sourceName: masked.sourceName ?? null,
+      sourceUrl: masked.sourceUrl ?? null,
     };
   }
 
