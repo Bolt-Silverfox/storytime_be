@@ -30,6 +30,7 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
+import { AdminGuard } from '@/shared/guards/admin.guard';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
 
@@ -349,7 +350,8 @@ export class StoryCoreController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new story' })
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: 'Create a new story (admin only)' })
   @ApiBody({ type: CreateStoryDto })
   @ApiOkResponse({ description: 'Created story', type: CreateStoryDto })
   @ApiResponse({
