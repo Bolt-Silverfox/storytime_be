@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   ConflictException,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -12,6 +13,9 @@ import { ConfigService } from '@nestjs/config';
 import appleSigninAuth from 'apple-signin-auth';
 import { Prisma } from '@prisma/client';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+
+const UNVERIFIED_LINK_MESSAGE =
+  'Verify your email before linking a sign-in provider.';
 
 /**
  * Owns account-linking concerns for authenticated users: listing linked
@@ -33,6 +37,12 @@ export class AccountLinkingService {
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (clientId) {
       this.googleClient = new OAuth2Client(clientId);
+    }
+  }
+
+  private async assertSessionStillActive(sessionId?: string): Promise<void> {
+    if (sessionId && !(await this.authRepository.findSessionById(sessionId))) {
+      throw new UnauthorizedException('Session expired. Please sign in again.');
     }
   }
 
@@ -67,7 +77,7 @@ export class AccountLinkingService {
     };
   }
 
-  async linkGoogle(userId: string, idToken: string) {
+  async linkGoogle(userId: string, idToken: string, sessionId?: string) {
     if (!this.googleClient) {
       throw new ServiceUnavailableException('Google client not configured');
     }
@@ -107,6 +117,7 @@ export class AccountLinkingService {
       updated = await this.authRepository.linkGoogleAccountIfUnset(
         userId,
         googleId,
+        sessionId,
       );
     } catch (err) {
       if (
@@ -121,8 +132,11 @@ export class AccountLinkingService {
     }
     if (updated.count === 0) {
       // Either user does not exist (or is soft-deleted), or googleId is already set
+      await this.assertSessionStillActive(sessionId);
       const user = await this.authRepository.findActiveUserById(userId);
       if (!user) throw new NotFoundException('User not found');
+      if (!user.isEmailVerified)
+        throw new ForbiddenException(UNVERIFIED_LINK_MESSAGE);
       throw new BadRequestException('Google account is already linked.');
     }
 
@@ -134,7 +148,7 @@ export class AccountLinkingService {
     };
   }
 
-  async linkApple(userId: string, idToken: string) {
+  async linkApple(userId: string, idToken: string, sessionId?: string) {
     const APPLE_CLIENT_ID = this.configService.get<string>('APPLE_CLIENT_ID');
     const APPLE_SERVICE_ID = this.configService.get<string>('APPLE_SERVICE_ID');
     const audiences = [APPLE_CLIENT_ID, APPLE_SERVICE_ID].filter(Boolean);
@@ -165,6 +179,7 @@ export class AccountLinkingService {
       updated = await this.authRepository.linkAppleAccountIfUnset(
         userId,
         appleId,
+        sessionId,
       );
     } catch (err) {
       if (
@@ -179,8 +194,11 @@ export class AccountLinkingService {
     }
     if (updated.count === 0) {
       // Either user does not exist (or is soft-deleted), or appleId is already set
+      await this.assertSessionStillActive(sessionId);
       const user = await this.authRepository.findActiveUserById(userId);
       if (!user) throw new NotFoundException('User not found');
+      if (!user.isEmailVerified)
+        throw new ForbiddenException(UNVERIFIED_LINK_MESSAGE);
       throw new BadRequestException('Apple account is already linked.');
     }
 

@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
 import { Test } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { validateEnv } from './env.validation';
@@ -116,6 +118,129 @@ describe('validateEnv', () => {
       expect(nodeEnv).toBe('production');
       expect(nonProdThrottleMultiplier(process.env.NODE_ENV)).toBe(1);
       expect(nonProdThrottleMultiplier(nodeEnv)).toBe(1);
+    });
+  });
+
+  describe('passwordless login', () => {
+    const pepper = 'q7Zk2vX9mP4rT8wL1nB6cD3fG5hJ0sA2';
+
+    it('is off by default and needs no pepper', () => {
+      const env = validateEnv(base);
+      expect(env.PASSWORDLESS_LOGIN_ENABLED).toBe(false);
+      expect(env.PASSWORDLESS_PEPPER).toBeUndefined();
+    });
+
+    it('treats a blank pepper and blank flag as unset', () => {
+      const env = validateEnv({
+        ...base,
+        PASSWORDLESS_PEPPER: '  ',
+        PASSWORDLESS_LOGIN_ENABLED: '',
+      });
+      expect(env.PASSWORDLESS_LOGIN_ENABLED).toBe(false);
+      expect(env.PASSWORDLESS_PEPPER).toBeUndefined();
+    });
+
+    it('refuses to boot when enabled without a pepper', () => {
+      expect(() =>
+        validateEnv({ ...base, PASSWORDLESS_LOGIN_ENABLED: 'true' }),
+      ).toThrow('Invalid environment variables');
+    });
+
+    it('refuses a short pepper', () => {
+      expect(() =>
+        validateEnv({
+          ...base,
+          PASSWORDLESS_LOGIN_ENABLED: 'true',
+          PASSWORDLESS_PEPPER: 'short',
+        }),
+      ).toThrow('Invalid environment variables');
+    });
+
+    it('ignores the pepper entirely while the flag is off', () => {
+      for (const junk of ['short', 'changeme', 'a'.repeat(40)]) {
+        expect(() =>
+          validateEnv({
+            ...base,
+            PASSWORDLESS_LOGIN_ENABLED: 'false',
+            PASSWORDLESS_PEPPER: junk,
+          }),
+        ).not.toThrow();
+      }
+    });
+
+    it('names the real problem in the log instead of always saying placeholder', () => {
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation();
+      expect(() =>
+        validateEnv({
+          ...base,
+          PASSWORDLESS_LOGIN_ENABLED: 'true',
+          PASSWORDLESS_PEPPER: 'short',
+        }),
+      ).toThrow('Invalid environment variables');
+      const logged = JSON.stringify(errorSpy.mock.calls);
+      expect(logged).toContain('at least 32');
+      expect(logged).not.toContain('placeholder');
+      errorSpy.mockRestore();
+    });
+
+    it.each([16, 32, 48])(
+      'accepts every random %i byte hex pepper',
+      (bytes) => {
+        for (let i = 0; i < 2000; i++) {
+          const pepper = crypto.randomBytes(bytes).toString('hex');
+          if (pepper.length < 32) continue;
+          expect(() =>
+            validateEnv({
+              ...base,
+              PASSWORDLESS_LOGIN_ENABLED: 'true',
+              PASSWORDLESS_PEPPER: pepper,
+            }),
+          ).not.toThrow();
+        }
+      },
+    );
+
+    it('accepts random base64 peppers', () => {
+      for (let i = 0; i < 2000; i++) {
+        expect(() =>
+          validateEnv({
+            ...base,
+            PASSWORDLESS_LOGIN_ENABLED: 'true',
+            PASSWORDLESS_PEPPER: crypto.randomBytes(32).toString('base64'),
+          }),
+        ).not.toThrow();
+      }
+    });
+
+    it('accepts the flag with a long pepper', () => {
+      const env = validateEnv({
+        ...base,
+        PASSWORDLESS_LOGIN_ENABLED: 'true',
+        PASSWORDLESS_PEPPER: pepper,
+      });
+      expect(env.PASSWORDLESS_LOGIN_ENABLED).toBe(true);
+      expect(env.PASSWORDLESS_PEPPER).toBe(pepper);
+    });
+
+    it.each([
+      'changeme'.padEnd(40, 'x'),
+      'CHANGE-ME-please-change-me-now-1234567',
+      'replace-with-a-real-pepper-value-123456',
+      'your-pepper-goes-here-0000000000000000',
+      'a'.repeat(40),
+      'ab'.repeat(20),
+      'abcdefgh'.repeat(5),
+      'abcdefghij1234567890'.repeat(2),
+    ])('rejects the placeholder pepper %s', (placeholder) => {
+      expect(() =>
+        validateEnv({
+          ...base,
+          PASSWORDLESS_LOGIN_ENABLED: 'true',
+          PASSWORDLESS_PEPPER: placeholder,
+        }),
+      ).toThrow('Invalid environment variables');
     });
   });
 });

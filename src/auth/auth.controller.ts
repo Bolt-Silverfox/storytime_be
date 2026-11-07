@@ -418,6 +418,7 @@ export class AuthController {
     return this.accountLinkingService.linkGoogle(
       req.authUserData['userId'],
       idToken,
+      req.authUserData['authSessionId'],
     );
   }
 
@@ -440,6 +441,7 @@ export class AuthController {
     return this.accountLinkingService.linkApple(
       req.authUserData['userId'],
       idToken,
+      req.authUserData['authSessionId'],
     );
   }
 

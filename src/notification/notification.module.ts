@@ -30,6 +30,7 @@ import { PushQueueService } from './queue/push-queue.service';
 import { PushProcessor } from './queue/push.processor';
 import { AuthEventListener } from './listeners/auth-event.listener';
 import { PasswordEventListener } from './listeners/password-event.listener';
+import { PasswordlessEventListener } from './listeners/passwordless-event.listener';
 import { NotificationPreferenceEventListener } from './listeners/notification-preference-event.listener';
 import { EngagementEventListener } from './listeners/engagement-event.listener';
 import { SubscriptionEventListener } from './listeners/subscription-event.listener';
@@ -95,6 +96,7 @@ import {
     // Event listeners (event-driven architecture)
     AuthEventListener,
     PasswordEventListener,
+    PasswordlessEventListener,
     NotificationPreferenceEventListener,
     // Engagement + subscription notifications from real domain events
     EngagementEventListener,
