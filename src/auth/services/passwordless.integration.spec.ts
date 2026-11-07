@@ -6,6 +6,7 @@ import { PasswordlessService } from './passwordless.service';
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
 import { TokenService } from './token.service';
 import * as bcrypt from 'bcryptjs';
+import { UnauthorizedException } from '@nestjs/common';
 import { PasswordService } from './password.service';
 import {
   AccountAlreadyVerifiedError,
@@ -941,8 +942,60 @@ maybe('PasswordlessService against Postgres', () => {
         where: { id: user.id },
       });
       expect(after.passwordHash).toBe('victim-owned-hash');
-      expect(outcome).toBeInstanceOf(Error);
+      expect(outcome).toBeInstanceOf(UnauthorizedException);
     });
+
+    it('never deadlocks the takeover against a concurrent change-password', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const passwords = makePasswordService(authRepo);
+      const failures: unknown[] = [];
+      for (let round = 0; round < 60; round++) {
+        const { user, session } = await seedAttacker('cpd');
+        for (let extra = 0; extra < 2; extra++) {
+          await prisma.session.create({
+            data: {
+              userId: user.id,
+              token: `pwl-it-cpd-x-${process.pid}-${++n}`,
+              expiresAt: new Date(Date.now() + 3_600_000),
+            },
+          });
+        }
+        const change = passwords
+          .changePassword(
+            user.id,
+            { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
+            session.id,
+          )
+          .catch((error: unknown) => error);
+        const takeover = new Promise((resolve) =>
+          setTimeout(resolve, 30 + (round % 12) * 8),
+        ).then(() =>
+          authRepo
+            .takeOverUnverifiedAccount(user.id, {
+              passwordHash: 'rotated',
+              hasLocalPassword: false,
+              pinHash: null,
+              biometricsEnabled: false,
+              isEmailVerified: true,
+              googleId: null,
+              appleId: null,
+            })
+            .catch((error: unknown) => error),
+        );
+        const [changeResult, takeoverResult] = await Promise.all([
+          change,
+          takeover,
+        ]);
+        if (takeoverResult instanceof Error) failures.push(takeoverResult);
+        if (
+          changeResult instanceof Error &&
+          !(changeResult instanceof UnauthorizedException)
+        ) {
+          failures.push(changeResult);
+        }
+      }
+      expect(failures).toEqual([]);
+    }, 60_000);
 
     it('still changes the password when nothing intervened', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
@@ -975,7 +1028,7 @@ maybe('PasswordlessService against Postgres', () => {
           { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
           session.id,
         ),
-      ).rejects.toBeInstanceOf(Error);
+      ).rejects.toBeInstanceOf(UnauthorizedException);
 
       const after = await prisma.user.findUniqueOrThrow({
         where: { id: user.id },

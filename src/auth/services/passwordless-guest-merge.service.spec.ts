@@ -44,6 +44,14 @@ describe('PasswordlessGuestMergeService', () => {
     );
   });
 
+  it('looks up and retires the lower-case session when the header is upper-case', async () => {
+    const { service, guestSessions } = build({ s1: {} });
+    await service.carryOver('u1', GUEST.toUpperCase(), true);
+    expect(guestSessions.getGuestReadingHistory).toHaveBeenCalledWith(GUEST);
+    expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
+    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
+  });
+
   it('claims a guest session only once', async () => {
     const { service, guestSessions } = build({ s1: {} });
     await service.carryOver('u1', GUEST, true);

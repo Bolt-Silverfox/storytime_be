@@ -6,6 +6,7 @@ import { PasswordlessService } from './passwordless.service';
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
+import { INCR_WITH_EXPIRY } from './passwordless-throttle.service';
 import {
   InMemoryAuthRepository,
   InMemoryLoginChallengeRepository,
@@ -371,7 +372,12 @@ describe('PasswordlessService', () => {
     it('stops sending once the global ceiling is reached', async () => {
       const { service, captured, redis } = build();
       for (let i = 0; i < 1000; i++) {
-        await redis.client.eval('', 1, 'pwl:req:global', '3600000');
+        await redis.client.eval(
+          INCR_WITH_EXPIRY,
+          1,
+          'pwl:req:global',
+          '3600000',
+        );
       }
       await service.request('a@example.com', '1.1.1.1');
       expect(captured).toHaveLength(0);
@@ -734,7 +740,12 @@ describe('PasswordlessService', () => {
       jest.spyOn(Logger.prototype, 'log').mockImplementation();
       const { service, captured, redis } = build();
       for (let i = 0; i < 998; i++) {
-        await redis.client.eval('', 1, 'pwl:req:global', '3600000');
+        await redis.client.eval(
+          INCR_WITH_EXPIRY,
+          1,
+          'pwl:req:global',
+          '3600000',
+        );
       }
 
       await Promise.all(
@@ -755,7 +766,12 @@ describe('PasswordlessService', () => {
       jest.spyOn(Logger.prototype, 'log').mockImplementation();
       const { service, redis } = build();
       for (let i = 0; i < 1000; i++) {
-        await redis.client.eval('', 1, 'pwl:req:global', '3600000');
+        await redis.client.eval(
+          INCR_WITH_EXPIRY,
+          1,
+          'pwl:req:global',
+          '3600000',
+        );
       }
       await service.request('a@example.com', '1.1.1.1');
       expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('ceiling'));

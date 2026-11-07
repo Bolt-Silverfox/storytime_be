@@ -1,4 +1,7 @@
-import { DECR_CLAMPED } from '@/auth/services/passwordless-throttle.service';
+import {
+  DECR_CLAMPED,
+  INCR_WITH_EXPIRY,
+} from '@/auth/services/passwordless-throttle.service';
 import { AccountAlreadyVerifiedError } from '@/auth/repositories/account-already-verified.error';
 import type { User, Profile, Avatar, Session } from '@prisma/client';
 import type {
@@ -130,6 +133,9 @@ export class InMemoryRedis {
         }
         this.store.set(key, { n: current - 1, expiresAt: live!.expiresAt });
         return Promise.resolve(current - 1);
+      }
+      if (script !== INCR_WITH_EXPIRY) {
+        return Promise.reject(new Error('InMemoryRedis: unknown Lua script'));
       }
       const cur = this.store.get(key);
       if (!cur || cur.expiresAt <= now) {

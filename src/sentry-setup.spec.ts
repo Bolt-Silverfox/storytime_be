@@ -2,7 +2,8 @@ describe('sentry-setup passwordless body protection', () => {
   const originalDsn = process.env.SENTRY_DSN;
 
   afterEach(() => {
-    process.env.SENTRY_DSN = originalDsn;
+    if (originalDsn === undefined) delete process.env.SENTRY_DSN;
+    else process.env.SENTRY_DSN = originalDsn;
     jest.resetModules();
     jest.dontMock('@sentry/node');
   });

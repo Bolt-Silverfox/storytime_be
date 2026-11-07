@@ -24,9 +24,10 @@ export class PasswordlessGuestMergeService {
     isNewUser: boolean,
   ): Promise<void> {
     if (!isNewUser || !UUID_V4_LIKE.test(guestSessionId)) return;
+    const sid = guestSessionId.toLowerCase();
 
     const claimed = await this.redis.client.set(
-      `pwl:guest-claim:${guestSessionId.toLowerCase()}`,
+      `pwl:guest-claim:${sid}`,
       '1',
       'EX',
       CLAIM_TTL_SECONDS,
@@ -34,8 +35,7 @@ export class PasswordlessGuestMergeService {
     );
     if (claimed !== 'OK') return;
 
-    const history =
-      await this.guestSessions.getGuestReadingHistory(guestSessionId);
+    const history = await this.guestSessions.getGuestReadingHistory(sid);
     if (!history) return;
 
     const storyIds = Object.keys(history).slice(0, GUEST_STORY_LIMIT);
@@ -51,7 +51,7 @@ export class PasswordlessGuestMergeService {
         false,
       );
     }
-    await this.guestSessions.deleteGuestSession(guestSessionId);
+    await this.guestSessions.deleteGuestSession(sid);
     this.logger.log(
       `Carried over ${existing.length} guest stories for user ${userId.slice(0, 8)}`,
     );
