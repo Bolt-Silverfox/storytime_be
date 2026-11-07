@@ -1,9 +1,10 @@
-import { INestApplication } from '@nestjs/common';
+import { ForbiddenException, INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { RewardController } from './reward.controller';
 import { RewardService } from './reward.service';
 import {
   ALICE_KID,
+  BOB,
   BOB_KID,
   bearer,
   createAuthzApp,
@@ -115,5 +116,28 @@ describe('RewardController authorization', () => {
       .get(`/rewards/redemption/${REWARD_ID}`)
       .set('Authorization', bearer('alice'))
       .expect(200);
+  });
+
+  it('rejects creating, redeeming or approving against a kid the caller does not own', async () => {
+    const controller = app.get(RewardController);
+    const bobReq = { authUserData: { userId: BOB, userRole: 'user' } } as never;
+    await expect(
+      controller.create({ name: 'n', points: 1, kidId: ALICE_KID }, bobReq),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.redeemReward(
+        { rewardId: REWARD_ID, kidId: ALICE_KID },
+        bobReq,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.updateRedemptionStatus(
+        { redemptionId: REWARD_ID, status: 'approved' },
+        bobReq,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(rewards.create).not.toHaveBeenCalled();
+    expect(rewards.redeemReward).not.toHaveBeenCalled();
+    expect(rewards.updateRedemptionStatus).not.toHaveBeenCalled();
   });
 });

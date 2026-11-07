@@ -166,6 +166,18 @@ export class NotificationSettingsService {
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
   }
 
+  async getPreferenceOwner(
+    id: string,
+  ): Promise<{ userId: string | null; kidId: string | null }> {
+    const pref =
+      await this.notificationPreferenceRepository.findUniqueNotificationPreference(
+        id,
+        true,
+      );
+    if (!pref) throw new NotFoundException('Notification preference not found');
+    return { userId: pref.userId, kidId: pref.kidId };
+  }
+
   async getById(id: string): Promise<NotificationPreferenceDto> {
     const pref =
       await this.notificationPreferenceRepository.findUniqueNotificationPreference(
