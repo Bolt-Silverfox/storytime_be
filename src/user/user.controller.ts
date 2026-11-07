@@ -32,6 +32,7 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
+import { AccessControlService } from '@/shared/access/access-control.service';
 import { UploadService } from '@/upload/upload.service';
 import {
   AuthSessionGuard,
@@ -74,7 +75,18 @@ export class UserController {
     private readonly userService: UserService,
     private readonly uploadService: UploadService,
     private readonly userDataExportService: UserDataExportService,
+    private readonly accessControl: AccessControlService,
   ) {}
+
+  private toDeleteResponse(result: {
+    id: string;
+    email: string;
+    message: string;
+    permanent: boolean;
+  }) {
+    const { id, email, message, permanent } = result;
+    return { id, email, message, permanent };
+  }
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
   // ============================================================
@@ -460,7 +472,7 @@ export class UserController {
     return {
       statusCode: 200,
       success: true,
-      data: result,
+      data: this.toDeleteResponse(result),
       message: result.message,
     };
   }
@@ -628,23 +640,36 @@ export class UserController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get user profile' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get user profile (self or admin)' })
   @ApiParam({ name: 'id', type: String })
-  async getUser(@Param('id') id: string) {
+  async getUser(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, id);
     const user = await this.userService.getUser(id);
     if (!user) return null;
     return new UserDto(user);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update user profile' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user profile (self or admin)' })
   @ApiParam({ name: 'id', type: String })
-  async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
-    return await this.userService.updateUser(id, body);
+  async updateUser(
+    @Param('id') id: string,
+    @Body() body: UpdateUserDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, id);
+    const updated = await this.userService.updateUser(id, body);
+    return updated ? new UserDto(updated) : null;
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete user account' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete user account (self or admin)' })
   @ApiQuery({
     name: 'permanent',
     required: false,
@@ -654,9 +679,12 @@ export class UserController {
   })
   async deleteUserAccount(
     @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
     @Query('permanent') permanent: boolean = false,
   ) {
-    return await this.userService.deleteUserAccount(id, permanent);
+    this.accessControl.assertSelfOrAdmin(req.authUserData, id);
+    const result = await this.userService.deleteUserAccount(id, permanent);
+    return this.toDeleteResponse(result);
   }
 
   @Post(':id/undo-delete')
