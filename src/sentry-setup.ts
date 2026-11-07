@@ -1,5 +1,6 @@
 import * as Sentry from '@sentry/node';
 import { setupEventContextTrace } from '@sentry/opentelemetry';
+import { buildSentryOptions } from './sentry-scrub';
 
 type SentryClient = ReturnType<typeof Sentry.getClient>;
 
@@ -43,6 +44,8 @@ if (isSentryEnabled) {
     // We own the OpenTelemetry setup (see otel-setup.ts). Do NOT let Sentry create
     // its own NodeSDK/provider — that would conflict with the existing one.
     skipOpenTelemetrySetup: true,
+    // Never send request credentials (authorization, cookies, tokens) to Sentry.
+    ...buildSentryOptions(),
   });
 
   // Attach OTel trace/span context (trace_id, span_id) to Sentry events so they
