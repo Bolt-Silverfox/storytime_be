@@ -21,6 +21,14 @@ export class AvatarService {
 
   // Helper Methods
 
+  private withoutCredentials<
+    T extends { passwordHash: string | null; pinHash: string | null },
+  >(user: T): Omit<T, 'passwordHash' | 'pinHash'> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, pinHash, ...safe } = user;
+    return safe;
+  }
+
   private async handleCustomAvatarUpload(
     entityId: string,
     entityType: 'user' | 'kid',
@@ -261,7 +269,9 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found');
     }
 
-    return this.avatarRepository.updateUserAvatar(userId, avatarId);
+    return this.withoutCredentials(
+      await this.avatarRepository.updateUserAvatar(userId, avatarId),
+    );
   }
 
   async assignAvatarToKid(kidId: string, avatarId: string) {
@@ -296,7 +306,9 @@ export class AvatarService {
       user.name || user.email || 'Unknown User',
     );
 
-    return this.avatarRepository.updateUserAvatar(userId, avatar.id);
+    return this.withoutCredentials(
+      await this.avatarRepository.updateUserAvatar(userId, avatar.id),
+    );
   }
 
   async uploadAndAssignKidAvatar(kidId: string, file: Express.Multer.File) {
