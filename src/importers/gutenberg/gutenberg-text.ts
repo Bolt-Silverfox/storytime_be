@@ -295,17 +295,24 @@ function scanNote(m: string, startDepth: number): number | null {
 }
 
 const PRODUCER_SHAPE =
-  /\be-?texts?\b|\be-?books?\b|\bpgdp\b|\bpglaf\b|\bpg\b|@|https?:\/\/\S+|www\.\S+|internet archive|page images|updated editions|online distributed|proofreading team|this file was produced|michael\s+(?:s\.?\s+)?hart/i;
+  /\be-?texts?\b|\be-?books?\b|\bpgdp\b|\bpglaf\b|\S+@\S+\.\S+|https?:\/\/\S+|www\.\S+|internet archive|page images|proofreading team|this file was produced/i;
+const KNOWN_SHORT_BOILERPLATE =
+  /^(?:this\s+(?:e-?book|e-?text|file)\s+was\s+produced\b|(?:e-?text|e-?book)\s*(?:(?:no\.?|number|#)\s*)?\d+|(?:this\s+)?pg\s+(?:edition|version)\b|updated\s+editions\s+will\s+replace\b|distributed\s+proofread)/i;
+const MAX_SHAPE_PARAGRAPH_CHARS = 200;
 const PRODUCER_CREDIT =
   /^(?:e-?text\s+)?(?:produced|prepared|transcribed|scanned|proofread|proofed|digitized|digitised|converted)\s+by\s+(.+)$/i;
-const MAX_CREDIT_CHARS = 200;
 
 function isProducerParagraph(m: string): boolean {
-  if (hasSourceReference(m) || PRODUCER_SHAPE.test(m)) return true;
+  const short = m.length <= MAX_SHAPE_PARAGRAPH_CHARS;
+  if (short && KNOWN_SHORT_BOILERPLATE.test(m)) return true;
+  const opener = BOILERPLATE_START.exec(m);
+  const rest = opener ? m.slice(opener[0].length) : m;
+  if (hasSourceReference(rest) || (short && PRODUCER_SHAPE.test(rest)))
+    return true;
   const credit = PRODUCER_CREDIT.exec(m);
   return (
     !!credit &&
-    m.length <= MAX_CREDIT_CHARS &&
+    short &&
     credit[1]
       .split(/[\s,]+/)
       .filter(Boolean)

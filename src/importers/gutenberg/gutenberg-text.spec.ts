@@ -553,7 +553,7 @@ describe('processGutenbergText hardening', () => {
     it('drops a leading producer line and trailing edition lines but not mid-body paragraphs', () => {
       expect(
         contentOf(
-          `Produced by Jane Doe.\n\n${STORY}\n\nUpdated editions will replace this one.\n\nOnline Distributed Proofreading Team`,
+          `Produced by Jane Doe.\n\n${STORY}\n\nUpdated editions will replace the previous one.\n\nOnline Distributed Proofreading Team`,
         ),
       ).toBe(STORY);
       for (const line of [
@@ -587,6 +587,56 @@ describe('processGutenbergText hardening', () => {
     );
 
     it.each([
+      'Michael Hart lived in a little house by the sea and loved the fox.',
+      'Michael Hart was a poor fisherman.',
+      'MICHAEL HART AND THE FOX',
+      'Updated editions of the book were sold at the market, and the fox bought one.',
+      'Project Gutenberg Street was where the fox lived.',
+      "Online distributed the fox's letters to every house.",
+      'This file was a gift, said the fox.',
+      'Prepared by the cook at the pg diner.',
+      'Prepared by the cook, who liked the @ sign.',
+    ])(
+      'a story line that opens like boilerplate fails closed at both ends: %s',
+      (line) => {
+        expect(contentOf(`${line}\n\nCHAPTER I. HOME\n\n${STORY}`)).toEqual({
+          ok: false,
+          reason: 'boilerplate-ambiguous',
+        });
+        expect(contentOf(`${STORY}\n\n${line}`)).toEqual({
+          ok: false,
+          reason: 'boilerplate-mid-body',
+        });
+      },
+    );
+
+    it('a long paragraph is never dropped on a producer token alone', () => {
+      const line = `Prepared by the cook, who read an e-book aloud. ${'The soup was hot and the fox ate it all up. '.repeat(6)}`;
+      expect(contentOf(`${STORY}\n\n${line}`)).toEqual({
+        ok: false,
+        reason: 'boilerplate-mid-body',
+      });
+    });
+
+    it('keeps a line that only looks like the This ebook opener', () => {
+      const line = 'This ebook-reading owl hooted at the moon.';
+      expect(contentOf(`${STORY}\n\n${line}`)).toBe(`${STORY}\n\n${line}`);
+    });
+
+    it.each([
+      'Michael S. Hart began the e-text effort.',
+      'Michael Hart, Project Gutenberg founder.',
+      'Updated editions will replace the previous one--the old editions will be renamed.',
+      'Online Distributed Proofreading Team',
+      'Distributed Proofreaders Canada',
+      'Etext #14838',
+      'This PG edition has been updated.',
+    ])('a real boilerplate line is still dropped at both ends: %s', (line) => {
+      expect(contentOf(`${line}\n\n${STORY}`)).toBe(STORY);
+      expect(contentOf(`${STORY}\n\n${line}`)).toBe(STORY);
+    });
+
+    it.each([
       'Produced by David Widger',
       'Produced by Sue Asscher, John Hamm and Al Haines.',
       'Transcribed from the 1894 Macmillan edition by David Price, email ccx074@pglaf.org',
@@ -616,7 +666,7 @@ describe('processGutenbergText hardening', () => {
       },
     );
 
-    it('a lone ] in a later story paragraph does not close an open note', () => {
+    it('an open note whose first paragraph ends in ] fails closed', () => {
       expect(
         contentOf(
           `${STORY}\n\n[Transcriber's Note: the word [sic on page 3.]\n\nThe badger dug a deep hole by the river.\n\nThe owl said it was late]\n\n${STORY}`,
