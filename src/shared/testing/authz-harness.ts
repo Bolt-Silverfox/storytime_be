@@ -66,12 +66,14 @@ export async function createAuthzApp(
     },
     kid: {
       findFirst: jest.fn(
-        async ({ where }: { where: { id: string; parentId?: string } }) =>
-          KIDS.find(
-            (k) =>
-              k.id === where.id &&
-              (where.parentId === undefined || k.parentId === where.parentId),
-          ) ?? null,
+        ({ where }: { where: { id: string; parentId?: string } }) =>
+          Promise.resolve(
+            KIDS.find(
+              (k) =>
+                k.id === where.id &&
+                (where.parentId === undefined || k.parentId === where.parentId),
+            ) ?? null,
+          ),
       ),
     },
   };

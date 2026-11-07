@@ -24,10 +24,12 @@ describe('ActivityLogController authorization', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    analytics.create.mockImplementation(async (dto) => ({
-      id: LOG_ID,
-      ...dto,
-    }));
+    analytics.create.mockImplementation((dto) =>
+      Promise.resolve({
+        id: LOG_ID,
+        ...dto,
+      }),
+    );
     analytics.getForUser.mockResolvedValue([]);
     analytics.getForKid.mockResolvedValue([]);
     analytics.getById.mockResolvedValue({ id: LOG_ID, userId: ALICE });

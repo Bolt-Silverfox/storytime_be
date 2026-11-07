@@ -35,15 +35,19 @@ describe('UserController /user/:id authorization', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    userService.getUser.mockImplementation(async (id: string) => userRow(id));
-    userService.updateUser.mockImplementation(async (id: string) =>
-      userRow(id),
+    userService.getUser.mockImplementation((id: string) =>
+      Promise.resolve(userRow(id)),
+    );
+    userService.updateUser.mockImplementation((id: string) =>
+      Promise.resolve(userRow(id)),
     );
     userService.deleteUserAccount.mockImplementation(
-      async (id: string, permanent: boolean) =>
-        permanent
-          ? { id, email: 'e', message: 'm', permanent: true }
-          : { ...userRow(id), message: 'm', permanent: false },
+      (id: string, permanent: boolean) =>
+        Promise.resolve(
+          permanent
+            ? { id, email: 'e', message: 'm', permanent: true }
+            : { ...userRow(id), message: 'm', permanent: false },
+        ),
     );
     app = await createAuthzApp(
       [UserController],

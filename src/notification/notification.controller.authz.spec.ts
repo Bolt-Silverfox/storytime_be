@@ -33,7 +33,7 @@ describe('NotificationController (preferences) authorization', () => {
     notifications.getForKid.mockResolvedValue([]);
     notifications.getById.mockResolvedValue({ id: PREF_ID, userId: ALICE });
     notifications.getPreferenceOwner.mockResolvedValue({ userId: ALICE });
-    notifications.create.mockImplementation(async (dto) => dto);
+    notifications.create.mockImplementation((dto) => Promise.resolve(dto));
     app = await createAuthzApp(
       [NotificationController],
       [{ provide: NotificationService, useValue: notifications }],
