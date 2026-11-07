@@ -1,26 +1,51 @@
-import { Controller, Get, Post, Param, Body, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiParam,
   ApiBody,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { CreateActivityLogDto, ActivityLogDto } from './dto/analytics.dto';
 import { UAParser } from 'ua-parser-js';
-import { Request } from 'express';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+import { AccessControlService } from '@/shared/access/access-control.service';
 
 @ApiTags('activity-logs')
 @Controller('activity-logs')
+@UseGuards(AuthSessionGuard)
+@ApiBearerAuth()
 export class ActivityLogController {
-  constructor(private readonly analyticsService: AnalyticsService) {}
+  constructor(
+    private readonly analyticsService: AnalyticsService,
+    private readonly accessControl: AccessControlService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Log an activity' })
   @ApiBody({ type: CreateActivityLogDto })
   @ApiResponse({ status: 201, type: ActivityLogDto })
-  async create(@Body() dto: CreateActivityLogDto, @Req() req: Request) {
+  async create(
+    @Body() dto: CreateActivityLogDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    dto.userId = this.accessControl.resolveUserId(req.authUserData, dto.userId);
+    if (dto.kidId) {
+      await this.accessControl.assertKidAccess(req.authUserData, dto.kidId);
+    }
     // Detect IP
     const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     // Detect device info from User-Agent
@@ -37,7 +62,11 @@ export class ActivityLogController {
   @ApiOperation({ summary: 'Get activity logs for a user' })
   @ApiParam({ name: 'userId', type: String })
   @ApiResponse({ status: 200, type: [ActivityLogDto] })
-  async getForUser(@Param('userId') userId: string) {
+  async getForUser(
+    @Param('userId') userId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, userId);
     return this.analyticsService.getForUser(userId);
   }
 
@@ -45,7 +74,11 @@ export class ActivityLogController {
   @ApiOperation({ summary: 'Get activity logs for a kid' })
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [ActivityLogDto] })
-  async getForKid(@Param('kidId') kidId: string) {
+  async getForKid(
+    @Param('kidId') kidId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
     return this.analyticsService.getForKid(kidId);
   }
 
@@ -53,7 +86,9 @@ export class ActivityLogController {
   @ApiOperation({ summary: 'Get an activity log by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: ActivityLogDto })
-  async getById(@Param('id') id: string) {
-    return this.analyticsService.getById(id);
+  async getById(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    const log = await this.analyticsService.getById(id);
+    if (log) await this.accessControl.assertOwner(req.authUserData, log);
+    return log;
   }
 }

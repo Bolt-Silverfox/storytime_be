@@ -24,6 +24,7 @@ import {
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
 import { NotificationService } from './notification.service';
+import { AccessControlService } from '@/shared/access/access-control.service';
 import {
   CreateNotificationPreferenceDto,
   UpdateNotificationPreferenceDto,
@@ -33,20 +34,46 @@ import {
 
 @ApiTags('notification-preferences')
 @Controller('notification-preferences')
+@UseGuards(AuthSessionGuard)
+@ApiBearerAuth()
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly accessControl: AccessControlService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Create notification preferences (bulk)' })
   @ApiBody({ type: [CreateNotificationPreferenceDto] })
   @ApiResponse({ status: 201, type: [NotificationPreferenceDto] })
-  async create(@Body() dtos: CreateNotificationPreferenceDto[]) {
-    return Promise.all(dtos.map((dto) => this.notificationService.create(dto)));
+  async create(
+    @Req() req: AuthenticatedRequest,
+    @Body() dtos: CreateNotificationPreferenceDto[],
+  ) {
+    const scoped: CreateNotificationPreferenceDto[] = [];
+    for (const dto of dtos) {
+      if (dto.kidId) {
+        await this.accessControl.assertKidAccess(req.authUserData, dto.kidId);
+        if (dto.userId) {
+          this.accessControl.assertSelfOrAdmin(req.authUserData, dto.userId);
+        }
+        scoped.push(dto);
+      } else {
+        scoped.push({
+          ...dto,
+          userId: this.accessControl.resolveUserId(
+            req.authUserData,
+            dto.userId,
+          ),
+        });
+      }
+    }
+    return Promise.all(
+      scoped.map((dto) => this.notificationService.create(dto)),
+    );
   }
 
   @Patch()
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
   @ApiOperation({ summary: 'Update multiple notification preferences' })
   @ApiBody({ type: [BulkUpdateNotificationPreferenceDto] })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
@@ -65,7 +92,9 @@ export class NotificationController {
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateNotificationPreferenceDto,
+    @Req() req: AuthenticatedRequest,
   ) {
+    await this.assertPreferenceAccess(req, id);
     return this.notificationService.update(id, dto);
   }
 
@@ -85,8 +114,10 @@ export class NotificationController {
   })
   async delete(
     @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
     @Query('permanent') permanent: boolean = false,
   ) {
+    await this.assertPreferenceAccess(req, id);
     await this.notificationService.delete(id, permanent);
     return { message: 'Notification preference deleted successfully' };
   }
@@ -95,7 +126,8 @@ export class NotificationController {
   @ApiOperation({ summary: 'Restore a soft deleted notification preference' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: NotificationPreferenceDto })
-  async undoDelete(@Param('id') id: string) {
+  async undoDelete(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    await this.assertPreferenceAccess(req, id);
     return this.notificationService.undoDelete(id);
   }
 
@@ -105,7 +137,11 @@ export class NotificationController {
   })
   @ApiParam({ name: 'userId', type: String })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
-  async getForUser(@Param('userId') userId: string) {
+  async getForUser(
+    @Param('userId') userId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, userId);
     return this.notificationService.getForUser(userId);
   }
 
@@ -115,7 +151,11 @@ export class NotificationController {
   })
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
-  async getForKid(@Param('kidId') kidId: string) {
+  async getForKid(
+    @Param('kidId') kidId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
     return this.notificationService.getForKid(kidId);
   }
 
@@ -123,7 +163,13 @@ export class NotificationController {
   @ApiOperation({ summary: 'Get a notification preference by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: NotificationPreferenceDto })
-  async getById(@Param('id') id: string) {
+  async getById(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    await this.assertPreferenceAccess(req, id);
     return this.notificationService.getById(id);
+  }
+
+  private async assertPreferenceAccess(req: AuthenticatedRequest, id: string) {
+    const owner = await this.notificationService.getPreferenceOwner(id);
+    await this.accessControl.assertOwner(req.authUserData, owner);
   }
 }

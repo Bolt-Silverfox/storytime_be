@@ -178,6 +178,12 @@ export class NotificationService {
     return this.settingsService.getForKid(kidId);
   }
 
+  async getPreferenceOwner(
+    id: string,
+  ): Promise<{ userId: string | null; kidId: string | null }> {
+    return this.settingsService.getPreferenceOwner(id);
+  }
+
   async getById(id: string): Promise<NotificationPreferenceDto> {
     return this.settingsService.getById(id);
   }

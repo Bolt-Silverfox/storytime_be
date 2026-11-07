@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Body,
+  Req,
   UseInterceptors,
   UploadedFile,
   UseGuards,
@@ -26,13 +27,20 @@ import {
   AssignAvatarToUserDto,
   AssignAvatarToKidDto,
 } from './dto/avatar.dto';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+import { AccessControlService } from '@/shared/access/access-control.service';
 import { SuccessResponse } from '@/shared/dtos/api-response.dto';
 
 @Controller('avatars')
 @UseGuards(AuthSessionGuard)
 export class AvatarAssignmentController {
-  constructor(private readonly avatarService: AvatarService) {}
+  constructor(
+    private readonly avatarService: AvatarService,
+    private readonly accessControl: AccessControlService,
+  ) {}
 
   @Post('assign/user')
   @ApiOperation({
@@ -125,9 +133,16 @@ export class AvatarAssignmentController {
       },
     },
   })
-  async assignAvatarToUser(@Body() assignAvatarDto: AssignAvatarToUserDto) {
-    const user = await this.avatarService.assignAvatarToUser(
+  async assignAvatarToUser(
+    @Body() assignAvatarDto: AssignAvatarToUserDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const userId = this.accessControl.resolveUserId(
+      req.authUserData,
       assignAvatarDto.userId,
+    );
+    const user = await this.avatarService.assignAvatarToUser(
+      userId,
       assignAvatarDto.avatarId,
     );
     return new SuccessResponse(
@@ -217,7 +232,14 @@ export class AvatarAssignmentController {
       },
     },
   })
-  async assignAvatarToKid(@Body() assignAvatarDto: AssignAvatarToKidDto) {
+  async assignAvatarToKid(
+    @Body() assignAvatarDto: AssignAvatarToKidDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.accessControl.assertKidAccess(
+      req.authUserData,
+      assignAvatarDto.kidId,
+    );
     const kid = await this.avatarService.assignAvatarToKid(
       assignAvatarDto.kidId,
       assignAvatarDto.avatarId,
@@ -338,8 +360,13 @@ export class AvatarAssignmentController {
       }),
     )
     file: Express.Multer.File,
-    @Body('userId') userId: string,
+    @Body('userId') requestedUserId: string | undefined,
+    @Req() req: AuthenticatedRequest,
   ) {
+    const userId = this.accessControl.resolveUserId(
+      req.authUserData,
+      requestedUserId,
+    );
     const user = await this.avatarService.uploadAndAssignUserAvatar(
       userId,
       file,
@@ -446,7 +473,9 @@ export class AvatarAssignmentController {
     )
     file: Express.Multer.File,
     @Body('kidId') kidId: string,
+    @Req() req: AuthenticatedRequest,
   ) {
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
     const kid = await this.avatarService.uploadAndAssignKidAvatar(kidId, file);
     return new SuccessResponse(
       200,
