@@ -223,6 +223,12 @@ export interface IAuthRepository {
 
 export interface IAuthRepositoryTransaction {
   updateUser(id: string, data: { passwordHash: string }): Promise<User>;
+  changePasswordIfUnchanged(
+    userId: string,
+    expectedHash: string,
+    newHash: string,
+    sessionId: string,
+  ): Promise<boolean>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
   findActiveUserLinkedProviderFields(
     userId: string,

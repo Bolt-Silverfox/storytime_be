@@ -46,16 +46,17 @@ maybe('PasswordlessThrottleService against real Redis', () => {
     expect(await client.pttl(key)).toBeGreaterThan(0);
   });
 
-  it('does not lose a hit that races a release', async () => {
+  it('keeps the exact count when releases race with hits', async () => {
     const key = `${prefix}race`;
+    for (let i = 0; i < 50; i++) await throttle.hit(key, 60_000);
+
     await Promise.all(
       Array.from({ length: 50 }, (_, i) =>
         i % 2 ? throttle.hit(key, 60_000) : throttle.release(key, 60_000),
       ),
     );
 
-    const value = Number(await client.get(key));
-    expect(value).toBeGreaterThanOrEqual(0);
+    expect(await client.get(key)).toBe('50');
     expect(await client.pttl(key)).toBeGreaterThan(0);
   });
 });

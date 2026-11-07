@@ -1,3 +1,4 @@
+import { DECR_CLAMPED } from '@/auth/services/passwordless-throttle.service';
 import { AccountAlreadyVerifiedError } from '@/auth/repositories/account-already-verified.error';
 import type { User, Profile, Avatar, Session } from '@prisma/client';
 import type {
@@ -120,7 +121,7 @@ export class InMemoryRedis {
     ): Promise<number> => {
       if (this.down) return Promise.reject(new Error('redis down'));
       const now = Date.now();
-      if (script.includes("'DECR'")) {
+      if (script === DECR_CLAMPED) {
         const live = this.store.get(key);
         const current = live && live.expiresAt > now ? live.n : 0;
         if (current - 1 < 0) {

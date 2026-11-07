@@ -5,6 +5,8 @@ import * as crypto from 'crypto';
 import { PasswordlessService } from './passwordless.service';
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
 import { TokenService } from './token.service';
+import * as bcrypt from 'bcryptjs';
+import { PasswordService } from './password.service';
 import {
   AccountAlreadyVerifiedError,
   PrismaAuthRepository,
@@ -569,7 +571,12 @@ maybe('PasswordlessService against Postgres', () => {
     const upper = `PWL-IT-CASE-${stamp}@EXAMPLE.COM`;
     const lower = upper.toLowerCase();
     const older = await prisma.user.create({
-      data: { email: upper, passwordHash: 'h', isEmailVerified: false },
+      data: {
+        email: upper,
+        passwordHash: 'h',
+        isEmailVerified: false,
+        createdAt: new Date(Date.now() - 2000),
+      },
     });
     const newer = await prisma.user.create({
       data: { email: lower, passwordHash: 'h', isEmailVerified: false },
@@ -791,7 +798,12 @@ maybe('PasswordlessService against Postgres', () => {
     const stamp = `${process.pid}-${++n}`;
     const upper = `PWL-IT-OLD-${stamp}@EXAMPLE.COM`;
     const older = await prisma.user.create({
-      data: { email: upper, passwordHash: 'h', isEmailVerified: true },
+      data: {
+        email: upper,
+        passwordHash: 'h',
+        isEmailVerified: true,
+        createdAt: new Date(Date.now() - 2000),
+      },
     });
     await prisma.user.create({
       data: {
@@ -877,5 +889,100 @@ maybe('PasswordlessService against Postgres', () => {
     expect(after.passwordHash).toBe('owner-hash');
     expect(after.pinHash).toBe('owner-pin');
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1);
+  });
+
+  describe('change-password in flight during a takeover', () => {
+    const makePasswordService = (authRepo: PrismaAuthRepository) =>
+      new PasswordService(authRepo, new EventEmitter2(), {} as never);
+
+    const seedAttacker = async (label: string) => {
+      const stamp = `${process.pid}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-${label}-${stamp}@example.com`,
+          passwordHash: await bcrypt.hash('AttackerOld1#', 4),
+          isEmailVerified: false,
+        },
+      });
+      const session = await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-${label}-s-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+      return { user, session };
+    };
+
+    it('does not let a change-password that read before the takeover write the attacker password after it', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const passwords = makePasswordService(authRepo);
+      const { user, session } = await seedAttacker('cpw');
+
+      let change: Promise<unknown> = Promise.resolve();
+      await prisma.$transaction(async (tx) => {
+        await tx.session.deleteMany({ where: { userId: user.id } });
+        await tx.user.update({
+          where: { id: user.id },
+          data: { passwordHash: 'victim-owned-hash', isEmailVerified: true },
+        });
+        change = passwords
+          .changePassword(
+            user.id,
+            { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
+            session.id,
+          )
+          .catch((error: unknown) => error);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      });
+      const outcome = await change;
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(after.passwordHash).toBe('victim-owned-hash');
+      expect(outcome).toBeInstanceOf(Error);
+    });
+
+    it('still changes the password when nothing intervened', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const passwords = makePasswordService(authRepo);
+      const { user, session } = await seedAttacker('cpwok');
+
+      await passwords.changePassword(
+        user.id,
+        { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
+        session.id,
+      );
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(await bcrypt.compare('AttackerNew1#', after.passwordHash)).toBe(
+        true,
+      );
+    });
+
+    it('refuses when the caller session was revoked even though the hash is unchanged', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const passwords = makePasswordService(authRepo);
+      const { user, session } = await seedAttacker('cpws');
+      await prisma.session.delete({ where: { id: session.id } });
+
+      await expect(
+        passwords.changePassword(
+          user.id,
+          { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
+          session.id,
+        ),
+      ).rejects.toBeInstanceOf(Error);
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(await bcrypt.compare('AttackerOld1#', after.passwordHash)).toBe(
+        true,
+      );
+    });
   });
 });

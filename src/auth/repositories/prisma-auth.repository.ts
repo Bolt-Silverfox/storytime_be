@@ -489,6 +489,22 @@ export class PrismaAuthRepository implements IAuthRepository {
         updateUser: async (id, data) => {
           return prisma.user.update({ where: { id }, data });
         },
+        changePasswordIfUnchanged: async (
+          userId,
+          expectedHash,
+          newHash,
+          sessionId,
+        ) => {
+          const { count } = await prisma.user.updateMany({
+            where: {
+              id: userId,
+              passwordHash: expectedHash,
+              auth: { some: { id: sessionId } },
+            },
+            data: { passwordHash: newHash },
+          });
+          return count === 1;
+        },
         deleteOtherSessions: async (userId, exceptSessionId) => {
           await prisma.session.deleteMany({
             where: {
