@@ -2,13 +2,16 @@ import {
   Controller,
   Post,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
+import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 
 @Controller('upload')
+@UseGuards(AuthSessionGuard)
 export class UploadController {
   constructor(private readonly uploadService: UploadService) {}
 
