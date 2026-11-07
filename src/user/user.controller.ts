@@ -32,6 +32,7 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
+import { stripCredentials } from '@/shared/utils/strip-credentials';
 import { AccessControlService } from '@/shared/access/access-control.service';
 import { UploadService } from '@/upload/upload.service';
 import {
@@ -154,7 +155,9 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Body() body: UpdateParentProfileDto,
   ) {
-    return this.userService.updateParentProfile(req.authUserData.userId, body);
+    return stripCredentials(
+      await this.userService.updateParentProfile(req.authUserData.userId, body),
+    );
   }
 
   @Patch('me/rate-app')
@@ -189,9 +192,11 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Body() body: UpdateAvatarDto,
   ) {
-    return this.userService.updateAvatarForParent(
-      req.authUserData.userId,
-      body,
+    return stripCredentials(
+      await this.userService.updateAvatarForParent(
+        req.authUserData.userId,
+        body,
+      ),
     );
   }
 
@@ -229,10 +234,12 @@ export class UserController {
     }
     const uploadResult = await this.uploadService.uploadImage(file, 'avatars');
     try {
-      return await this.userService.createAndAssignAvatar(
-        req.authUserData.userId,
-        uploadResult.secure_url,
-        uploadResult.public_id,
+      return stripCredentials(
+        await this.userService.createAndAssignAvatar(
+          req.authUserData.userId,
+          uploadResult.secure_url,
+          uploadResult.public_id,
+        ),
       );
     } catch (err) {
       // Compensating action: clean up the Cloudinary asset if the DB transaction fails
@@ -602,7 +609,7 @@ export class UserController {
     return {
       statusCode: 200,
       message: 'Your account has been restored successfully',
-      data: restoredUser,
+      data: stripCredentials(restoredUser),
     };
   }
 
@@ -722,7 +729,7 @@ export class UserController {
     return {
       statusCode: 200,
       message: 'User restored successfully',
-      data: restoredUser,
+      data: stripCredentials(restoredUser),
     };
   }
 
