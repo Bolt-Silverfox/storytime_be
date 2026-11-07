@@ -24,6 +24,20 @@ const RETRY_CONFIG = {
  */
 const DEFAULT_QUOTA_COOLDOWN_MS = 15 * 60 * 1000;
 
+export type ElevenLabsAuthFailureReason =
+  'insufficient_key_permission' | 'invalid_key';
+
+/**
+ * The ElevenLabs key was rejected (401/403). Still a 502 for any caller that
+ * does not handle it, but typed so callers (the admin balance endpoint) can
+ * degrade gracefully instead of paging Sentry on every poll.
+ */
+export class ElevenLabsAuthError extends BadGatewayException {
+  constructor(public readonly reason: ElevenLabsAuthFailureReason) {
+    super('ElevenLabs API authentication error');
+  }
+}
+
 @Injectable()
 export class ElevenLabsTTSProvider
   implements ITextToSpeechProvider, IVoiceCloningProvider
@@ -306,7 +320,20 @@ export class ElevenLabsTTSProvider
         const err = error as Record<string, unknown>;
         const status = (err.status || err.statusCode) as number | undefined;
         if (status === 401 || status === 403) {
-          throw new BadGatewayException('ElevenLabs API authentication error');
+          // ElevenLabs answers 401 with detail.status = 'missing_permissions'
+          // for a valid key that lacks a scope (here: user_read), and
+          // 'invalid_api_key' for a bad/revoked key. Never log the key itself.
+          const detail = (
+            err.body as { detail?: { status?: string } } | undefined
+          )?.detail;
+          const missingScope =
+            detail?.status === 'missing_permissions' ||
+            /missing_permissions|user_read/i.test(
+              (error as Error).message ?? '',
+            );
+          throw new ElevenLabsAuthError(
+            missingScope ? 'insufficient_key_permission' : 'invalid_key',
+          );
         }
       }
 
