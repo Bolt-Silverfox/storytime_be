@@ -12,7 +12,6 @@ import { validateEnv, EnvConfig } from './shared/config/env.validation';
 import { HelpSupportModule } from './help-support/help-support.module';
 import { KidModule } from './kid/kid.module';
 import { NotificationModule } from './notification/notification.module';
-import { AccessControlModule } from './shared/access/access-control.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ReportsModule } from './reports/reports.module';
 import { CacheModule } from '@nestjs/cache-manager';
@@ -141,7 +140,6 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
     RewardModule,
     AnalyticsModule,
     PrismaModule,
-    AccessControlModule,
     AvatarModule,
     AgeModule,
     ReportsModule,

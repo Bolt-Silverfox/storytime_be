@@ -111,6 +111,7 @@ describe('UserController responses never carry credential hashes', () => {
       .post('/user/me/undo-delete')
       .set('Authorization', bearer('alice'));
     expect(res.status).toBeLessThan(300);
+    expect(res.body.data.id).toBe(ALICE);
     expectNoCredentials(res.body);
   });
 
@@ -119,6 +120,7 @@ describe('UserController responses never carry credential hashes', () => {
       .post(`/user/${BOB}/undo-delete`)
       .set('Authorization', bearer('admin'));
     expect(res.status).toBeLessThan(300);
+    expect(res.body.data.id).toBe(BOB);
     expectNoCredentials(res.body);
   });
 

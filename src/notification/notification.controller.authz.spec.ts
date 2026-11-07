@@ -153,6 +153,14 @@ describe('NotificationController (preferences) authorization', () => {
       expect(notifications.create).toHaveBeenCalledTimes(1);
     });
 
+    it('rejects more than 50 preferences in one request', async () => {
+      await post(
+        'alice',
+        Array.from({ length: 51 }, () => valid),
+      ).expect(400);
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
     it.each([
       ['a non-array body', valid],
       ['an extra property', [{ ...valid, role: 'admin' }]],
@@ -168,6 +176,37 @@ describe('NotificationController (preferences) authorization', () => {
       await post('alice', body).expect(400);
       await post('admin', body).expect(400);
       expect(notifications.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PATCH /notification-preferences (bulk) body validation', () => {
+    const patch = (body: unknown) =>
+      http()
+        .patch('/notification-preferences')
+        .set('Authorization', bearer('alice'))
+        .send(body as object);
+
+    it('accepts a valid array and passes the session user id', async () => {
+      notifications.bulkUpdate.mockResolvedValue([]);
+      await patch([{ id: PREF_ID, enabled: false }]).expect(200);
+      expect(notifications.bulkUpdate).toHaveBeenCalledWith(ALICE, [
+        expect.objectContaining({ id: PREF_ID, enabled: false }),
+      ]);
+    });
+
+    it.each([
+      ['a non-array body', { id: PREF_ID, enabled: false }],
+      ['an extra property', [{ id: PREF_ID, enabled: false, userId: BOB }]],
+      ['a string boolean', [{ id: PREF_ID, enabled: 'false' }]],
+      ['a non-uuid id', [{ id: 'x', enabled: false }]],
+      ['an operator object id', [{ id: { not: 'z' }, enabled: false }]],
+      [
+        'more than 50 items',
+        Array.from({ length: 51 }, () => ({ id: PREF_ID, enabled: true })),
+      ],
+    ])('rejects %s with 400', async (_l, body) => {
+      await patch(body).expect(400);
+      expect(notifications.bulkUpdate).not.toHaveBeenCalled();
     });
   });
 });

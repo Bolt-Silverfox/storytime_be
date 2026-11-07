@@ -44,10 +44,12 @@ import {
   USER_REPOSITORY,
   PrismaUserRepository,
 } from './repositories';
+import { AccessControlModule } from '@/shared/access/access-control.module';
 
 @Global()
 @Module({
   imports: [
+    AccessControlModule,
     HttpModule,
     // Register email queue
     BullModule.registerQueue({

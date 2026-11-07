@@ -9,9 +9,16 @@ import { UploadModule } from '../upload/upload.module';
 import { AuthModule } from '../auth/auth.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { AVATAR_REPOSITORY, PrismaAvatarRepository } from './repositories';
+import { AccessControlModule } from '@/shared/access/access-control.module';
 
 @Module({
-  imports: [CloudinaryModule, AuthModule, UploadModule, PrismaModule],
+  imports: [
+    AccessControlModule,
+    CloudinaryModule,
+    AuthModule,
+    UploadModule,
+    PrismaModule,
+  ],
   controllers: [
     AvatarSystemController,
     AvatarAssignmentController,

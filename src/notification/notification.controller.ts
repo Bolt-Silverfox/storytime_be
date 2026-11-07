@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Post,
   Patch,
@@ -33,6 +34,15 @@ import {
   NotificationPreferenceDto,
 } from './dto/notification.dto';
 
+const MAX_PREFERENCES_PER_REQUEST = 50;
+
+const arrayBody = (items: new () => object) =>
+  new ParseArrayPipe({
+    items,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+  });
+
 @ApiTags('notification-preferences')
 @Controller('notification-preferences')
 @UseGuards(AuthSessionGuard)
@@ -49,15 +59,10 @@ export class NotificationController {
   @ApiResponse({ status: 201, type: [NotificationPreferenceDto] })
   async create(
     @Req() req: AuthenticatedRequest,
-    @Body(
-      new ParseArrayPipe({
-        items: CreateNotificationPreferenceDto,
-        whitelist: true,
-        forbidNonWhitelisted: true,
-      }),
-    )
+    @Body(arrayBody(CreateNotificationPreferenceDto))
     dtos: CreateNotificationPreferenceDto[],
   ) {
+    this.assertBatchSize(dtos);
     const scoped: CreateNotificationPreferenceDto[] = [];
     for (const dto of dtos) {
       if (dto.kidId) {
@@ -87,8 +92,10 @@ export class NotificationController {
   @ApiResponse({ status: 200, type: [NotificationPreferenceDto] })
   async bulkUpdate(
     @Req() req: AuthenticatedRequest,
-    @Body() dtos: BulkUpdateNotificationPreferenceDto[],
+    @Body(arrayBody(BulkUpdateNotificationPreferenceDto))
+    dtos: BulkUpdateNotificationPreferenceDto[],
   ) {
+    this.assertBatchSize(dtos);
     return this.notificationService.bulkUpdate(req.authUserData.userId, dtos);
   }
 
@@ -174,6 +181,14 @@ export class NotificationController {
   async getById(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     await this.assertPreferenceAccess(req, id);
     return this.notificationService.getById(id);
+  }
+
+  private assertBatchSize(dtos: unknown[]) {
+    if (dtos.length > MAX_PREFERENCES_PER_REQUEST) {
+      throw new BadRequestException(
+        `At most ${MAX_PREFERENCES_PER_REQUEST} preferences per request`,
+      );
+    }
   }
 
   private async assertPreferenceAccess(req: AuthenticatedRequest, id: string) {

@@ -341,6 +341,9 @@ describe('Story (e2e)', () => {
               userId: TEST_USER_ID,
               email: TEST_USER_EMAIL,
               role: TEST_USER_ROLE,
+              userRole: authHeader.includes('mock-admin-token')
+                ? 'admin'
+                : TEST_USER_ROLE,
             };
             return true;
           }
@@ -497,6 +500,9 @@ describe('Story (e2e)', () => {
   // ==================== CREATE STORY TESTS ====================
 
   describe('POST /stories', () => {
+    const adminPost = (url: string) =>
+      request(server).post(url).set('Authorization', 'Bearer mock-admin-token');
+
     const validCreateBody = {
       title: 'My New Story',
       description: 'A story about adventures',
@@ -506,8 +512,7 @@ describe('Story (e2e)', () => {
     };
 
     it('should create a story when authenticated with valid data', async () => {
-      const res =
-        await authenticatedPost('/api/v1/stories').send(validCreateBody);
+      const res = await adminPost('/api/v1/stories').send(validCreateBody);
 
       expectSuccessResponse(res, 201);
       expect(res.body.data).toHaveProperty('id');
@@ -521,6 +526,15 @@ describe('Story (e2e)', () => {
       );
     });
 
+    it('should reject a non-admin authenticated user with 403', async () => {
+      mockStoryService.createStory.mockClear();
+      const res =
+        await authenticatedPost('/api/v1/stories').send(validCreateBody);
+
+      expect(res.status).toBe(403);
+      expect(mockStoryService.createStory).not.toHaveBeenCalled();
+    });
+
     it('should reject unauthenticated request', async () => {
       const res = await request(server)
         .post('/api/v1/stories')
@@ -530,7 +544,7 @@ describe('Story (e2e)', () => {
     });
 
     it('should reject request with missing required title', async () => {
-      const res = await authenticatedPost('/api/v1/stories').send({
+      const res = await adminPost('/api/v1/stories').send({
         description: 'A story',
         language: 'English',
         themeIds: ['theme-1'],
@@ -541,7 +555,7 @@ describe('Story (e2e)', () => {
     });
 
     it('should reject request with missing required description', async () => {
-      const res = await authenticatedPost('/api/v1/stories').send({
+      const res = await adminPost('/api/v1/stories').send({
         title: 'My Story',
         language: 'English',
         themeIds: ['theme-1'],
@@ -552,7 +566,7 @@ describe('Story (e2e)', () => {
     });
 
     it('should reject request with unexpected fields', async () => {
-      const res = await authenticatedPost('/api/v1/stories').send({
+      const res = await adminPost('/api/v1/stories').send({
         ...validCreateBody,
         unknownField: 'should be rejected',
       });
@@ -561,7 +575,7 @@ describe('Story (e2e)', () => {
     });
 
     it('should reject request with empty title', async () => {
-      const res = await authenticatedPost('/api/v1/stories').send({
+      const res = await adminPost('/api/v1/stories').send({
         ...validCreateBody,
         title: '',
       });

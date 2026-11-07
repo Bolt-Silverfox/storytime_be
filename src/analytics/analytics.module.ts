@@ -8,9 +8,10 @@ import {
   ANALYTICS_REPOSITORY,
   PrismaAnalyticsRepository,
 } from './repositories';
+import { AccessControlModule } from '@/shared/access/access-control.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule],
+  imports: [AccessControlModule, PrismaModule, AuthModule],
   controllers: [AnalyticsController, ActivityLogController],
   providers: [
     AnalyticsService,

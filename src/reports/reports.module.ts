@@ -23,9 +23,10 @@ import {
   FAVORITE_REPOSITORY,
   PrismaFavoriteRepository,
 } from './repositories';
+import { AccessControlModule } from '@/shared/access/access-control.module';
 
 @Module({
-  imports: [PrismaModule, AchievementProgressModule],
+  imports: [AccessControlModule, PrismaModule, AchievementProgressModule],
   controllers: [ReportsController],
   providers: [
     ReportsService,
