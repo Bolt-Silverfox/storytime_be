@@ -553,7 +553,7 @@ describe('processGutenbergText hardening', () => {
     it('drops a leading producer line and trailing edition lines but not mid-body paragraphs', () => {
       expect(
         contentOf(
-          `Produced by Jane Doe at a library.\n\n${STORY}\n\nUpdated editions will replace this one.\n\nOnline Distributed Proofreading Team`,
+          `Produced by Jane Doe.\n\n${STORY}\n\nUpdated editions will replace this one.\n\nOnline Distributed Proofreading Team`,
         ),
       ).toBe(STORY);
       for (const line of [
@@ -567,6 +567,106 @@ describe('processGutenbergText hardening', () => {
         ).toEqual({ ok: false, reason: 'boilerplate-mid-body' });
       }
     });
+
+    it.each([
+      'Prepared by the cook, the soup was hot and the fox ate it all.',
+      'Transcribed by a monk long ago, the book was old and brown.',
+      'Prepared by the cook at the library.',
+    ])(
+      'a story-like line that opens like a credit is never dropped: %s',
+      (line) => {
+        expect(contentOf(`${STORY}\n\n${line}`)).toEqual({
+          ok: false,
+          reason: 'boilerplate-mid-body',
+        });
+        expect(contentOf(`${line}\n\nCHAPTER I. HOME\n\n${STORY}`)).toEqual({
+          ok: false,
+          reason: 'boilerplate-ambiguous',
+        });
+      },
+    );
+
+    it.each([
+      'Produced by David Widger',
+      'Produced by Sue Asscher, John Hamm and Al Haines.',
+      'Transcribed from the 1894 Macmillan edition by David Price, email ccx074@pglaf.org',
+      'This file was produced from images generously made available by the Internet Archive.',
+      'E-text prepared by Some Volunteers',
+      'Transcribed from the 1894 edition by David Price, email dprice@example.org',
+      'Transcribed from the 1894 edition by David Price, see pglaf.org',
+    ])('a positive producer credit is dropped: %s', (line) => {
+      expect(contentOf(`${line}\n\n${STORY}`)).toBe(STORY);
+      expect(contentOf(`${STORY}\n\n${line}`)).toBe(STORY);
+    });
+
+    it.each([
+      ["[Transcriber's Note: spelling kept.]\nThe fox found the box [sic]."],
+      [
+        "[Transcriber's Note: spelling kept.]\nThe fox ran home to the den.\n[Illustration]",
+      ],
+      ["[Transcriber's Note: x.]] The badger dug a hole."],
+      ["[Transcriber's Note: x.\n\nThe badger dug a hole]]"],
+    ])(
+      'note text with story text after a closing bracket fails closed: %s',
+      (note) => {
+        expect(contentOf(`${STORY}\n\n${note}\n\n${STORY}`)).toEqual({
+          ok: false,
+          reason: 'transcriber-note-unclosed',
+        });
+      },
+    );
+
+    it('a lone ] in a later story paragraph does not close an open note', () => {
+      expect(
+        contentOf(
+          `${STORY}\n\n[Transcriber's Note: the word [sic on page 3.]\n\nThe badger dug a deep hole by the river.\n\nThe owl said it was late]\n\n${STORY}`,
+        ),
+      ).toEqual({ ok: false, reason: 'transcriber-note-unclosed' });
+    });
+
+    it('a note may span at most three paragraphs', () => {
+      const note = (n: number) =>
+        [
+          "[Transcriber's Note: one",
+          ...Array.from({ length: n - 2 }, (_v, i) => `middle ${i}`),
+          'end.]',
+        ].join('\n\n');
+      expect(contentOf(`${STORY}\n\n${note(3)}\n\n${STORY}`)).toBe(
+        `${STORY}\n\n${STORY}`,
+      );
+      expect(contentOf(`${STORY}\n\n${note(4)}\n\n${STORY}`)).toEqual({
+        ok: false,
+        reason: 'transcriber-note-unclosed',
+      });
+    });
+
+    it.each([
+      ['T A B L E  O F  C O N T E N T S'],
+      ['I N D E X'],
+      ['L I S T  O F  P L A T E S'],
+      ['P L A T E S'],
+    ])('a spaced-letter heading is ambiguous: %j', (heading) => {
+      expect(
+        contentOf(
+          `${heading}\n\nI. The Dark Wood\nII. The Lantern\n\n${STORY}`,
+        ),
+      ).toEqual(AMBIGUOUS);
+    });
+
+    it.each([
+      'Contents did not matter to the fox.',
+      'Contents did',
+      'Index mild',
+      'Contents vivid',
+      'Index mild and vivid were the words.',
+    ])(
+      'prose after the word Contents or Index with a roman-looking word is kept: %s',
+      (line) => {
+        expect(
+          processGutenbergText(wrap(`${line}\n\n${STORY}`), plain()).ok,
+        ).toBe(true);
+      },
+    );
 
     it.each([
       ["[Transcriber's Note: the word [sic on page 3 is as printed.]"],
@@ -757,6 +857,12 @@ describe('processGutenbergText hardening', () => {
         300_000,
         400,
         (n: number) => wrap('CODE\n'.repeat(n / 5)),
+      ],
+      [
+        'curly-quoted lines in one paragraph',
+        300_000,
+        400,
+        (n: number) => wrap('\u201cword\u201d\n'.repeat(n / 8)),
       ],
       [
         'many one-line paragraphs',

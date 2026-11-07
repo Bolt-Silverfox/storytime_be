@@ -16,6 +16,7 @@ export type ProcessFailure =
   | 'transcriber-note-unbracketed'
   | 'transcriber-note-unclosed'
   | 'boilerplate-mid-body'
+  | 'boilerplate-ambiguous'
   | 'table-of-contents-ambiguous'
   | 'residual-reference'
   | 'empty-after-clean'
@@ -196,7 +197,12 @@ const MID_BODY_BOILERPLATE = {
   ok: false,
   reason: 'boilerplate-mid-body',
 } as const;
-const NOTE_CLOSE_END = /\][.,;:!?)”"'’]*\s*$/;
+const BOILERPLATE_AMBIGUOUS = {
+  ok: false,
+  reason: 'boilerplate-ambiguous',
+} as const;
+const NOTE_TAIL = /^[.,;:!?)”"'’]*\s*$/;
+const MAX_NOTE_PARAGRAPHS = 3;
 
 const AMBIGUOUS_CONTENTS = {
   ok: false,
@@ -211,15 +217,19 @@ const CONTENTS_HEADING = [
   /^illustrations[.:]?$/i,
   /^index(?:\s*[.:\u2026]+.*|\s+of\b.*)?$/i,
 ];
-const TRAILING_PAGE_LABEL =
-  /(?:\s+(?:page|pp?\.)|[\s.\u2026\u00b7\u2013\u2014-]+[ivxlcdm\d]+)\s*$/i;
+const ROMAN_NUMERAL =
+  '(?=[ivxlcdm])m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})';
+const TRAILING_PAGE_LABEL = new RegExp(
+  `(?:\\s+(?:page|pp?\\.)|[\\s.\\u2026\\u00b7\\u2013\\u2014-]+(?:${ROMAN_NUMERAL}|\\d+))\\s*$`,
+  'i',
+);
 const CONTENTS_LABELLED = /^contents:\s*\S/i;
 const PAGE_REFERENCE = /[\s.\u2026\u00b7]+[ivxlcdm\d]+\s*$/i;
 const CONTENTS_FAMILY =
   /^(?:tableof)?(?:contents?|listof|illustrations?|index|plates|colou?redplates)/;
 
 const CONTENTS_WORD = /contents|illustrations|index/i;
-const HEADING_INITIAL = /^[^\p{L}\p{N}]*[CLITP\u0080-\uffff]/iu;
+const HEADING_INITIAL = /^[^\p{L}\p{N}]*[CLITP]/iu;
 const NON_ASCII = /[^ -~\t\r\n]/;
 
 const mayBeContentsHeading = (line: string): boolean =>
@@ -271,7 +281,37 @@ function stripIllustrations(p: string): { text: string; changed: boolean } {
   return { text: out.replace(/ {2,}/g, ' ').trim(), changed };
 }
 
-const count = (s: string, ch: string): number => s.split(ch).length - 1;
+function scanNote(m: string, startDepth: number): number | null {
+  let depth = startDepth;
+  for (let i = 0; i < m.length; i++) {
+    const c = m[i];
+    if (c === '[') depth++;
+    else if (c === ']') {
+      depth--;
+      if (depth === 0) return NOTE_TAIL.test(m.slice(i + 1)) ? 0 : null;
+    }
+  }
+  return depth > 0 && m.trimEnd().endsWith(']') ? null : depth;
+}
+
+const PRODUCER_SHAPE =
+  /\be-?texts?\b|\be-?books?\b|\bpgdp\b|\bpglaf\b|\bpg\b|@|https?:\/\/\S+|www\.\S+|internet archive|page images|updated editions|online distributed|proofreading team|this file was produced|michael\s+(?:s\.?\s+)?hart/i;
+const PRODUCER_CREDIT =
+  /^(?:e-?text\s+)?(?:produced|prepared|transcribed|scanned|proofread|proofed|digitized|digitised|converted)\s+by\s+(.+)$/i;
+const MAX_CREDIT_CHARS = 200;
+
+function isProducerParagraph(m: string): boolean {
+  if (hasSourceReference(m) || PRODUCER_SHAPE.test(m)) return true;
+  const credit = PRODUCER_CREDIT.exec(m);
+  return (
+    !!credit &&
+    m.length <= MAX_CREDIT_CHARS &&
+    credit[1]
+      .split(/[\s,]+/)
+      .filter(Boolean)
+      .every((tok) => /^(?:and|&|\p{Lu}[\p{L}.'’-]*)$/u.test(tok))
+  );
+}
 
 /**
  * Join wrapped lines; a line ending in "-" joins the next word with no space.
@@ -348,6 +388,7 @@ export function processGutenbergText(
   ]);
   const out: string[] = [];
   let noteDepth = 0;
+  let noteParagraphs = 0;
   let boilerplateAfterStory = false;
   const titleLc = matchForm(entry.title).toLowerCase();
 
@@ -356,19 +397,21 @@ export function processGutenbergText(
     const m = matchForm(flat);
 
     if (noteDepth > 0) {
-      if (HEADING.test(m)) return UNCLOSED_NOTE;
-      noteDepth += count(m, '[') - count(m, ']');
-      if (noteDepth < 0 || (noteDepth === 0 && !NOTE_CLOSE_END.test(m)))
+      if (HEADING.test(m) || ++noteParagraphs > MAX_NOTE_PARAGRAPHS)
         return UNCLOSED_NOTE;
+      const depth = scanNote(m, noteDepth);
+      if (depth === null) return UNCLOSED_NOTE;
+      noteDepth = depth;
       continue;
     }
     if (lines.some(isContentsHeading)) {
       return AMBIGUOUS_CONTENTS;
     }
     if (/^\[\s*transcriber/i.test(m)) {
-      noteDepth = count(m, '[') - count(m, ']');
-      if (noteDepth < 0 || (noteDepth === 0 && !NOTE_CLOSE_END.test(m)))
-        return UNCLOSED_NOTE;
+      const depth = scanNote(m, 0);
+      if (depth === null) return UNCLOSED_NOTE;
+      noteDepth = depth;
+      noteParagraphs = 1;
       notes.add('transcriber and producer notes removed');
       continue;
     }
@@ -376,6 +419,9 @@ export function processGutenbergText(
       return { ok: false, reason: 'transcriber-note-unbracketed' };
     }
     if (BOILERPLATE_START.test(m)) {
+      if (!isProducerParagraph(m)) {
+        return out.length > 0 ? MID_BODY_BOILERPLATE : BOILERPLATE_AMBIGUOUS;
+      }
       if (out.length > 0) boilerplateAfterStory = true;
       notes.add('transcriber and producer notes removed');
       continue;
