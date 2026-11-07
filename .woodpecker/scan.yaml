@@ -1,0 +1,68 @@
+# Config-injection + disguised-font scan: the shared scanner from
+# Bolt-Silverfox/storytime-ci, run exactly as its reusable malware-scan.yml job
+# "config-injection + disguised-font scan" does. Status check:
+# ci/woodpecker/{push,pr}/scan
+#
+# Fails closed: if the repo tracks anything at .storytime-ci (where the scanner
+# is checked out, so it would hide caller content), or the scanner is missing,
+# the workflow fails. SCANNER_REF is the same pinned commit the GitHub
+# reusable workflow uses; bump it together with that pin. The storytime-ci repo
+# is public, so no credentials are involved.
+#
+# Not ported: the weekly shai-hulud-detect deep scan (needs a Woodpecker cron
+# on this repo, set in the UI).
+#
+# LIGHT lane: bash and grep over the tracked files, no install.
+# PRs run once (as pull_request); pushes run only on the long-lived branches.
+when:
+  - event: pull_request
+  - event: push
+    branch: [main, "develop-v*", "release-v*"]
+
+labels:
+  lane: light
+
+variables:
+  - &scan_image node:24.22.1-bookworm
+  - &scanner_ref e87113d8008ab92c9cef07c0c33391e097fcd8a7
+
+steps:
+  - name: no-collision
+    image: *scan_image
+    commands:
+      - |
+        if ! tracked=$(git ls-files -- ':(icase).storytime-ci'); then
+          echo "ERROR: could not list tracked files; failing closed."
+          exit 1
+        fi
+        if [ -n "$tracked" ]; then
+          echo "ERROR: this repository tracks path(s) at .storytime-ci, where the scanner is checked out."
+          echo "Those files would be deleted before the scan and skipped silently, so the scan cannot be trusted."
+          echo "Fix: move or delete them, and add '.storytime-ci/' to .gitignore."
+          printf '%s\n' "$tracked" | sed 's|^|tracked under the scanner path: |'
+          exit 1
+        fi
+        echo "No tracked paths collide with .storytime-ci."
+
+  - name: fetch-scanner
+    image: *scan_image
+    environment:
+      SCANNER_REF: *scanner_ref
+    commands:
+      - rm -rf .storytime-ci
+      - git init -q .storytime-ci
+      - git -C .storytime-ci fetch -q --depth 1 https://github.com/Bolt-Silverfox/storytime-ci.git "$SCANNER_REF"
+      - git -C .storytime-ci checkout -q FETCH_HEAD
+      - |
+        scanner=.storytime-ci/scripts/scan-injection.sh
+        if [ ! -s "$scanner" ]; then
+          echo "ERROR: scanner missing or empty at $scanner - the scan did NOT run. Treat as a failed scan."
+          exit 1
+        fi
+        echo "Scanner source: Bolt-Silverfox/storytime-ci@$SCANNER_REF"
+        echo "Scanner sha256: $(sha256sum "$scanner" | cut -d' ' -f1)"
+
+  - name: scan
+    image: *scan_image
+    commands:
+      - bash .storytime-ci/scripts/scan-injection.sh
