@@ -262,7 +262,6 @@ export class AvatarAssignmentController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['userId'],
       properties: {
         image: {
           type: 'string',
@@ -271,7 +270,8 @@ export class AvatarAssignmentController {
         },
         userId: {
           type: 'string',
-          description: 'User ID to assign the avatar to (required)',
+          description:
+            'User ID to assign the avatar to (optional; defaults to the authenticated user, other users are admin only)',
           example: 'user-123',
         },
       },

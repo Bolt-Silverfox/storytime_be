@@ -62,12 +62,26 @@ describe('SettingsController authorization', () => {
     for (const fn of Object.values(settings)) expect(fn).not.toHaveBeenCalled();
   });
 
+  const serviceCalledFor: Record<string, keyof typeof settings> = {
+    [`get /settings/${ALICE}`]: 'getSettings',
+    [`put /settings/${ALICE}`]: 'updateSettings',
+    [`patch /settings/kid/${ALICE_KID}/daily-limit`]: 'setKidDailyLimit',
+    [`get /settings/kid/${ALICE_KID}/daily-limit`]: 'getKidDailyLimit',
+    [`get /settings/parent/${ALICE}/kids-limits`]: 'getKidsScreenTimeSettings',
+    [`post /settings/parent/${ALICE}/apply-default-to-kids`]:
+      'applyDefaultToAllKids',
+  };
+
   it.each(routes)('%s %s: owner and admin 200', async (method, url, body) => {
+    const expected = settings[serviceCalledFor[`${method} ${url}`]];
     await call(method, url, body)
       .set('Authorization', bearer('alice'))
       .expect((res) => expect(res.status).toBeLessThan(300));
+    expect(expected).toHaveBeenCalledTimes(1);
+    expected.mockClear();
     await call(method, url, body)
       .set('Authorization', bearer('admin'))
       .expect((res) => expect(res.status).toBeLessThan(300));
+    expect(expected).toHaveBeenCalledTimes(1);
   });
 });

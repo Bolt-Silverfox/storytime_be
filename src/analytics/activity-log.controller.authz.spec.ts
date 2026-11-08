@@ -102,6 +102,44 @@ describe('ActivityLogController authorization', () => {
       .expect(200);
   });
 
+  describe('single log ownership when the log carries a kid', () => {
+    it("kid-only log: the kid's parent and admin read it, another parent is refused", async () => {
+      analytics.getById.mockResolvedValue({
+        id: LOG_ID,
+        userId: null,
+        kidId: ALICE_KID,
+      });
+      await http()
+        .get(`/activity-logs/${LOG_ID}`)
+        .set('Authorization', bearer('alice'))
+        .expect(200);
+      await http()
+        .get(`/activity-logs/${LOG_ID}`)
+        .set('Authorization', bearer('admin'))
+        .expect(200);
+      await http()
+        .get(`/activity-logs/${LOG_ID}`)
+        .set('Authorization', bearer('bob'))
+        .expect(403);
+    });
+
+    it('conflicting owner (userId alice, kid bob): the kid decides, so alice is refused and bob is allowed', async () => {
+      analytics.getById.mockResolvedValue({
+        id: LOG_ID,
+        userId: ALICE,
+        kidId: BOB_KID,
+      });
+      await http()
+        .get(`/activity-logs/${LOG_ID}`)
+        .set('Authorization', bearer('alice'))
+        .expect(403);
+      await http()
+        .get(`/activity-logs/${LOG_ID}`)
+        .set('Authorization', bearer('bob'))
+        .expect(200);
+    });
+  });
+
   it('forges nothing: a log created for another user is refused, an own log is bound to the session', async () => {
     await http()
       .post('/activity-logs')

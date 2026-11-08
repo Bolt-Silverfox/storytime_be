@@ -430,9 +430,8 @@ export class UserController {
         data: {
           id: 'user-id',
           email: 'user@example.com',
-          isDeleted: true,
-          deletedAt: '2025-12-01T13:20:00.000Z',
           message: 'Account deactivated successfully',
+          permanent: false,
         },
         message: 'Account deactivated successfully',
       },
@@ -450,6 +449,7 @@ export class UserController {
           email: 'user@example.com',
           message:
             'Account and all associated data deleted permanently. All active sessions have been terminated.',
+          permanent: true,
         },
         message: 'Account and all associated data deleted permanently',
       },
