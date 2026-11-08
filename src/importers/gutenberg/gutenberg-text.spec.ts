@@ -1019,3 +1019,21 @@ describe('processGutenbergText chapter headings', () => {
     });
   });
 });
+
+describe('processGutenbergText title page line', () => {
+  const curated = plain({ title: 'The Fox and the Lantern' });
+  const content = (body: string) => {
+    const r = processGutenbergText(wrap(body), curated);
+    return r.ok ? r.content : r;
+  };
+
+  it('drops a paragraph equal to the source header title even when the curated title differs', () => {
+    expect(content(`LANTERN FOX\n\n${STORY}`)).toBe(STORY);
+  });
+
+  it('keeps a paragraph that only contains the source title', () => {
+    expect(content(`Lantern Fox and the wood.\n\n${STORY}`)).toBe(
+      `Lantern Fox and the wood.\n\n${STORY}`,
+    );
+  });
+});

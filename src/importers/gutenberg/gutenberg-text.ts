@@ -420,7 +420,7 @@ export function processGutenbergText(
   let noteDepth = 0;
   let noteParagraphs = 0;
   let boilerplateAfterStory = false;
-  const titleLc = matchForm(entry.title).toLowerCase();
+  const titleLc = hTitle === null ? null : hTitle.toLowerCase();
 
   const queue = paras;
   for (let index = 0; index < queue.length; index++) {
