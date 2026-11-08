@@ -963,6 +963,18 @@ describe('processGutenbergText hardening', () => {
         (n: number) => wrap('\u201cword\u201d\n'.repeat(n / 8)),
       ],
       [
+        'many heading lines in one paragraph',
+        300_000,
+        400,
+        (n: number) => wrap('CHAPTER I.\n'.repeat(n / 11)),
+      ],
+      [
+        'many headings glued to prose',
+        300_000,
+        400,
+        (n: number) => wrap('CHAPTER I.\nword\n\n'.repeat(n / 17)),
+      ],
+      [
         'many one-line paragraphs',
         200_000,
         150,

@@ -425,9 +425,11 @@ export function processGutenbergText(
   let boilerplateAfterStory = false;
   const titleLc = hTitle === null ? null : hTitle.toLowerCase();
 
-  const queue = paras;
-  for (let index = 0; index < queue.length; index++) {
-    const lines = queue[index];
+  let next = 0;
+  let carry: string[] | null = null;
+  while (carry || next < paras.length) {
+    const lines: string[] = carry ?? paras[next++];
+    carry = null;
     const flat = unwrap(lines);
     const m = matchForm(flat);
 
@@ -479,19 +481,24 @@ export function processGutenbergText(
     // story words); it stays and the final residual check fails the work.
     if (matchForm(p).toLowerCase() === titleLc) continue; // title page line
 
-    const h = HEADING.exec(pLines[0]);
-    if (h) {
-      if (/\p{Ll}/u.test(pLines[0].slice(h[1].length)))
+    let headings = 0;
+    while (headings < pLines.length) {
+      const h = HEADING.exec(pLines[headings]);
+      if (!h) break;
+      if (/\p{Ll}/u.test(pLines[headings].slice(h[1].length)))
         return HEADING_AMBIGUOUS;
       if (boilerplateAfterStory) return MID_BODY_BOILERPLATE;
       const title = h[3]
         ? ` ${titleCase(h[3].replace(/^[.:\-–—\s]+/, ''))}`
         : '';
       out.push(`${titleCase(h[1])} ${h[2].toUpperCase()}.${title}`.trim());
+      headings++;
+    }
+    if (headings > 0) {
       notes.add(
         'chapter headings kept as separate paragraphs, capitals normalised',
       );
-      if (pLines.length > 1) queue.splice(index + 1, 0, pLines.slice(1));
+      if (headings < pLines.length) carry = pLines.slice(headings);
       continue;
     }
     const unItalic = p.replace(
