@@ -103,6 +103,11 @@ export function validateAllowList(list: AllowListEntry[]): void {
         `${where}: approved needs a pre-1931 first publication (got ${e.firstPublished})`,
       );
     }
+    if (!!e.translator !== !!e.expect?.translator) {
+      throw new Error(
+        `${where}: translator and expect.translator must be set together`,
+      );
+    }
     if (typeof e.idVerified !== 'boolean') {
       throw new Error(`${where}: idVerified must be true or false`);
     }

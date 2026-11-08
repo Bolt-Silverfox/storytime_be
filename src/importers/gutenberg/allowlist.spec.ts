@@ -118,6 +118,30 @@ describe('allow-list rules', () => {
     });
   });
 
+  it.each([
+    [
+      'a translator without an expected header translator',
+      { translator: { name: 'Bram Sample', deathYear: 1900 } },
+    ],
+    [
+      'an expected header translator without a listed translator',
+      { expect: { title: 't', author: 'a', translator: 'Bram Sample' } },
+    ],
+  ])('validateAllowList rejects %s', (_n, over) => {
+    expect(() => validateAllowList([base(over)])).toThrow(/translator/i);
+  });
+
+  it('validateAllowList accepts a translator listed and expected together', () => {
+    expect(() =>
+      validateAllowList([
+        base({
+          translator: { name: 'Bram Sample', deathYear: 1900 },
+          expect: { title: 't', author: 'a', translator: 'Bram Sample' },
+        }),
+      ]),
+    ).not.toThrow();
+  });
+
   it('validateAllowList requires idVerified to be a boolean', () => {
     expect(() =>
       validateAllowList([base({ idVerified: undefined as never })]),
