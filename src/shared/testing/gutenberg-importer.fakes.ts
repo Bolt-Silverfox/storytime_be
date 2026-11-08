@@ -58,12 +58,12 @@ export class FakeCache implements GutenbergCachePort {
   async getOrFetch(
     id: string,
     fetcher: SourceFetcher,
-    opts: { ttlMs?: number; now?: Date },
+    opts: { ttlMs?: number; now?: Date; force?: boolean },
   ): Promise<GetOrFetchResult> {
     this.getOrFetchCalls++;
     const now = opts.now ?? this.now;
     const hit = this.entries.get(id);
-    if (hit && hit.revalidateAfter > now) {
+    if (hit && !opts.force && hit.revalidateAfter > now) {
       return { entry: hit, fetched: false };
     }
     const r = await fetcher(hit ?? null, new AbortController().signal);

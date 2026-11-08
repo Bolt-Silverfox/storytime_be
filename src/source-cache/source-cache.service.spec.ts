@@ -241,6 +241,17 @@ describe('SourceCacheService', () => {
       expect(again.fetched).toBe(false);
     });
 
+    it('force re-fetches an entry that is still fresh', async () => {
+      const fetcher = jest.fn().mockResolvedValue(ok());
+      await svc.getOrFetch('g', '1', fetcher, { now: NOW, ttlMs: DAY });
+      const again = await svc.getOrFetch('g', '1', fetcher, {
+        now: new Date(NOW.getTime() + DAY / 2),
+        force: true,
+      });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(again.fetched).toBe(true);
+    });
+
     it('re-fetches an expired entry and passes the previous entry (for etag)', async () => {
       const fetcher = jest
         .fn()

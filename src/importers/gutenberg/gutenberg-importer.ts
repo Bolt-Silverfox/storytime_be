@@ -22,7 +22,7 @@ export interface GutenbergCachePort {
   getOrFetch(
     ebookId: string,
     fetcher: SourceFetcher,
-    opts: { ttlMs?: number; now?: Date },
+    opts: { ttlMs?: number; now?: Date; force?: boolean },
   ): Promise<GetOrFetchResult>;
 }
 
@@ -352,24 +352,17 @@ export class GutenbergImporter {
     const { source, cache, payloads } = this.deps;
     const pOpts = { maxWords: this.deps.maxWords };
 
-    const readCached = async (
-      key: string,
-    ): Promise<
-      { kind: 'missing' } | { kind: 'ok'; processed: ProcessResult }
-    > => {
-      let text: string;
+    const process = (text: string) => ({
+      kind: 'ok' as const,
+      processed: processGutenbergText(text, entry, pOpts),
+    });
+    const readCached = async (key: string) => {
       try {
-        text = await payloads.read(key);
+        return process(await payloads.read(key));
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-        const r = await source.fetch(id, new AbortController().signal);
-        if (r.status !== 200) return { kind: 'missing' };
-        text = r.text;
+        return null;
       }
-      return {
-        kind: 'ok',
-        processed: processGutenbergText(text, entry, pOpts),
-      };
     };
 
     if (mode === 'dry-run') {
@@ -377,14 +370,12 @@ export class GutenbergImporter {
       if (hit && hit.revalidateAfter.getTime() > this.now().getTime()) {
         if (hit.httpStatus === 404 || !hit.rawPayloadKey)
           return { kind: 'missing' };
-        return readCached(hit.rawPayloadKey);
+        const cachedRead = await readCached(hit.rawPayloadKey);
+        if (cachedRead) return cachedRead;
       }
       const r = await source.fetch(id, new AbortController().signal);
       if (r.status !== 200) return { kind: 'missing' };
-      return {
-        kind: 'ok',
-        processed: processGutenbergText(r.text, entry, pOpts),
-      };
+      return process(r.text);
     }
 
     const fetcher: SourceFetcher = async (_prev, signal) => {
@@ -405,12 +396,20 @@ export class GutenbergImporter {
         licenseSnapshot: 'US public domain (PD-US) per curated allow-list',
       };
     };
-    const { entry: cached } = await cache.getOrFetch(id, fetcher, {
-      ttlMs: opts.ttlMs,
-      now: this.now(),
-    });
+    const cacheOpts = { ttlMs: opts.ttlMs, now: this.now() };
+    let { entry: cached } = await cache.getOrFetch(id, fetcher, cacheOpts);
     if (cached.httpStatus === 404 || !cached.rawPayloadKey)
       return { kind: 'missing' };
-    return readCached(cached.rawPayloadKey);
+    const first = await readCached(cached.rawPayloadKey);
+    if (first) return first;
+    ({ entry: cached } = await cache.getOrFetch(id, fetcher, {
+      ...cacheOpts,
+      force: true,
+    }));
+    if (cached.httpStatus === 404 || !cached.rawPayloadKey)
+      return { kind: 'missing' };
+    const second = await readCached(cached.rawPayloadKey);
+    if (!second) throw new Error('cached payload missing after revalidation');
+    return second;
   }
 }

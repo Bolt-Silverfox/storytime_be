@@ -36,6 +36,8 @@ export type SourceFetcher = (
 
 export interface CacheOptions {
   now?: Date;
+  /** Skip the fresh-entry shortcut and run the fetcher. */
+  force?: boolean;
   ttlMs?: number;
   notFoundTtlMs?: number;
   fetchedBy?: string;
@@ -399,7 +401,7 @@ export class SourceCacheService {
   ): Promise<GetOrFetchResult> {
     const nowFn = () => options.now ?? new Date();
     const hit = await this.get(sourceName, sourceId);
-    if (hit && this.isFresh(hit, nowFn()))
+    if (hit && !options.force && this.isFresh(hit, nowFn()))
       return { entry: hit, fetched: false };
 
     const key: LeaseKey = `${sourceName}\u0000${sourceId}`;
@@ -417,7 +419,7 @@ export class SourceCacheService {
       await sleep(poll);
       poll = Math.min(poll * 2, MAX_POLL_MS);
       const landed = await this.get(sourceName, sourceId);
-      if (landed && this.isFresh(landed, nowFn())) {
+      if (landed && !options.force && this.isFresh(landed, nowFn())) {
         return { entry: landed, fetched: false };
       }
     }
@@ -477,7 +479,7 @@ export class SourceCacheService {
     try {
       // Re-check under the lease: the previous holder may just have finished.
       const current = await this.get(sourceName, sourceId);
-      if (current && this.isFresh(current, nowFn())) {
+      if (current && !options.force && this.isFresh(current, nowFn())) {
         return { entry: current, fetched: false };
       }
       const timeout = new Promise<never>((_, reject) => {

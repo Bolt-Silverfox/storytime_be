@@ -51,7 +51,7 @@ export class SourceCachePortImpl implements GutenbergCachePort {
   getOrFetch(
     id: string,
     fetcher: SourceFetcher,
-    opts: { ttlMs?: number; now?: Date },
+    opts: { ttlMs?: number; now?: Date; force?: boolean },
   ) {
     return this.svc.getOrFetch(SOURCE_NAME, id, fetcher, {
       ...opts,

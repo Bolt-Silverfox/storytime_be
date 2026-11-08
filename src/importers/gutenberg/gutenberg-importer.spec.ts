@@ -335,6 +335,24 @@ describe('GutenbergImporter', () => {
     expect(source.calls.filter((c) => c === '90001').length).toBe(3);
   });
 
+  it('commit with a missing payload revalidates the cache row instead of reading around it', async () => {
+    const { importer, source, cache, payloads, store } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    const before = cache.entries.get('90001')?.contentHash;
+    source.texts['90001'] = source.texts['90001'].replace(
+      'Once upon a time',
+      'Once upon a long time',
+    );
+    store.rows = [];
+    payloads.files.clear();
+    const r = await importer.run({ mode: 'commit', only: '90001' });
+    expect(r.items[0].outcome).toBe('create');
+    const row = cache.entries.get('90001');
+    expect(row?.contentHash).not.toBe(before);
+    expect(row?.contentChanged).toBe(true);
+    expect(payloads.files.size).toBe(1);
+  });
+
   it('a payload read error other than a missing file is still an error', async () => {
     const { importer, payloads } = setup();
     await importer.run({ mode: 'commit', only: '90001' });
