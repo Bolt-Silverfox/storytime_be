@@ -36,7 +36,6 @@ export type SourceFetcher = (
 
 export interface CacheOptions {
   now?: Date;
-  /** Skip the fresh-entry shortcut and run the fetcher. */
   force?: boolean;
   ttlMs?: number;
   notFoundTtlMs?: number;
