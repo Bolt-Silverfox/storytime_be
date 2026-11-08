@@ -935,3 +935,39 @@ describe('processGutenbergText hardening', () => {
     );
   });
 });
+
+describe('processGutenbergText chapter headings', () => {
+  const content = (body: string) => {
+    const r = processGutenbergText(wrap(body), plain());
+    return r.ok ? r.content : r;
+  };
+
+  it('splits a heading off and keeps prose glued to it verbatim', () => {
+    expect(
+      content(`CHAPTER I.\nOnce upon a TIME the Fox walked.\n\n${STORY}`),
+    ).toBe(`Chapter I.\n\nOnce upon a TIME the Fox walked.\n\n${STORY}`);
+  });
+
+  it('keeps prose after a titled heading verbatim', () => {
+    expect(content(`CHAPTER II. THE LANTERN\nShe said HELLO to Fox.`)).toBe(
+      'Chapter II. The Lantern\n\nShe said HELLO to Fox.',
+    );
+  });
+
+  it('still processes the prose that follows a heading', () => {
+    expect(content(`CHAPTER I.\n${STORY} [Illustration]`)).toBe(
+      `Chapter I.\n\n${STORY}`,
+    );
+  });
+
+  it.each([
+    ['story words that look like a numeral', 'Part civil and part military.'],
+    ['a mixed-case heading', 'Chapter I. The Hill'],
+    ['a lower-case numeral', 'chapter iv'],
+  ])('routes %s to review', (_n, line) => {
+    expect(content(`${line}\n\n${STORY}`)).toEqual({
+      ok: false,
+      reason: 'heading-ambiguous',
+    });
+  });
+});

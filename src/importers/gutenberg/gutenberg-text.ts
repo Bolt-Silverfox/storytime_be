@@ -20,6 +20,7 @@ export type ProcessFailure =
   | 'table-of-contents-ambiguous'
   | 'residual-reference'
   | 'empty-after-clean'
+  | 'heading-ambiguous'
   | 'oversized';
 
 export type ProcessResult =
@@ -253,6 +254,10 @@ const isContentsHeading = (line: string): boolean => {
 };
 
 const HEADING = /^(chapter|book|part)\s+([ivxlcdm\d]+)\b\.?\s*(.*)$/i;
+const HEADING_AMBIGUOUS = {
+  ok: false,
+  reason: 'heading-ambiguous',
+} as const;
 
 /** Linear removal of [Illustration ...]; an unclosed one runs to the end. */
 function stripIllustrations(p: string): { text: string; changed: boolean } {
@@ -399,7 +404,9 @@ export function processGutenbergText(
   let boilerplateAfterStory = false;
   const titleLc = matchForm(entry.title).toLowerCase();
 
-  for (const lines of paras) {
+  const queue = paras;
+  for (let index = 0; index < queue.length; index++) {
+    const lines = queue[index];
     const flat = unwrap(lines);
     const m = matchForm(flat);
 
@@ -435,25 +442,35 @@ export function processGutenbergText(
     }
 
     let p = flat;
-    const ill = stripIllustrations(p);
+    let pLines = lines;
+    const ill = stripIllustrations(lines.join('\n'));
     if (ill.changed) {
       notes.add('illustration placeholders removed');
-      p = ill.text;
-      if (!p) continue;
+      pLines = ill.text
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean);
+      if (pLines.length === 0) continue;
+      p = unwrap(pLines);
     }
     // An ebook number inside a story sentence is NOT deleted (that would drop
     // story words); it stays and the final residual check fails the work.
     if (matchForm(p).toLowerCase() === titleLc) continue; // title page line
 
-    const h = HEADING.exec(p);
+    const h = HEADING.exec(pLines[0]);
     if (h) {
-      const rest = h[3]
+      if (/\p{Ll}/u.test(pLines[0].slice(h[1].length)))
+        return HEADING_AMBIGUOUS;
+      if (boilerplateAfterStory) return MID_BODY_BOILERPLATE;
+      const title = h[3]
         ? ` ${titleCase(h[3].replace(/^[.:\-–—\s]+/, ''))}`
         : '';
-      p = `${titleCase(h[1])} ${h[2].toUpperCase()}.${rest}`.trim();
+      out.push(`${titleCase(h[1])} ${h[2].toUpperCase()}.${title}`.trim());
       notes.add(
         'chapter headings kept as separate paragraphs, capitals normalised',
       );
+      if (pLines.length > 1) queue.splice(index + 1, 0, pLines.slice(1));
+      continue;
     }
     const unItalic = p.replace(
       /(^|[\s(“"'‘])_([^_]+?)_(?=[\s.,;:!?)”"'’]|$)/g,
