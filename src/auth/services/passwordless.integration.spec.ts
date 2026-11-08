@@ -1115,7 +1115,7 @@ maybe('PasswordlessService against Postgres', () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
       const tokenRepo = new GatedDeviceTokenRepository(prisma as never);
       const devices = new DeviceTokenService(tokenRepo);
-      const { user, stamp } = await seedSquatter('dl');
+      const { user, session, stamp } = await seedSquatter('dl');
 
       let release: () => void = () => undefined;
       tokenRepo.gate = new Promise<void>((resolve) => (release = resolve));
@@ -1123,23 +1123,82 @@ maybe('PasswordlessService against Postgres', () => {
         (resolve) => (tokenRepo.reachedCreate = resolve),
       );
       const register = devices
-        .registerDeviceToken(user.id, {
-          token: `pwl-it-dl-new-${stamp}`,
-          platform: 'android',
-          deviceName: 'phone',
-        })
+        .registerDeviceToken(
+          user.id,
+          {
+            token: `pwl-it-dl-new-${stamp}`,
+            platform: 'android',
+            deviceName: 'phone',
+          },
+          session.id,
+        )
         .catch((error: unknown) => error);
       await reached;
 
       const takeover = authRepo
         .takeOverUnverifiedAccount(user.id, takeoverData)
         .catch((error: unknown) => error);
-      await waitForBlockedStatement('DELETE%"device_tokens"%');
+      await waitForBlockedStatement('DELETE%"sessions"%');
       release();
       const [registered, taken] = await Promise.all([register, takeover]);
 
       expect(taken).not.toBeInstanceOf(Error);
       expect(registered).not.toBeInstanceOf(Error);
+    });
+    it('leaves no device token on the account when a registration was in flight during the takeover', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const tokenRepo = new GatedDeviceTokenRepository(prisma as never);
+      const devices = new DeviceTokenService(tokenRepo);
+      const { user, session, stamp } = await seedSquatter('surv');
+      await prisma.deviceToken.deleteMany({ where: { userId: user.id } });
+
+      let release: () => void = () => undefined;
+      tokenRepo.gate = new Promise<void>((resolve) => (release = resolve));
+      const reached = new Promise<void>(
+        (resolve) => (tokenRepo.reachedCreate = resolve),
+      );
+      const register = devices
+        .registerDeviceToken(
+          user.id,
+          { token: `pwl-it-surv-new-${stamp}`, platform: 'android' },
+          session.id,
+        )
+        .catch((error: unknown) => error);
+      await reached;
+
+      const takeover = authRepo
+        .takeOverUnverifiedAccount(user.id, takeoverData)
+        .catch((error: unknown) => error);
+      await Promise.race([
+        takeover,
+        waitForBlockedStatement('DELETE%"sessions"%'),
+      ]);
+      release();
+      const [, taken] = await Promise.all([register, takeover]);
+
+      expect(taken).not.toBeInstanceOf(Error);
+      expect(
+        await prisma.deviceToken.count({ where: { userId: user.id } }),
+      ).toBe(0);
+    });
+    it('refuses a registration whose session the takeover already revoked', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const devices = new DeviceTokenService(
+        new PrismaDeviceTokenRepository(prisma as never),
+      );
+      const { user, session, stamp } = await seedSquatter('late');
+      await authRepo.takeOverUnverifiedAccount(user.id, takeoverData);
+
+      await expect(
+        devices.registerDeviceToken(
+          user.id,
+          { token: `pwl-it-late-new-${stamp}`, platform: 'android' },
+          session.id,
+        ),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(
+        await prisma.deviceToken.count({ where: { userId: user.id } }),
+      ).toBe(0);
     });
   });
 });

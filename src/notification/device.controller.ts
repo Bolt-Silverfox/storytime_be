@@ -107,6 +107,7 @@ export class DeviceController {
     return this.deviceTokenService.registerDeviceToken(
       req.authUserData.userId,
       dto,
+      req.authUserData.authSessionId,
     );
   }
 
