@@ -230,7 +230,10 @@ export class PrismaAdminUserRepository implements IAdminUserRepository {
   }
 
   hardDeleteUser(userId: string): Promise<User> {
-    return this.prisma.user.delete({ where: { id: userId } });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.session.deleteMany({ where: { userId } });
+      return tx.user.delete({ where: { id: userId } });
+    });
   }
 
   softDeleteUser(userId: string): Promise<User> {

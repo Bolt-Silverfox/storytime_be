@@ -17,6 +17,7 @@ import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 import { PrismaDeviceTokenRepository } from '@/notification/repositories/prisma-device-token.repository';
+import { PrismaAdminUserRepository } from '@/admin/repositories/prisma-admin-user.repository';
 import { DeviceTokenService } from '@/notification/services/device-token.service';
 
 const url = process.env.PASSWORDLESS_TEST_DATABASE_URL;
@@ -1221,6 +1222,59 @@ maybe('PasswordlessService against Postgres', () => {
         await prisma.deviceToken.count({ where: { userId: user.id } }),
       ).toBe(0);
     });
+    it('does not deadlock an admin hard delete against a registration in flight', async () => {
+      const adminRepo = new PrismaAdminUserRepository(prisma as never);
+      const tokenRepo = new GatedDeviceTokenRepository(prisma as never);
+      const devices = new DeviceTokenService(tokenRepo);
+      const { user, session, stamp } = await seedSquatter('adel');
+      await prisma.deviceToken.deleteMany({ where: { userId: user.id } });
+
+      let release: () => void = () => undefined;
+      tokenRepo.gate = new Promise<void>((resolve) => (release = resolve));
+      const reached = new Promise<void>(
+        (resolve) => (tokenRepo.reachedCreate = resolve),
+      );
+      const register = devices
+        .registerDeviceToken(
+          user.id,
+          { token: `pwl-it-adel-new-${stamp}`, platform: 'android' },
+          session.id,
+        )
+        .catch((error: unknown) => error);
+      await reached;
+
+      const removal = adminRepo
+        .hardDeleteUser(user.id)
+        .catch((error: unknown) => error);
+      await waitForBlockedStatement('DELETE%"sessions"%');
+      release();
+      const [, removed] = await Promise.all([register, removal]);
+
+      expect(removed).not.toBeInstanceOf(Error);
+      expect(await prisma.user.count({ where: { id: user.id } })).toBe(0);
+    });
+
+    it('refuses a registration that presents another user’s session', async () => {
+      const devices = new DeviceTokenService(
+        new PrismaDeviceTokenRepository(prisma as never),
+      );
+      const owner = await seedSquatter('own');
+      const other = await seedSquatter('oth');
+
+      await expect(
+        devices.registerDeviceToken(
+          other.user.id,
+          { token: `pwl-it-oth-new-${other.stamp}`, platform: 'android' },
+          owner.session.id,
+        ),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(
+        await prisma.deviceToken.count({
+          where: { token: `pwl-it-oth-new-${other.stamp}` },
+        }),
+      ).toBe(0);
+    });
+
     it('refuses a registration whose session the takeover already revoked', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
       const devices = new DeviceTokenService(

@@ -96,11 +96,6 @@ async function resolveParent(
       }
     }
 
-    if (emailVerified && !current.isEmailVerified) {
-      await authRepository.updateUserWithRelations(current.id, {
-        isEmailVerified: true,
-      });
-    }
     if (googleId) {
       await authRepository.linkGoogleAccountIfUnset(current.id, googleId);
     }
