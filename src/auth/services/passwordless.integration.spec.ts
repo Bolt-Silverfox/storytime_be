@@ -16,6 +16,8 @@ import { PrismaLoginChallengeRepository } from '../repositories/prisma-login-cha
 import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
+import { PrismaDeviceTokenRepository } from '@/notification/repositories/prisma-device-token.repository';
+import { DeviceTokenService } from '@/notification/services/device-token.service';
 
 const url = process.env.PASSWORDLESS_TEST_DATABASE_URL;
 const maybe = isThrowawayDatabaseUrl(url) ? describe : describe.skip;
@@ -36,6 +38,26 @@ maybe('PasswordlessService against Postgres', () => {
       where: { emailNormalized: email },
       orderBy: { createdAt: 'desc' },
     });
+
+  const waitForBlockedStatement = async (
+    queryLike: string,
+    timeoutMs = 10_000,
+  ) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const blocked = await prisma.$queryRaw<Array<{ pid: number }>>`
+        SELECT pid FROM pg_stat_activity
+        WHERE datname = current_database()
+          AND pid <> pg_backend_pid()
+          AND wait_event_type = 'Lock'
+          AND query ILIKE ${queryLike}`;
+      if (blocked.length > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(
+      `no statement matching ${queryLike} was blocked on a lock within ${timeoutMs}ms`,
+    );
+  };
 
   beforeAll(() => {
     prisma = new PrismaClient({ datasources: { db: { url } } });
@@ -915,23 +937,6 @@ maybe('PasswordlessService against Postgres', () => {
       return { user, session };
     };
 
-    const waitForBlockedUserUpdate = async (timeoutMs = 10_000) => {
-      const deadline = Date.now() + timeoutMs;
-      while (Date.now() < deadline) {
-        const blocked = await prisma.$queryRaw<Array<{ pid: number }>>`
-          SELECT pid FROM pg_stat_activity
-          WHERE datname = current_database()
-            AND pid <> pg_backend_pid()
-            AND wait_event_type = 'Lock'
-            AND query ILIKE 'UPDATE%"users"%'`;
-        if (blocked.length > 0) return;
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      throw new Error(
-        `changePassword's UPDATE "users" was not blocked on the takeover's row lock within ${timeoutMs}ms`,
-      );
-    };
-
     it('does not let a change-password that read before the takeover write the attacker password after it', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
       const passwords = makePasswordService(authRepo);
@@ -951,7 +956,7 @@ maybe('PasswordlessService against Postgres', () => {
             session.id,
           )
           .catch((error: unknown) => error);
-        await waitForBlockedUserUpdate();
+        await waitForBlockedStatement('UPDATE%"users"%');
       });
       const outcome = await change;
 
@@ -1053,6 +1058,88 @@ maybe('PasswordlessService against Postgres', () => {
       expect(await bcrypt.compare('AttackerOld1#', after.passwordHash)).toBe(
         true,
       );
+    });
+  });
+  describe('device-token registration racing a takeover', () => {
+    class GatedDeviceTokenRepository extends PrismaDeviceTokenRepository {
+      reachedCreate: () => void = () => undefined;
+      gate: Promise<void> = Promise.resolve();
+
+      async createToken(
+        ...args: Parameters<PrismaDeviceTokenRepository['createToken']>
+      ) {
+        this.reachedCreate();
+        await this.gate;
+        return super.createToken(...args);
+      }
+    }
+
+    const takeoverData = {
+      passwordHash: 'rotated',
+      hasLocalPassword: false,
+      pinHash: null,
+      biometricsEnabled: false,
+      isEmailVerified: true,
+      googleId: null,
+      appleId: null,
+    };
+
+    const seedSquatter = async (label: string) => {
+      const stamp = `${process.pid}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-${label}-${stamp}@example.com`,
+          passwordHash: 'squatter-hash',
+          isEmailVerified: false,
+        },
+      });
+      const session = await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-${label}-s-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+      await prisma.deviceToken.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-${label}-old-${stamp}`,
+          platform: 'android',
+          deviceName: 'phone',
+        },
+      });
+      return { user, session, stamp };
+    };
+
+    it('does not deadlock when a token registration holds the old device rows while the takeover runs', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const tokenRepo = new GatedDeviceTokenRepository(prisma as never);
+      const devices = new DeviceTokenService(tokenRepo);
+      const { user, stamp } = await seedSquatter('dl');
+
+      let release: () => void = () => undefined;
+      tokenRepo.gate = new Promise<void>((resolve) => (release = resolve));
+      const reached = new Promise<void>(
+        (resolve) => (tokenRepo.reachedCreate = resolve),
+      );
+      const register = devices
+        .registerDeviceToken(user.id, {
+          token: `pwl-it-dl-new-${stamp}`,
+          platform: 'android',
+          deviceName: 'phone',
+        })
+        .catch((error: unknown) => error);
+      await reached;
+
+      const takeover = authRepo
+        .takeOverUnverifiedAccount(user.id, takeoverData)
+        .catch((error: unknown) => error);
+      await waitForBlockedStatement('DELETE%"device_tokens"%');
+      release();
+      const [registered, taken] = await Promise.all([register, takeover]);
+
+      expect(taken).not.toBeInstanceOf(Error);
+      expect(registered).not.toBeInstanceOf(Error);
     });
   });
 });
