@@ -86,6 +86,9 @@ describe('needsProductionConfirmation', () => {
     'postgresql://u:p@[::1]:5432/db',
     'postgresql://u:p@LOCALHOST/db',
     'postgresql://u@/db?host=/var/run/postgresql',
+    'postgresql://u@/db?host=%2Fvar%2Frun%2Fpostgresql',
+    'postgresql://u:p@db.example.com/db?host=localhost',
+    'postgresql://u@/db?host=/var/run/postgresql&host=127.0.0.1',
   ])('local database needs no confirmation: %s', (u) => {
     expect(needsProductionConfirmation(u)).toBe(false);
   });
@@ -97,6 +100,10 @@ describe('needsProductionConfirmation', () => {
     'postgresql://u:p@evil.local.example.com/db',
     'postgresql://u:p@box.local/db',
     'postgresql://u:p@printer.local:5432/db',
+    'postgresql://u:p@localhost:5432/db?host=prod-db.example.com',
+    'postgresql://u:p@localhost/db?host=/var/run/postgresql&host=prod-db.example.com',
+    'postgresql://u:p@localhost/db?host=',
+    'postgresql://u@/db?host=/var/run/postgresql&host=prod-db.example.com',
     'not a url',
     '',
     undefined,

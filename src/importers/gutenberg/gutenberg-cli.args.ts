@@ -63,6 +63,16 @@ export function parseCliArgs(argv: string[]): CliArgs {
   };
 }
 
+const isLocalHost = (value: string): boolean => {
+  const host = value.toLowerCase().replace(/^\[|\]$/g, '');
+  return (
+    host.startsWith('/') ||
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '::1'
+  );
+};
+
 /**
  * --commit needs an explicit --yes-production unless the database host is
  * clearly local (localhost, 127.0.0.1, ::1, unix socket; NOT *.local names).
@@ -72,20 +82,24 @@ export function parseCliArgs(argv: string[]): CliArgs {
  */
 export function needsProductionConfirmation(databaseUrl?: string): boolean {
   if (!databaseUrl) return true;
-  let u: URL;
+  let hostname: string;
+  let query: URLSearchParams;
   try {
-    u = new URL(databaseUrl);
+    const u = new URL(databaseUrl);
+    hostname = u.hostname;
+    query = u.searchParams;
   } catch {
     // Unix-socket URLs such as postgresql://u@/db?host=/var/run/postgresql
-    return !/^postgres(?:ql)?:\/\/[^@/?]*@?\/[^?]*\?(?:[^#]*&)?host=(?:\/|%2f)/i.test(
+    const m = /^postgres(?:ql)?:\/\/[^@/?]*@?\/[^?]*\?([^#]*)/i.exec(
       databaseUrl,
     );
+    if (!m) return true;
+    hostname = '';
+    query = new URLSearchParams(m[1]);
   }
-  const host = u.hostname.toLowerCase().replace(/^\[|\]$/g, '');
-  if (host === 'localhost' || host === '127.0.0.1' || host === '::1')
-    return false;
-  if (host === '' && u.searchParams.get('host')?.startsWith('/')) return false;
-  return true;
+  const queryHosts = query.getAll('host').flatMap((h) => h.split(','));
+  const hosts = queryHosts.length > 0 ? queryHosts : [hostname];
+  return !hosts.every((h) => h !== '' && isLocalHost(h));
 }
 
 export function formatReport(r: ImportReport): string {
