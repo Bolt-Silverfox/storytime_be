@@ -21,6 +21,7 @@ export type ProcessFailure =
   | 'residual-reference'
   | 'empty-after-clean'
   | 'heading-ambiguous'
+  | 'illustration-unclosed'
   | 'oversized';
 
 export type ProcessResult =
@@ -254,13 +255,21 @@ const isContentsHeading = (line: string): boolean => {
 };
 
 const HEADING = /^(chapter|book|part)\s+([ivxlcdm\d]+)\b\.?\s*(.*)$/i;
+const ILLUSTRATION_UNCLOSED = {
+  ok: false,
+  reason: 'illustration-unclosed',
+} as const;
 const HEADING_AMBIGUOUS = {
   ok: false,
   reason: 'heading-ambiguous',
 } as const;
 
-/** Linear removal of [Illustration ...]; an unclosed one runs to the end. */
-function stripIllustrations(p: string): { text: string; changed: boolean } {
+/** Linear removal of [Illustration ...]; an unclosed one is reported, not dropped. */
+function stripIllustrations(p: string): {
+  text: string;
+  changed: boolean;
+  unclosed: boolean;
+} {
   let out = '';
   let i = 0;
   let changed = false;
@@ -276,14 +285,14 @@ function stripIllustrations(p: string): { text: string; changed: boolean } {
       out += p.slice(i, b);
       changed = true;
       const close = p.indexOf(']', j);
-      if (close < 0) break;
+      if (close < 0) return { text: '', changed, unclosed: true };
       i = close + 1;
     } else {
       out += p.slice(i, b + 1);
       i = b + 1;
     }
   }
-  return { text: out.replace(/ {2,}/g, ' ').trim(), changed };
+  return { text: out.replace(/ {2,}/g, ' ').trim(), changed, unclosed: false };
 }
 
 function scanNote(m: string, startDepth: number): number | null {
@@ -444,6 +453,7 @@ export function processGutenbergText(
     let p = flat;
     let pLines = lines;
     const ill = stripIllustrations(lines.join('\n'));
+    if (ill.unclosed) return ILLUSTRATION_UNCLOSED;
     if (ill.changed) {
       notes.add('illustration placeholders removed');
       pLines = ill.text

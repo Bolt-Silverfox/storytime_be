@@ -253,13 +253,26 @@ describe('processGutenbergText hardening', () => {
     expect(r).toEqual({ ok: false, reason: 'residual-reference' });
   });
 
-  it('unclosed [Illustration marker is dropped to the end of its paragraph', () => {
-    const r = processGutenbergText(
-      wrap(`${STORY} [Illustration: a fox\n\nNext.`),
-      plain(),
-    );
+  it('unclosed [Illustration marker fails closed instead of dropping prose', () => {
+    expect(
+      processGutenbergText(
+        wrap(`${STORY} [Illustration: a fox\n\nNext.`),
+        plain(),
+      ),
+    ).toEqual({ ok: false, reason: 'illustration-unclosed' });
+  });
+
+  it.each([
+    [
+      'a multi-line caption',
+      `${STORY}\n[Illustration: a fox\nin a hollow tree]`,
+    ],
+    ['an inline caption', `${STORY} [Illustration: a fox] Then it ran.`],
+    ['a bare marker', `${STORY} [Illustration] Then it ran.`],
+  ])('removes %s without failing', (_n, body) => {
+    const r = processGutenbergText(wrap(body), plain());
     expect(r).toMatchObject({ ok: true });
-    if (r.ok) expect(r.content).not.toMatch(/illustration/i);
+    if (r.ok) expect(r.content).not.toMatch(/illustration|hollow tree/i);
   });
 
   it('unbracketed multi-paragraph transcriber note fails closed', () => {
