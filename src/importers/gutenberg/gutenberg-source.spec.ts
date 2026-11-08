@@ -1,7 +1,11 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { FilesystemGutenbergSource } from './gutenberg-source';
+import {
+  FilesystemGutenbergSource,
+  MAX_WORK_BYTES,
+  isInsideRoot,
+} from './gutenberg-source';
 
 describe('FilesystemGutenbergSource', () => {
   let dir: string;
@@ -53,5 +57,47 @@ describe('FilesystemGutenbergSource', () => {
     expect(() => new FilesystemGutenbergSource('/definitely/not/here')).toThrow(
       /directory/i,
     );
+  });
+
+  it('refuses a file larger than the cap', async () => {
+    fs.writeFileSync(path.join(dir, '7-0.txt'), '');
+    fs.truncateSync(path.join(dir, '7-0.txt'), MAX_WORK_BYTES + 1);
+    await expect(
+      new FilesystemGutenbergSource(dir).fetch('7', signal),
+    ).rejects.toThrow(/exceeds/);
+  });
+
+  it('refuses a file that grew past the cap after it was measured', async () => {
+    const file = path.join(dir, '8-0.txt');
+    fs.writeFileSync(file, '');
+    fs.truncateSync(file, MAX_WORK_BYTES + 10);
+    const real = jest.requireActual<typeof fs>('fs');
+    const original = real.fstatSync;
+    const fstat = jest.spyOn(real, 'fstatSync').mockImplementation(((
+      fd: number,
+    ) =>
+      Object.assign(Object.create(original(fd) as object) as object, {
+        size: 10,
+      })) as typeof fs.fstatSync);
+    try {
+      await expect(
+        new FilesystemGutenbergSource(dir).fetch('8', signal),
+      ).rejects.toThrow(/exceeds/);
+    } finally {
+      fstat.mockRestore();
+    }
+  });
+});
+
+describe('isInsideRoot', () => {
+  it.each([
+    ['/', '/a/b', true],
+    ['/r', '/r/a', true],
+    ['/r', '/rx/a', false],
+    ['/r', '/r', false],
+    ['/r/s', '/r/x', false],
+    ['/r', '/other', false],
+  ])('root %s, path %s -> %s', (root, p, expected) => {
+    expect(isInsideRoot(root, p)).toBe(expected);
   });
 });

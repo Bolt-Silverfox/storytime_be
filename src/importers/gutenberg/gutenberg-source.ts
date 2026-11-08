@@ -23,6 +23,16 @@ export interface GutenbergSource {
 export const MAX_WORK_BYTES = 8 * 1024 * 1024;
 const ID = /^\d{1,7}$/;
 
+export function isInsideRoot(root: string, candidate: string): boolean {
+  const rel = path.relative(root, candidate);
+  return (
+    rel !== '' &&
+    rel !== '..' &&
+    !rel.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(rel)
+  );
+}
+
 export class FilesystemGutenbergSource implements GutenbergSource {
   private readonly root: string;
 
@@ -70,21 +80,38 @@ export class FilesystemGutenbergSource implements GutenbergSource {
       } catch {
         continue;
       }
-      if (!real.startsWith(this.root + path.sep)) continue; // symlink escape
-      const st = fs.statSync(real);
-      if (!st.isFile()) continue;
-      if (st.size > MAX_WORK_BYTES) {
-        return Promise.reject(
-          new Error(`Work ${id} exceeds ${MAX_WORK_BYTES} bytes`),
-        );
+      if (!isInsideRoot(this.root, real)) continue; // symlink escape
+      let fd: number;
+      try {
+        fd = fs.openSync(real, 'r');
+      } catch {
+        continue;
       }
-      const buf = fs.readFileSync(real);
-      return Promise.resolve({
-        status: 200,
-        text: buf.toString(c.latin1 ? 'latin1' : 'utf8'),
-        sourceUrl: null,
-        lastModified: st.mtime.toISOString(),
-      });
+      try {
+        const st = fs.fstatSync(fd);
+        if (!st.isFile()) continue;
+        const tooBig = () =>
+          Promise.reject(
+            new Error(`Work ${id} exceeds ${MAX_WORK_BYTES} bytes`),
+          );
+        if (st.size > MAX_WORK_BYTES) return tooBig();
+        const buf = Buffer.allocUnsafe(MAX_WORK_BYTES + 1);
+        let len = 0;
+        while (len < buf.length) {
+          const n = fs.readSync(fd, buf, len, buf.length - len, null);
+          if (n === 0) break;
+          len += n;
+        }
+        if (len > MAX_WORK_BYTES) return tooBig();
+        return Promise.resolve({
+          status: 200,
+          text: buf.toString(c.latin1 ? 'latin1' : 'utf8', 0, len),
+          sourceUrl: null,
+          lastModified: st.mtime.toISOString(),
+        });
+      } finally {
+        fs.closeSync(fd);
+      }
     }
     return Promise.resolve({ status: 404 });
   }
