@@ -105,8 +105,19 @@ export class AvatarAssignmentController {
     description: 'Bad Request',
     schema: {
       example: {
-        message: 'userId is required',
+        message: ['avatarId should not be empty'],
         statusCode: 400,
+        details: {},
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Assigning to another user without being an admin',
+    schema: {
+      example: {
+        message: 'You can only access your own data',
+        statusCode: 403,
         details: {},
       },
     },
