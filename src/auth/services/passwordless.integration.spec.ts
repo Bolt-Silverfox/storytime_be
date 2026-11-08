@@ -1276,6 +1276,101 @@ maybe('PasswordlessService against Postgres', () => {
       ).toBe(0);
     });
 
+    const gateTransactionStep = (
+      model: 'user' | 'token',
+      method: 'delete' | 'deleteMany',
+    ) => {
+      let reached: () => void = () => undefined;
+      let release: () => void = () => undefined;
+      const reachedStep = new Promise<void>((resolve) => (reached = resolve));
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const bound = <T extends object>(target: T) =>
+        new Proxy(target, {
+          get: (t, key) => {
+            const value = Reflect.get(t, key) as unknown;
+            return typeof value === 'function'
+              ? (value as (...args: unknown[]) => unknown).bind(t)
+              : value;
+          },
+        });
+      const gatedTx = (tx: Record<string, unknown>) =>
+        new Proxy(tx, {
+          get: (t, key) => {
+            if (key !== model) return bound(t)[key as never];
+            const delegate = t[model] as Record<string, unknown>;
+            return new Proxy(delegate, {
+              get: (d, name) =>
+                name === method
+                  ? async (...args: unknown[]) => {
+                      reached();
+                      await gate;
+                      return (d[method] as (...a: unknown[]) => unknown)(
+                        ...args,
+                      );
+                    }
+                  : bound(d)[name as never],
+            });
+          },
+        });
+      const client = new Proxy(prisma, {
+        get: (target, key) =>
+          key === '$transaction'
+            ? (fn: (tx: Record<string, unknown>) => unknown) =>
+                target.$transaction((tx) => fn(gatedTx(tx as never)) as never)
+            : bound(target)[key as never],
+      });
+      return { client, reached: reachedStep, release };
+    };
+
+    it('does not deadlock an admin hard delete that already removed the sessions against a takeover', async () => {
+      const gated = gateTransactionStep('user', 'delete');
+      const adminRepo = new PrismaAdminUserRepository(gated.client as never);
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user } = await seedSquatter('adtk');
+
+      const removal = adminRepo
+        .hardDeleteUser(user.id)
+        .catch((error: unknown) => error);
+      await gated.reached;
+      const takeover = authRepo
+        .takeOverUnverifiedAccount(user.id, takeoverData)
+        .catch((error: unknown) => error);
+      await waitForBlockedStatement('%');
+      gated.release();
+      const [removed, taken] = await Promise.all([removal, takeover]);
+
+      expect(removed).not.toBeInstanceOf(Error);
+      if (
+        taken instanceof Error &&
+        !(taken instanceof AccountAlreadyVerifiedError)
+      ) {
+        throw taken;
+      }
+      expect(await prisma.user.count({ where: { id: user.id } })).toBe(0);
+    });
+
+    it('lets an admin hard delete wait out a takeover that is already running', async () => {
+      const gated = gateTransactionStep('token', 'deleteMany');
+      const authRepo = new PrismaAuthRepository(gated.client as never);
+      const adminRepo = new PrismaAdminUserRepository(prisma as never);
+      const { user } = await seedSquatter('tkad');
+
+      const takeover = authRepo
+        .takeOverUnverifiedAccount(user.id, takeoverData)
+        .catch((error: unknown) => error);
+      await gated.reached;
+      const removal = adminRepo
+        .hardDeleteUser(user.id)
+        .catch((error: unknown) => error);
+      await waitForBlockedStatement('%');
+      gated.release();
+      const [taken, removed] = await Promise.all([takeover, removal]);
+
+      expect(taken).not.toBeInstanceOf(Error);
+      expect(removed).not.toBeInstanceOf(Error);
+      expect(await prisma.user.count({ where: { id: user.id } })).toBe(0);
+    });
+
     it('refuses a registration whose session the takeover already revoked', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
       const devices = new DeviceTokenService(

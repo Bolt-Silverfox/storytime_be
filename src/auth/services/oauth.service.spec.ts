@@ -15,6 +15,8 @@ import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
 import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
 import appleSigninAuth from 'apple-signin-auth';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents } from '@/shared/events/app-events';
 
 // Mock google-auth-library
 jest.mock('google-auth-library', () => ({
@@ -37,6 +39,7 @@ describe('OAuthService', () => {
   let tokenService: jest.Mocked<TokenService>;
   let passwordService: jest.Mocked<PasswordService>;
   let googleClient: { verifyIdToken: jest.Mock };
+  let eventEmitter: { emit: jest.Mock };
 
   const mockUser: UserWithProfileAndAvatar = {
     ...makeUser({
@@ -78,6 +81,7 @@ describe('OAuthService', () => {
       seedDefaultPreferences: jest.fn(),
     };
 
+    eventEmitter = { emit: jest.fn() };
     googleClient = { verifyIdToken: jest.fn() };
     (OAuth2Client as unknown as jest.Mock).mockImplementation(
       () => googleClient,
@@ -99,6 +103,7 @@ describe('OAuthService', () => {
         { provide: TokenService, useValue: mockTokenService },
         { provide: PasswordService, useValue: mockPasswordService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: EventEmitter2, useValue: eventEmitter },
         {
           provide: NotificationPreferenceService,
           useValue: mockNotificationPreferenceService,
@@ -223,6 +228,31 @@ describe('OAuthService', () => {
         expect(authRepository.linkGoogleAccountIfUnset).toHaveBeenCalledWith(
           verifiedNow.id,
           'google-victim',
+        );
+      });
+
+      it('emits the email-verified event when the takeover verifies the account', async () => {
+        await service.loginWithGoogleIdToken('valid-token');
+
+        expect(eventEmitter.emit).toHaveBeenCalledWith(
+          AppEvents.USER_EMAIL_VERIFIED,
+          expect.objectContaining({
+            userId: 'victim-account',
+            email: 'victim@example.com',
+          }),
+        );
+      });
+
+      it('does not emit the email-verified event for an already verified account', async () => {
+        authRepository.findUserByEmailInsensitive.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
+        await service.loginWithGoogleIdToken('valid-token');
+
+        expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+          AppEvents.USER_EMAIL_VERIFIED,
+          expect.anything(),
         );
       });
 

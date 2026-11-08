@@ -19,16 +19,18 @@ export class PasswordlessEventListener {
     code: string;
     linkToken: string;
   }): Promise<void> {
-    const base = (
-      this.configService.get<string>('WEB_APP_BASE_URL') ?? ''
-    ).replace(/\/+$/, '');
     try {
+      const linkUrl = new URL(
+        '/auth/magic',
+        this.configService.get<string>('WEB_APP_BASE_URL') ?? '',
+      );
+      linkUrl.hash = `t=${payload.linkToken}`;
       const resp = await this.notificationService.sendNotification(
         'PasswordlessLogin',
         {
           email: payload.email,
           code: payload.code,
-          linkUrl: `${base}/auth/magic#t=${payload.linkToken}`,
+          linkUrl: linkUrl.toString(),
         },
       );
       if (!resp.success) {

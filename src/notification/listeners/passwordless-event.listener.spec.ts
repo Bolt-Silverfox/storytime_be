@@ -9,14 +9,17 @@ describe('PasswordlessEventListener', () => {
     linkToken: 'A'.repeat(43),
   };
 
-  function build(result: { success: boolean; error?: string } | Error) {
+  function build(
+    result: { success: boolean; error?: string } | Error,
+    baseUrl = 'https://app.test/',
+  ) {
     const notificationService = {
       sendNotification:
         result instanceof Error
           ? jest.fn().mockRejectedValue(result)
           : jest.fn().mockResolvedValue(result),
     };
-    const config = { get: () => 'https://app.test/' };
+    const config = { get: () => baseUrl };
     return {
       listener: new PasswordlessEventListener(
         notificationService as never,
@@ -36,6 +39,19 @@ describe('PasswordlessEventListener', () => {
         code: payload.code,
         linkUrl: `https://app.test/auth/magic#t=${payload.linkToken}`,
       },
+    );
+  });
+
+  it.each([
+    'https://app.test/?utm=1',
+    'https://app.test/#section',
+    'https://app.test/?utm=1#section',
+  ])('builds the same link when the base url is %s', async (base) => {
+    const { listener, notificationService } = build({ success: true }, base);
+    await listener.handlePasswordlessRequested(payload);
+    const data = notificationService.sendNotification.mock.calls[0][1];
+    expect(data.linkUrl).toBe(
+      `https://app.test/auth/magic#t=${payload.linkToken}`,
     );
   });
 

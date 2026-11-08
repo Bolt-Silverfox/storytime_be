@@ -24,7 +24,9 @@ maybe('PasswordlessThrottleService against real Redis', () => {
     const key = `${prefix}hit`;
     expect(await throttle.hit(key, 60_000)).toBe(1);
     expect(await throttle.hit(key, 60_000)).toBe(2);
-    expect(await client.pttl(key)).toBeGreaterThan(0);
+    const ttl = await client.pttl(key);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(60_000);
   });
 
   it('releases one from a live counter', async () => {

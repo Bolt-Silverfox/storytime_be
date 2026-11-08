@@ -6,6 +6,9 @@ describe('isThrowawayDatabaseUrl', () => {
     'postgresql://u:p@localhost:5432/pwl_throwaway',
     'postgresql://u:p@localhost:5432/throwaway?schema=public',
     'postgres://u:p@localhost:5432/pwl_throwaway',
+    'postgresql://u:p@127.0.0.1:5432/storytime_test',
+    'postgresql://u:p@[::1]:5432/storytime_test',
+    'postgresql:///storytime_test',
   ])('accepts %s', (url) => {
     expect(isThrowawayDatabaseUrl(url)).toBe(true);
   });
@@ -21,6 +24,7 @@ describe('isThrowawayDatabaseUrl', () => {
     'postgresql://u:p@h/production_test_data',
     'https://example.com/storytime_test',
     'mysql://u:p@h/storytime_test',
+    'postgresql://u:p@shared.example.com:5432/storytime_test',
   ])('rejects %s', (url) => {
     expect(isThrowawayDatabaseUrl(url)).toBe(false);
   });

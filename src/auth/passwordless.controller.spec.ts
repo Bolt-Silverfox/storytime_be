@@ -5,7 +5,9 @@ import request from 'supertest';
 import { PasswordlessController } from './passwordless.controller';
 import { PasswordlessService } from './services/passwordless.service';
 import { PasswordlessEnabledGuard } from './guards/passwordless-enabled.guard';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
+import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import { HttpExceptionFilter } from '@/shared/filters/http-exception.filter';
 
 const GENERIC = 'Invalid or expired code';
@@ -50,6 +52,51 @@ async function makeApp(enabled: boolean) {
   await app.init();
   return { app, service };
 }
+
+describe('PasswordlessController with the real throttle guard', () => {
+  let app: INestApplication;
+  const limit = THROTTLE_LIMITS.AUTH_PASSWORDLESS_REQUEST.limit;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot([{ name: 'short', ttl: 60_000, limit: 1000 }]),
+      ],
+      controllers: [PasswordlessController],
+      providers: [
+        {
+          provide: PasswordlessService,
+          useValue: { request: jest.fn().mockResolvedValue({ message: 'ok' }) },
+        },
+        PasswordlessEnabledGuard,
+        AuthThrottleGuard,
+        {
+          provide: ConfigService,
+          useValue: { get: () => true },
+        },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
+    await app.init();
+  });
+  afterAll(() => app.close());
+
+  const post = (email: string) =>
+    request(app.getHttpServer())
+      .post('/auth/passwordless/request')
+      .send({ email });
+
+  it('throttles request per email once the limit is spent', async () => {
+    for (let i = 0; i < limit; i += 1)
+      await post('burst@example.com').expect(200);
+
+    await post('burst@example.com').expect(429);
+    await post('other@example.com').expect(200);
+  });
+});
 
 describe('PasswordlessController', () => {
   describe('feature flag off', () => {

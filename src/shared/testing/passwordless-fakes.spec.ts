@@ -36,6 +36,19 @@ describe('InMemoryLoginChallengeRepository.deleteExpiredBefore', () => {
   });
 });
 
+describe('InMemoryLoginChallengeRepository.deleteExpiredBefore boundary', () => {
+  it('keeps a row that expires exactly at the cutoff', async () => {
+    const repo = new InMemoryLoginChallengeRepository();
+    await repo.replaceOpenChallenge({
+      ...challenge('edge', 0),
+      expiresAt: minutes(10),
+    });
+
+    expect(await repo.deleteExpiredBefore(minutes(10), 5)).toBe(0);
+    expect(await repo.deleteExpiredBefore(minutes(11), 5)).toBe(1);
+  });
+});
+
 describe('InMemoryLoginChallengeRepository.findOpenIdByEmail', () => {
   it('returns null when the newest open row is exhausted even if an older one has attempts left', async () => {
     const repo = new InMemoryLoginChallengeRepository();

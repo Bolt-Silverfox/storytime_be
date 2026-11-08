@@ -527,7 +527,7 @@ describe('PasswordlessService', () => {
         role: 'parent',
         isEmailVerified: false,
       });
-      Object.assign(user, flags);
+      Object.assign(user, { hasLocalPassword: true, ...flags });
       await authRepo.createSession({
         userId: user.id,
         token: 'attacker-refresh',

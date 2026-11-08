@@ -13,6 +13,8 @@ import { GoogleOAuthProfile } from '@/shared/types';
 import { UserDto } from '../dto/auth.dto';
 import appleSigninAuth from 'apple-signin-auth';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents, UserEmailVerifiedEvent } from '@/shared/events/app-events';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 import {
   AUTH_REPOSITORY,
@@ -40,6 +42,7 @@ export class OAuthService {
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (clientId) {
@@ -171,7 +174,7 @@ export class OAuthService {
           'Email not verified. Please check your inbox.',
         );
       }
-      ({ user } = await findOrCreateParentByVerifiedEmail(
+      const resolved = await findOrCreateParentByVerifiedEmail(
         {
           authRepository: this.authRepository,
           passwordService: this.passwordService,
@@ -185,7 +188,15 @@ export class OAuthService {
           googleId,
           appleId,
         },
-      ));
+      );
+      ({ user } = resolved);
+      if (resolved.newlyVerified) {
+        this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, {
+          userId: user.id,
+          email: user.email,
+          verifiedAt: new Date(),
+        } satisfies UserEmailVerifiedEvent);
+      }
     }
 
     if (user.isSuspended || user.isDeleted) {
