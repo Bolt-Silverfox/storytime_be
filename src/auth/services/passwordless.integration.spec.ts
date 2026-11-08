@@ -915,6 +915,23 @@ maybe('PasswordlessService against Postgres', () => {
       return { user, session };
     };
 
+    const waitForBlockedUserUpdate = async (timeoutMs = 10_000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        const blocked = await prisma.$queryRaw<Array<{ pid: number }>>`
+          SELECT pid FROM pg_stat_activity
+          WHERE datname = current_database()
+            AND pid <> pg_backend_pid()
+            AND wait_event_type = 'Lock'
+            AND query ILIKE 'UPDATE%"users"%'`;
+        if (blocked.length > 0) return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error(
+        `changePassword's UPDATE "users" was not blocked on the takeover's row lock within ${timeoutMs}ms`,
+      );
+    };
+
     it('does not let a change-password that read before the takeover write the attacker password after it', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
       const passwords = makePasswordService(authRepo);
@@ -934,7 +951,7 @@ maybe('PasswordlessService against Postgres', () => {
             session.id,
           )
           .catch((error: unknown) => error);
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        await waitForBlockedUserUpdate();
       });
       const outcome = await change;
 
