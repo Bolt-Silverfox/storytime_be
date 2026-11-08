@@ -218,7 +218,7 @@ describe('OAuthService', () => {
 
         const data = authRepository.updateUserWithRelations.mock.calls[0][1];
         expect(data).not.toHaveProperty('passwordHash');
-        expect(data.googleId).toBe('owner-google');
+        expect(data).not.toHaveProperty('googleId');
       });
 
       it('drops ids the attacker linked earlier when the owner arrives through Google', async () => {
