@@ -142,6 +142,17 @@ describe('allow-list rules', () => {
     ).not.toThrow();
   });
 
+  it.each([
+    ['a zero-width character', 'Gutenb\u200berg Tales'],
+    ['a soft hyphen', 'Guten\u00adberg Tales'],
+    ['a look-alike letter', 'Gutenbe\u0433g Tales'],
+  ])(
+    'validateAllowList rejects a source reference hidden by %s',
+    (_n, title) => {
+      expect(() => validateAllowList([base({ title })])).toThrow(/source-site/);
+    },
+  );
+
   it('validateAllowList requires idVerified to be a boolean', () => {
     expect(() =>
       validateAllowList([base({ idVerified: undefined as never })]),

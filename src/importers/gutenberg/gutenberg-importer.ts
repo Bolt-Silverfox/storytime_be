@@ -250,8 +250,16 @@ export class GutenbergImporter {
         reason: 'deleted story holds this source id',
       };
     }
+    if (existing && !existing.contentHash) {
+      return {
+        ...withNotes,
+        outcome: 'needs-review',
+        reason: 'stored story has no content hash to compare',
+        storyId: existing.id,
+      };
+    }
     if (existing) {
-      if (existing.contentHash && existing.contentHash !== hash) {
+      if (existing.contentHash !== hash) {
         // Upstream text moved on. Flag only: never update or publish.
         return {
           ...withNotes,

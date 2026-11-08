@@ -1,5 +1,5 @@
 import { AllowListEntry, EffectiveStatus } from './allowlist.types';
-import { GUTENBERG_REFERENCE } from './gutenberg-text';
+import { GUTENBERG_REFERENCE, hasSourceReference } from './gutenberg-text';
 
 /** Last first-publication year that is US public domain by the 95-year rule. */
 export const LATEST_PD_US_PUBLICATION_YEAR = 1930;
@@ -84,10 +84,11 @@ export function validateAllowList(list: AllowListEntry[]): void {
       e.description,
       e.translator?.name,
       e.illustrator,
-    ]
-      .filter(Boolean)
-      .join(' ');
-    if (GUTENBERG_REFERENCE.test(pub)) {
+    ].filter((v): v is string => !!v);
+    if (
+      GUTENBERG_REFERENCE.test(pub.join(' ')) ||
+      pub.some(hasSourceReference)
+    ) {
       throw new Error(
         `${where}: public field contains a source-site reference`,
       );

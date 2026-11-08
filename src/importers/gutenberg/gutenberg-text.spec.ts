@@ -1037,3 +1037,12 @@ describe('processGutenbergText title page line', () => {
     );
   });
 });
+
+describe('processGutenbergText word cap', () => {
+  it('never allows more than the hard cap, even when maxWords is raised', () => {
+    const body = Array.from({ length: 700 }, () => STORY).join('\n\n');
+    expect(
+      processGutenbergText(wrap(body), plain(), { maxWords: 1_000_000 }),
+    ).toEqual({ ok: false, reason: 'oversized' });
+  });
+});

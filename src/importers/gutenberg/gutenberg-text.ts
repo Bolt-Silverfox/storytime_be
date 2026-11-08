@@ -122,7 +122,7 @@ const MICHAEL_HART = /michael\s+(?:s\.?\s+)?hart/i;
 const PGDP = /\bpgdp\b/i;
 const EBOOK_NUMBER_TEST = /e-?(?:book|text)\s*(?:(?:no\.?|number|#)\s*)?\d+/i;
 
-function hasSourceReference(s: string): boolean {
+export function hasSourceReference(s: string): boolean {
   const m = matchForm(s);
   if (PGDP.test(m) || MICHAEL_HART.test(m)) return true;
   const p = probe(s);
@@ -371,7 +371,10 @@ export function processGutenbergText(
   entry: AllowListEntry,
   options: ProcessOptions = {},
 ): ProcessResult {
-  const maxWords = options.maxWords ?? MAX_IMPORT_WORDS;
+  const maxWords = Math.min(
+    options.maxWords ?? MAX_IMPORT_WORDS,
+    MAX_IMPORT_WORDS,
+  );
   const all = normalise(raw).split('\n');
   const startIdx = all.findIndex((l) => START.test(l));
   if (startIdx < 0) return { ok: false, reason: 'no-start-marker' };

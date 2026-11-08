@@ -423,6 +423,19 @@ describe('GutenbergImporter', () => {
     expect(store.rows).toHaveLength(1);
   });
 
+  it('a stored story without a content hash is needs-review, not skip-exists', async () => {
+    const { importer, store } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    store.rows[0].contentHash = null as never;
+    const r = await importer.run({ mode: 'dry-run', only: '90001' });
+    expect(r.items[0]).toEqual(
+      expect.objectContaining({
+        outcome: 'needs-review',
+        reason: 'stored story has no content hash to compare',
+      }),
+    );
+  });
+
   it('a work with a contents block is needs-review in dry-run and commit, and writes nothing', async () => {
     const withContents = fx('90001-0.txt').replace(
       'CHAPTER I.',
