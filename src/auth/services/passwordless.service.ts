@@ -322,26 +322,19 @@ export class PasswordlessService {
   }
 
   private async findOrCreateUser(email: string): Promise<VerifiedEmailResult> {
-    const run = () =>
-      findOrCreateParentByVerifiedEmail(
-        {
-          authRepository: this.authRepository,
-          passwordService: this.passwordService,
-        },
-        {
-          email,
-          emailVerified: true,
-          onboardingStatus: 'email_verified',
-          refuseInactive: true,
-          matchEmailCaseInsensitively: true,
-        },
-      );
-    try {
-      return await run();
-    } catch (error) {
-      if ((error as { code?: string })?.code === 'P2002') return run();
-      throw error;
-    }
+    return findOrCreateParentByVerifiedEmail(
+      {
+        authRepository: this.authRepository,
+        passwordService: this.passwordService,
+      },
+      {
+        email,
+        emailVerified: true,
+        onboardingStatus: 'email_verified',
+        refuseInactive: true,
+        matchEmailCaseInsensitively: true,
+      },
+    );
   }
 
   private async enforceVerifyLimits(

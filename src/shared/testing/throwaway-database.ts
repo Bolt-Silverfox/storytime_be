@@ -6,6 +6,9 @@ export function isThrowawayDatabaseUrl(url: string | undefined): boolean {
   } catch {
     return false;
   }
+  if (parsed.protocol !== 'postgres:' && parsed.protocol !== 'postgresql:') {
+    return false;
+  }
   if (parsed.searchParams.has('host') || parsed.searchParams.has('dbname')) {
     return false;
   }

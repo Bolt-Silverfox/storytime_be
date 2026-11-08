@@ -5,6 +5,7 @@ describe('isThrowawayDatabaseUrl', () => {
     'postgresql://u:p@localhost:5432/storytime_test',
     'postgresql://u:p@localhost:5432/pwl_throwaway',
     'postgresql://u:p@localhost:5432/throwaway?schema=public',
+    'postgres://u:p@localhost:5432/pwl_throwaway',
   ])('accepts %s', (url) => {
     expect(isThrowawayDatabaseUrl(url)).toBe(true);
   });
@@ -18,6 +19,8 @@ describe('isThrowawayDatabaseUrl', () => {
     'postgresql://u:p@h/prod?dbname=x_test',
     'postgresql://u:p@h/x_test?host=/var/run/postgresql',
     'postgresql://u:p@h/production_test_data',
+    'https://example.com/storytime_test',
+    'mysql://u:p@h/storytime_test',
   ])('rejects %s', (url) => {
     expect(isThrowawayDatabaseUrl(url)).toBe(false);
   });

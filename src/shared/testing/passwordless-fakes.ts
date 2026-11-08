@@ -31,7 +31,6 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
     return (
       r.consumedAt === null &&
       r.invalidatedAt === null &&
-      r.attempts < r.maxAttempts &&
       r.expiresAt.getTime() > now.getTime()
     );
   }
@@ -66,12 +65,17 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
     const open = this.rows
       .filter((r) => r.emailNormalized === email && this.isOpen(r, now))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-    return Promise.resolve(open[0]?.id ?? null);
+    const newest = open[0];
+    return Promise.resolve(
+      newest && newest.attempts < newest.maxAttempts ? newest.id : null,
+    );
   }
 
   recordAttempt(id: string, now: Date): Promise<{ codeHash: string } | null> {
     const r = this.rows.find((x) => x.id === id);
-    if (!r || !this.isOpen(r, now)) return Promise.resolve(null);
+    if (!r || !this.isOpen(r, now) || r.attempts >= r.maxAttempts) {
+      return Promise.resolve(null);
+    }
     r.attempts += 1;
     return Promise.resolve({ codeHash: r.codeHash });
   }
@@ -95,12 +99,14 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
     return r ? this.consumeById(r.id, now) : Promise.resolve(null);
   }
 
-  deleteExpiredBefore(cutoff: Date): Promise<number> {
-    const before = this.rows.length;
-    this.rows = this.rows.filter(
-      (r) => r.expiresAt.getTime() >= cutoff.getTime(),
+  deleteExpiredBefore(cutoff: Date, limit: number): Promise<number> {
+    const doomed = new Set(
+      this.rows
+        .filter((r) => r.expiresAt.getTime() < cutoff.getTime())
+        .slice(0, limit),
     );
-    return Promise.resolve(before - this.rows.length);
+    this.rows = this.rows.filter((r) => !doomed.has(r));
+    return Promise.resolve(doomed.size);
   }
 }
 
@@ -243,6 +249,9 @@ export class InMemoryAuthRepository {
     this.deviceTokens = this.deviceTokens.filter((t) => t.userId !== userId);
     return Promise.resolve();
   };
+
+  findUserById = (id: string) =>
+    Promise.resolve(this.users.find((u) => u.id === id) ?? null);
 
   takeOverUnverifiedAccount = (id: string, data: Partial<User>) => {
     const u = this.users.find((x) => x.id === id)!;

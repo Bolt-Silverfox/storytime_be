@@ -29,9 +29,20 @@ export interface VerifiedEmailResult {
   newlyVerified: boolean;
 }
 
-export async function findOrCreateParentByVerifiedEmail(
+const isUniqueViolation = (error: unknown): boolean =>
+  (error as { code?: string } | null)?.code === 'P2002';
+
+export function findOrCreateParentByVerifiedEmail(
   deps: VerifiedEmailDeps,
   input: VerifiedEmailInput,
+): Promise<VerifiedEmailResult> {
+  return resolveParent(deps, input, true);
+}
+
+async function resolveParent(
+  deps: VerifiedEmailDeps,
+  input: VerifiedEmailInput,
+  canRetry: boolean,
 ): Promise<VerifiedEmailResult> {
   const { authRepository, passwordService } = deps;
   const { email, name, emailVerified, googleId, appleId, onboardingStatus } =
@@ -77,9 +88,11 @@ export async function findOrCreateParentByVerifiedEmail(
     }
 
     const user = await authRepository.updateUserWithRelations(current.id, {
-      isEmailVerified: emailVerified ? true : current.isEmailVerified,
-      googleId: current.googleId || googleId || null,
-      appleId: current.appleId || appleId || null,
+      ...(emailVerified && !current.isEmailVerified
+        ? { isEmailVerified: true }
+        : {}),
+      ...(googleId && !current.googleId ? { googleId } : {}),
+      ...(appleId && !current.appleId ? { appleId } : {}),
     });
     return { user, isNewUser: false, newlyVerified: false };
   }
@@ -87,20 +100,27 @@ export async function findOrCreateParentByVerifiedEmail(
   const randomPassword = crypto.randomBytes(16).toString('hex');
   const hashedPassword = await passwordService.hashPassword(randomPassword);
 
-  const user = await authRepository.createUser({
-    name: name || email || 'User',
-    email,
-    passwordHash: hashedPassword,
-    isEmailVerified: emailVerified === true,
-    googleId: googleId || null,
-    appleId: appleId || null,
-    role: Role.parent,
-    ...(onboardingStatus ? { onboardingStatus } : {}),
-    profile: {
-      create: {
-        country: 'NG',
+  try {
+    const user = await authRepository.createUser({
+      name: name || email || 'User',
+      email,
+      passwordHash: hashedPassword,
+      isEmailVerified: emailVerified === true,
+      googleId: googleId || null,
+      appleId: appleId || null,
+      role: Role.parent,
+      ...(onboardingStatus ? { onboardingStatus } : {}),
+      profile: {
+        create: {
+          country: 'NG',
+        },
       },
-    },
-  });
-  return { user, isNewUser: true, newlyVerified: false };
+    });
+    return { user, isNewUser: true, newlyVerified: false };
+  } catch (error) {
+    if (canRetry && isUniqueViolation(error)) {
+      return resolveParent(deps, input, false);
+    }
+    throw error;
+  }
 }
