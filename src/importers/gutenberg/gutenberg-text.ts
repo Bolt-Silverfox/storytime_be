@@ -166,6 +166,15 @@ function hasCopyrightSignal(head: string[], entry: AllowListEntry): boolean {
   const translator = entry.translator
     ? matchForm(entry.translator.name).toLowerCase()
     : null;
+  const joined = head.map((raw) => matchForm(raw).trim()).join(' ');
+  const credit = new RegExp(TRANSLATION_CREDIT.source, 'gi');
+  for (const m of joined.matchAll(credit)) {
+    const after = joined
+      .slice(m.index + m[0].length)
+      .trimStart()
+      .toLowerCase();
+    if (!(translator && after.startsWith(translator))) return true;
+  }
   return head.some((raw) => {
     const l = matchForm(raw).trim();
     if (COPYRIGHT_SIGNAL.test(l)) return true;

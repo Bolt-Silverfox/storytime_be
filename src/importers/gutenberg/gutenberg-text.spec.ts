@@ -376,6 +376,41 @@ describe('processGutenbergText hardening', () => {
       ).toEqual({ ok: false, reason: 'copyright-signal' });
     });
 
+    it('routes a translation credit split across lines to review', () => {
+      expect(
+        processGutenbergText(
+          wrap(STORY, head('Translated\nby Jane Living')),
+          plain(),
+        ),
+      ).toEqual({ ok: false, reason: 'copyright-signal' });
+    });
+
+    it('routes a split credit naming someone other than the listed translator to review', () => {
+      const e = entry({ expect: { title: 'Lantern Fox', author: 'Example' } });
+      expect(
+        processGutenbergText(
+          wrap(
+            STORY,
+            head('Translator: Bram Sample\nTranslated\nby Living Person'),
+          ),
+          e,
+        ),
+      ).toEqual({ ok: false, reason: 'copyright-signal' });
+    });
+
+    it('accepts a split credit naming the listed translator', () => {
+      const e = entry({ expect: { title: 'Lantern Fox', author: 'Example' } });
+      expect(
+        processGutenbergText(
+          wrap(
+            STORY,
+            head('Translator: Bram Sample\nTranslated\nby Bram Sample'),
+          ),
+          e,
+        ),
+      ).toMatchObject({ ok: true });
+    });
+
     it('accepts a translation credit naming the listed translator', () => {
       const e = entry({ expect: { title: 'Lantern Fox', author: 'Example' } });
       expect(
