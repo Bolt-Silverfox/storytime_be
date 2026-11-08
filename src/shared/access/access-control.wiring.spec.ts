@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { AccessControlService } from './access-control.service';
 import { AccessControlModule } from './access-control.module';
+import { PrismaModule } from '@/prisma/prisma.module';
 import { SettingsModule } from '@/settings/settings.module';
 import { NotificationModule } from '@/notification/notification.module';
 import { UserModule } from '@/user/user.module';
@@ -33,4 +34,16 @@ describe('AccessControlService wiring', () => {
       );
     },
   );
+
+  it('AccessControlModule provides, exports and can reach Prisma', () => {
+    expect(Reflect.getMetadata('providers', AccessControlModule)).toContain(
+      AccessControlService,
+    );
+    expect(Reflect.getMetadata('exports', AccessControlModule)).toContain(
+      AccessControlService,
+    );
+    expect(Reflect.getMetadata('imports', AccessControlModule)).toContain(
+      PrismaModule,
+    );
+  });
 });
