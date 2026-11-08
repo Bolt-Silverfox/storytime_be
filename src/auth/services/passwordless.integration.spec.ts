@@ -1246,10 +1246,11 @@ maybe('PasswordlessService against Postgres', () => {
       const removal = adminRepo
         .hardDeleteUser(user.id)
         .catch((error: unknown) => error);
-      await waitForBlockedStatement('DELETE%"sessions"%');
+      await waitForBlockedStatement('DELETE%');
       release();
-      const [, removed] = await Promise.all([register, removal]);
+      const [registered, removed] = await Promise.all([register, removal]);
 
+      expect(registered).not.toBeInstanceOf(Error);
       expect(removed).not.toBeInstanceOf(Error);
       expect(await prisma.user.count({ where: { id: user.id } })).toBe(0);
     });
