@@ -29,8 +29,17 @@ export interface VerifiedEmailResult {
   newlyVerified: boolean;
 }
 
-const isUniqueViolation = (error: unknown): boolean =>
-  (error as { code?: string } | null)?.code === 'P2002';
+const isEmailUniqueViolation = (error: unknown): boolean => {
+  const { code, meta } = (error ?? {}) as {
+    code?: string;
+    meta?: { target?: unknown };
+  };
+  if (code !== 'P2002') return false;
+  const target = meta?.target;
+  return Array.isArray(target)
+    ? target.includes('email')
+    : typeof target === 'string' && target.includes('email');
+};
 
 export function findOrCreateParentByVerifiedEmail(
   deps: VerifiedEmailDeps,
@@ -87,13 +96,22 @@ async function resolveParent(
       }
     }
 
-    const user = await authRepository.updateUserWithRelations(current.id, {
-      ...(emailVerified && !current.isEmailVerified
-        ? { isEmailVerified: true }
-        : {}),
-      ...(googleId && !current.googleId ? { googleId } : {}),
-      ...(appleId && !current.appleId ? { appleId } : {}),
-    });
+    if (emailVerified && !current.isEmailVerified) {
+      await authRepository.updateUserWithRelations(current.id, {
+        isEmailVerified: true,
+      });
+    }
+    if (googleId) {
+      await authRepository.linkGoogleAccountIfUnset(current.id, googleId);
+    }
+    if (appleId) {
+      await authRepository.linkAppleAccountIfUnset(current.id, appleId);
+    }
+    const user = (await authRepository.findUserByIdWithProfile(current.id)) ?? {
+      ...current,
+      profile: null,
+      avatar: null,
+    };
     return { user, isNewUser: false, newlyVerified: false };
   }
 
@@ -118,7 +136,7 @@ async function resolveParent(
     });
     return { user, isNewUser: true, newlyVerified: false };
   } catch (error) {
-    if (canRetry && isUniqueViolation(error)) {
+    if (canRetry && isEmailUniqueViolation(error)) {
       return resolveParent(deps, input, false);
     }
     throw error;

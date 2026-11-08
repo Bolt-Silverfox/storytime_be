@@ -234,11 +234,43 @@ export class InMemoryAuthRepository {
     return Promise.resolve(u);
   };
 
-  findUserByEmailInsensitive = (email: string) =>
-    Promise.resolve(
-      this.users.find((u) => u.email.toLowerCase() === email.toLowerCase()) ??
+  findUserByEmailInsensitive = (email: string) => {
+    const matches = this.users
+      .filter((u) => u.email.toLowerCase() === email.toLowerCase())
+      .sort(
+        (a, b) =>
+          a.createdAt.getTime() - b.createdAt.getTime() ||
+          a.id.localeCompare(b.id),
+      );
+    return Promise.resolve(
+      matches.find((u) => u.isEmailVerified) ??
+        matches.find((u) => u.email === email) ??
+        matches[0] ??
         null,
     );
+  };
+
+  findUserByIdWithProfile = (id: string) =>
+    Promise.resolve(this.users.find((u) => u.id === id) ?? null);
+
+  linkGoogleAccountIfUnset = (userId: string, googleId: string) =>
+    this.linkIfUnset(userId, 'googleId', googleId);
+
+  linkAppleAccountIfUnset = (userId: string, appleId: string) =>
+    this.linkIfUnset(userId, 'appleId', appleId);
+
+  private linkIfUnset(
+    userId: string,
+    field: 'googleId' | 'appleId',
+    value: string,
+  ) {
+    const u = this.users.find((x) => x.id === userId);
+    if (!u || u[field] || !u.isEmailVerified || u.isDeleted) {
+      return Promise.resolve({ count: 0 });
+    }
+    u[field] = value;
+    return Promise.resolve({ count: 1 });
+  }
 
   deleteAllUserSessions = (userId: string) => {
     this.sessions = this.sessions.filter((s) => s.userId !== userId);

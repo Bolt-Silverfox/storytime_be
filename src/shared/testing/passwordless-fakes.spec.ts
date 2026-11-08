@@ -1,6 +1,7 @@
 import {
   InMemoryAuthRepository,
   InMemoryLoginChallengeRepository,
+  InMemoryRedis,
 } from './passwordless-fakes';
 
 const NOW = new Date('2026-01-01T00:00:00Z');
@@ -80,5 +81,61 @@ describe('InMemoryAuthRepository.createUser', () => {
     expect(user.googleId).toBeNull();
     expect(user.appleId).toBeNull();
     expect(user.profile?.country).toBe('NG');
+  });
+});
+
+describe('InMemoryAuthRepository.findUserByEmailInsensitive', () => {
+  const seed = async (
+    repo: InMemoryAuthRepository,
+    email: string,
+    isEmailVerified: boolean,
+    ageMinutes: number,
+  ) => {
+    const user = await repo.createUser({
+      email,
+      passwordHash: 'h',
+      isEmailVerified,
+    });
+    user.createdAt = new Date(NOW.getTime() - ageMinutes * 60_000);
+    return user;
+  };
+
+  it('prefers the oldest verified match over an exact-case unverified one', async () => {
+    const repo = new InMemoryAuthRepository();
+    await seed(repo, 'Case@x.co', false, 30);
+    const newerVerified = await seed(repo, 'CASE@x.co', true, 10);
+    const olderVerified = await seed(repo, 'cAsE@x.co', true, 20);
+
+    const found = await repo.findUserByEmailInsensitive('case@x.co');
+
+    expect(found?.id).toBe(olderVerified.id);
+    expect(found?.id).not.toBe(newerVerified.id);
+  });
+
+  it('falls back to the exact-case match, then the oldest', async () => {
+    const repo = new InMemoryAuthRepository();
+    const oldest = await seed(repo, 'Case@x.co', false, 30);
+    const exact = await seed(repo, 'case@x.co', false, 10);
+
+    expect((await repo.findUserByEmailInsensitive('case@x.co'))?.id).toBe(
+      exact.id,
+    );
+    expect((await repo.findUserByEmailInsensitive('CASE@X.CO'))?.id).toBe(
+      oldest.id,
+    );
+  });
+
+  it('returns null when nothing matches', async () => {
+    expect(
+      await new InMemoryAuthRepository().findUserByEmailInsensitive('n@x.co'),
+    ).toBeNull();
+  });
+});
+
+describe('InMemoryRedis', () => {
+  it('rejects a Lua script it does not know', async () => {
+    await expect(
+      new InMemoryRedis().client.eval('return 1', 1, 'k', '1000'),
+    ).rejects.toThrow('InMemoryRedis: unknown Lua script');
   });
 });

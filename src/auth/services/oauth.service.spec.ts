@@ -57,6 +57,9 @@ describe('OAuthService', () => {
       updateUserWithRelations: jest.fn(),
       takeOverUnverifiedAccount: jest.fn(),
       findUserById: jest.fn(),
+      findUserByIdWithProfile: jest.fn().mockResolvedValue(null),
+      linkGoogleAccountIfUnset: jest.fn().mockResolvedValue({ count: 1 }),
+      linkAppleAccountIfUnset: jest.fn().mockResolvedValue({ count: 1 }),
       createUser: jest.fn(),
       findAvatarByUrl: jest.fn(),
       createAvatar: jest.fn(),
@@ -216,9 +219,11 @@ describe('OAuthService', () => {
           service.loginWithGoogleIdToken('valid-token'),
         ).resolves.toBeDefined();
 
-        const data = authRepository.updateUserWithRelations.mock.calls[0][1];
-        expect(data).not.toHaveProperty('passwordHash');
-        expect(data).not.toHaveProperty('googleId');
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+        expect(authRepository.linkGoogleAccountIfUnset).toHaveBeenCalledWith(
+          verifiedNow.id,
+          'google-victim',
+        );
       });
 
       it('drops ids the attacker linked earlier when the owner arrives through Google', async () => {
@@ -242,9 +247,7 @@ describe('OAuthService', () => {
         await service.loginWithGoogleIdToken('valid-token');
 
         expect(authRepository.takeOverUnverifiedAccount).not.toHaveBeenCalled();
-        expect(
-          authRepository.updateUserWithRelations.mock.calls[0][1],
-        ).not.toHaveProperty('passwordHash');
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
       });
     });
 

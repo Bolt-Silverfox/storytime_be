@@ -875,6 +875,46 @@ maybe('PasswordlessService against Postgres', () => {
     expect(after.appleId).toBe(`pwl-it-keep-a-${stamp}`);
   });
 
+  it('keeps a provider id linked between the lookup and the sign-in write', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const owner = await prisma.user.create({
+      data: {
+        email: `pwl-it-race${stamp}@example.com`,
+        passwordHash: 'h',
+        isEmailVerified: true,
+      },
+    });
+    const racingRepo = Object.create(authRepo) as PrismaAuthRepository;
+    racingRepo.findUserByEmailInsensitive = async (email: string) => {
+      const snapshot = await authRepo.findUserByEmailInsensitive(email);
+      await authRepo.linkGoogleAccountIfUnset(
+        owner.id,
+        `pwl-it-first-${stamp}`,
+      );
+      return snapshot;
+    };
+
+    const result = await findOrCreateParentByVerifiedEmail(
+      {
+        authRepository: racingRepo,
+        passwordService: { hashPassword: () => Promise.resolve('x') },
+      },
+      {
+        email: owner.email,
+        emailVerified: true,
+        googleId: `pwl-it-second-${stamp}`,
+        matchEmailCaseInsensitively: true,
+      },
+    );
+
+    const after = await prisma.user.findUniqueOrThrow({
+      where: { id: owner.id },
+    });
+    expect(after.googleId).toBe(`pwl-it-first-${stamp}`);
+    expect(result.user.googleId).toBe(`pwl-it-first-${stamp}`);
+  });
+
   it('refuses to reset an account that was verified between the read and the takeover', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
     const stamp = `${process.pid}-${++n}`;

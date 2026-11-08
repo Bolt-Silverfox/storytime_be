@@ -21,6 +21,13 @@ const seed = async (
   return user;
 };
 
+const uniqueViolation = (target: string[]) =>
+  Object.assign(new Error('Unique constraint failed'), {
+    code: 'P2002',
+    meta: { target },
+  });
+const emailCollision = () => uniqueViolation(['email']);
+
 describe('findOrCreateParentByVerifiedEmail', () => {
   it('resolves to the concurrently verified user when the takeover loses the race', async () => {
     const repo = new InMemoryAuthRepository();
@@ -38,7 +45,7 @@ describe('findOrCreateParentByVerifiedEmail', () => {
     expect(result.user.id).toBe(real.id);
   });
 
-  it('preserves a provider link made between the lookup and the update', async () => {
+  it('keeps a google link made between the lookup and the sign-in write when a different google id arrives', async () => {
     const repo = new InMemoryAuthRepository();
     const real = await seed(repo);
     repo.findUserByEmail = () => {
@@ -49,11 +56,23 @@ describe('findOrCreateParentByVerifiedEmail', () => {
 
     await findOrCreateParentByVerifiedEmail(
       { authRepository: asRepo(repo), passwordService },
-      { email: 'a@x.co', emailVerified: true, appleId: 'a-1' },
+      { email: 'a@x.co', emailVerified: true, googleId: 'g-second' },
     );
 
     expect(real.googleId).toBe('g-concurrent');
-    expect(real.appleId).toBe('a-1');
+  });
+
+  it('links a new google id to a verified existing user', async () => {
+    const repo = new InMemoryAuthRepository();
+    const real = await seed(repo);
+
+    const result = await findOrCreateParentByVerifiedEmail(
+      { authRepository: asRepo(repo), passwordService },
+      { email: 'a@x.co', emailVerified: true, googleId: 'g-new' },
+    );
+
+    expect(real.googleId).toBe('g-new');
+    expect(result.user.googleId).toBe('g-new');
   });
 
   it('does not overwrite provider ids that are already set', async () => {
@@ -73,9 +92,7 @@ describe('findOrCreateParentByVerifiedEmail', () => {
     const originalCreate = repo.createUser;
     repo.createUser = async (data) => {
       await originalCreate({ ...data, email: 'a@x.co' });
-      throw Object.assign(new Error('Unique constraint failed'), {
-        code: 'P2002',
-      });
+      throw emailCollision();
     };
 
     const result = await findOrCreateParentByVerifiedEmail(
@@ -90,11 +107,7 @@ describe('findOrCreateParentByVerifiedEmail', () => {
 
   it('rethrows a unique violation that persists after one retry', async () => {
     const repo = new InMemoryAuthRepository();
-    const create = jest
-      .fn()
-      .mockRejectedValue(
-        Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
-      );
+    const create = jest.fn().mockRejectedValue(emailCollision());
     repo.createUser = create;
 
     await expect(
@@ -104,5 +117,22 @@ describe('findOrCreateParentByVerifiedEmail', () => {
       ),
     ).rejects.toMatchObject({ code: 'P2002' });
     expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['a unique violation on another column', uniqueViolation(['googleId'])],
+    ['an error that is not a unique violation', new Error('connection lost')],
+  ])('does not retry %s', async (_label, error) => {
+    const repo = new InMemoryAuthRepository();
+    const create = jest.fn().mockRejectedValue(error);
+    repo.createUser = create;
+
+    await expect(
+      findOrCreateParentByVerifiedEmail(
+        { authRepository: asRepo(repo), passwordService },
+        { email: 'a@x.co', emailVerified: true },
+      ),
+    ).rejects.toBe(error);
+    expect(create).toHaveBeenCalledTimes(1);
   });
 });
