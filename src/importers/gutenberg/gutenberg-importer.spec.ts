@@ -388,6 +388,41 @@ describe('GutenbergImporter', () => {
     );
   });
 
+  it("a story from another source with the same id is not this importer's story", async () => {
+    const { importer, store } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    store.rows[0].sourceName = 'other-source';
+    const r = await importer.run({ mode: 'dry-run', only: '90001' });
+    expect(r.items[0].outcome).toBe('skip-duplicate');
+  });
+
+  it('a live story with the same content hash wins over a deleted one', async () => {
+    const { importer, store } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    store.deletedIds.add(store.rows[0].id);
+    store.rows[0].sourceId = 'gone';
+    store.rows.push({ ...store.rows[0], id: 'live', sourceId: 'other' });
+    const r = await importer.run({ mode: 'dry-run', only: '90001' });
+    expect(r.items[0]).toEqual(
+      expect.objectContaining({ outcome: 'skip-duplicate', storyId: 'live' }),
+    );
+  });
+
+  it('a create that collides on the source pair is skip-exists and stores one row', async () => {
+    const { importer, store } = setup();
+    await importer.run({ mode: 'commit', only: '90001' });
+    store.findBySource = () => Promise.resolve(null);
+    store.findByHash = () => Promise.resolve(null);
+    const r = await importer.run({ mode: 'commit', only: '90001' });
+    expect(r.items[0]).toEqual(
+      expect.objectContaining({
+        outcome: 'skip-exists',
+        reason: 'created concurrently',
+      }),
+    );
+    expect(store.rows).toHaveLength(1);
+  });
+
   it('a work with a contents block is needs-review in dry-run and commit, and writes nothing', async () => {
     const withContents = fx('90001-0.txt').replace(
       'CHAPTER I.',

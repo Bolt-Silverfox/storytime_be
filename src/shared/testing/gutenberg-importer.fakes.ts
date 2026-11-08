@@ -4,10 +4,12 @@ import {
   SourceFetcher,
 } from '@/source-cache/source-cache.service';
 import {
+  DuplicateStoryError,
   GutenbergCachePort,
   PayloadStore,
   StoryStorePort,
   NewImportedStory,
+  SOURCE_NAME,
 } from '@/importers/gutenberg/gutenberg-importer';
 import {
   GutenbergFetchResult,
@@ -99,7 +101,9 @@ export class MemoryStore implements StoryStorePort {
   themes = new Set(['Courage / Bravery']);
   deletedIds = new Set<string>();
   findBySource(sourceId: string) {
-    const r = this.rows.find((x) => x.sourceId === sourceId);
+    const r = this.rows.find(
+      (x) => x.sourceName === SOURCE_NAME && x.sourceId === sourceId,
+    );
     return Promise.resolve(
       r
         ? {
@@ -112,7 +116,8 @@ export class MemoryStore implements StoryStorePort {
     );
   }
   findByHash(hash: string) {
-    const r = this.rows.find((x) => x.contentHash === hash);
+    const matches = this.rows.filter((x) => x.contentHash === hash);
+    const r = matches.find((x) => !this.deletedIds.has(x.id)) ?? matches[0];
     return Promise.resolve(
       r ? { id: r.id, isDeleted: this.deletedIds.has(r.id) } : null,
     );
@@ -127,6 +132,13 @@ export class MemoryStore implements StoryStorePort {
   }
   create(data: NewImportedStory) {
     this.creates++;
+    if (
+      this.rows.some(
+        (x) => x.sourceName === data.sourceName && x.sourceId === data.sourceId,
+      )
+    ) {
+      return Promise.reject(new DuplicateStoryError());
+    }
     const id = `s${this.rows.length + 1}`;
     this.rows.push({ ...data, id, contentHash: data.contentHash });
     return Promise.resolve({ id });
