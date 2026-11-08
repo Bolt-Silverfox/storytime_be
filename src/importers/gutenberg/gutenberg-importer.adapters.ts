@@ -14,6 +14,7 @@ import {
   SOURCE_NAME,
   StoryStorePort,
 } from './gutenberg-importer';
+import { isInsideRoot } from './gutenberg-source';
 
 /** Raw payloads on local disk, content-addressed by the importer. Kept private. */
 export class FsPayloadStore implements PayloadStore {
@@ -30,16 +31,32 @@ export class FsPayloadStore implements PayloadStore {
       throw new Error('Payload key escapes root');
     return p;
   }
+  private async insideRoot(dir: string): Promise<string> {
+    const [realRoot, realDir] = await Promise.all([
+      fs.promises.realpath(this.root),
+      fs.promises.realpath(dir),
+    ]);
+    if (realDir !== realRoot && !isInsideRoot(realRoot, realDir)) {
+      throw new Error('Payload key escapes root');
+    }
+    return realDir;
+  }
   async write(key: string, text: string): Promise<void> {
     const p = this.resolve(key);
     await fs.promises.mkdir(path.dirname(p), { recursive: true, mode: 0o700 });
-    const tmp = `${p}.${process.pid}.tmp`;
+    const target = path.join(
+      await this.insideRoot(path.dirname(p)),
+      path.basename(p),
+    );
+    const tmp = `${target}.${process.pid}.tmp`;
     await fs.promises.writeFile(tmp, text, { encoding: 'utf8', mode: 0o600 });
     await fs.promises.chmod(tmp, 0o600);
-    await fs.promises.rename(tmp, p);
+    await fs.promises.rename(tmp, target);
   }
   async read(key: string): Promise<string> {
-    return fs.promises.readFile(this.resolve(key), 'utf8');
+    const p = this.resolve(key);
+    const dir = await this.insideRoot(path.dirname(p));
+    return fs.promises.readFile(path.join(dir, path.basename(p)), 'utf8');
   }
 }
 
