@@ -11,7 +11,7 @@ confirmed by a lawyer or against the live catalogue.
 
 - Reads only works on the curated allow-list (`src/importers/gutenberg/allowlist.ts`). There is no bulk crawl; an id that is not on the list is rejected without being read.
 - Reads text from a local directory (an rsync mirror copy or a folder you place files in). It never scrapes gutenberg.org pages. A real HTTPS/rsync source is a follow-up (see below).
-- Every read goes through `SourceCacheService.getOrFetch`, so each work is read once per cache window (30 days by default; `--ttl-days`). The raw file is kept privately under `--cache-dir` (default `.cache/gutenberg`, git-ignored) and is never served.
+- Commits use `SourceCacheService.getOrFetch` with a cache window of 30 days by default (`--ttl-days`). Dry runs reuse fresh cache entries or read the source directly. If a cached payload is missing, either mode reads the source directly. Cached raw files are kept privately under `--cache-dir` (default `.cache/gutenberg`, git-ignored) and are never served.
 - Strips edition boilerplate, normalises the text and stores it. No AI rewrite, no wording changes, no cover art, no audio.
 - Creates stories with `isPublished=false`. Publishing is always a manual admin action.
 - No HTTP endpoint. It is an operator script that needs a shell and `DATABASE_URL`.
@@ -75,7 +75,7 @@ Effective status order: `excluded`, `needs-review`, `dated-content` flag, transl
 
 1. Find the ebook number in the catalogue and copy the file into the mirror/folder.
 2. Check the edition's author, translator and illustrator, their death years, and the first publication year of this text. A modern translation or retelling is almost always copyrighted.
-3. Read the text for stereotypes or violence; if present add `flags: ['dated-content']`.
+3. Read the text for stereotypes and violence. Add `dated-content` for stereotypes and `violence` for violent passages; include both flags if both apply.
 4. Add the entry with a real `pdJustification`, run `--dry-run`, then `--commit --only <id>`.
 5. A reviewer reads the unpublished story in the admin tool, adds categories/age checks and art, then publishes.
 
