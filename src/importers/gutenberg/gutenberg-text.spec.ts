@@ -449,6 +449,24 @@ describe('processGutenbergText hardening', () => {
       ).toEqual({ ok: false, reason: 'copyright-signal' });
     });
 
+    it('routes a credit to someone else to review even when the listed translator is named on the next line', () => {
+      const e = entry({
+        translator: { name: 'Lucy Crane', deathYear: 1900 },
+        expect: { title: 'Lantern Fox', author: 'Example' },
+      });
+      expect(
+        processGutenbergText(
+          wrap(
+            STORY,
+            head(
+              'Translator: Lucy Crane\nTranslated by Jim Modern\nLucy Crane',
+            ),
+          ),
+          e,
+        ),
+      ).toEqual({ ok: false, reason: 'copyright-signal' });
+    });
+
     it('accepts a translation credit naming the listed translator', () => {
       const e = entry({ expect: { title: 'Lantern Fox', author: 'Example' } });
       expect(
@@ -1108,6 +1126,16 @@ describe('processGutenbergText title page line', () => {
     expect(content(`Lantern Fox\n\n${STORY}\n\nLantern Fox\n\n${STORY}`)).toBe(
       `${STORY}\n\nLantern Fox\n\n${STORY}`,
     );
+  });
+
+  it.each([
+    ['directly', 'Lantern Fox\n\nLantern Fox'],
+    [
+      'by an illustration-only paragraph',
+      'Lantern Fox\n\n[Illustration]\n\nLantern Fox',
+    ],
+  ])('drops a repeated title only once when separated %s', (_n, titles) => {
+    expect(content(`${titles}\n\n${STORY}`)).toBe(`Lantern Fox\n\n${STORY}`);
   });
 
   it('keeps a paragraph that only contains the source title', () => {

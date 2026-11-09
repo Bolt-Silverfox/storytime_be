@@ -429,6 +429,7 @@ export function processGutenbergText(
   let boilerplateAfterStory = false;
   const titleLc = hTitle === null ? null : hTitle.toLowerCase();
 
+  let titleDropped = false;
   let next = 0;
   let carry: string[] | null = null;
   while (carry || next < paras.length) {
@@ -483,7 +484,14 @@ export function processGutenbergText(
     }
     // An ebook number inside a story sentence is NOT deleted (that would drop
     // story words); it stays and the final residual check fails the work.
-    if (out.length === 0 && matchForm(p).toLowerCase() === titleLc) continue;
+    if (
+      !titleDropped &&
+      out.length === 0 &&
+      matchForm(p).toLowerCase() === titleLc
+    ) {
+      titleDropped = true;
+      continue;
+    }
 
     let headings = 0;
     while (headings < pLines.length) {

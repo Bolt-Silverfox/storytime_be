@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -60,11 +60,33 @@ describe('FilesystemGutenbergSource', () => {
     );
   });
 
-  it('skips a named pipe instead of blocking on it', async () => {
+  it('skips a named pipe instead of blocking on it', () => {
     execFileSync('mkfifo', [path.join(dir, '9-0.txt')]);
-    const r = await new FilesystemGutenbergSource(dir).fetch('9', signal);
-    expect(r.status).toBe(404);
-  }, 3000);
+    const script = `
+      const { FilesystemGutenbergSource } = require(process.env.SOURCE_MODULE);
+      new FilesystemGutenbergSource(process.env.SOURCE_DIR)
+        .fetch('9', new AbortController().signal)
+        .then((r) => console.log(JSON.stringify(r)));
+    `;
+    const r = spawnSync(
+      process.execPath,
+      ['-r', 'ts-node/register/transpile-only', '-e', script],
+      {
+        timeout: 5000,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          SOURCE_MODULE: path.resolve(__dirname, 'gutenberg-source'),
+          SOURCE_DIR: dir,
+        },
+      },
+    );
+    expect({
+      signal: r.signal,
+      status: r.status,
+      out: r.stdout.trim(),
+    }).toEqual({ signal: null, status: 0, out: '{"status":404}' });
+  }, 15000);
 
   it('refuses a file larger than the cap', async () => {
     fs.writeFileSync(path.join(dir, '7-0.txt'), '');
