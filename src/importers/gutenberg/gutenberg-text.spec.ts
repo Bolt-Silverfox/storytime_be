@@ -1138,6 +1138,17 @@ describe('processGutenbergText title page line', () => {
     expect(content(`${titles}\n\n${STORY}`)).toBe(`Lantern Fox\n\n${STORY}`);
   });
 
+  it.each([
+    ['repeated title lines', 'Lantern  Fox\n\nLANTERN FOX'],
+    ['a single title line', 'Lantern Fox'],
+    [
+      'title lines around an illustration',
+      'Lantern Fox\n\n[Illustration]\n\nLantern Fox',
+    ],
+  ])('a body made only of %s is empty after cleaning', (_n, body) => {
+    expect(content(body)).toEqual({ ok: false, reason: 'empty-after-clean' });
+  });
+
   it('keeps a paragraph that only contains the source title', () => {
     expect(content(`Lantern Fox and the wood.\n\n${STORY}`)).toBe(
       `Lantern Fox and the wood.\n\n${STORY}`,

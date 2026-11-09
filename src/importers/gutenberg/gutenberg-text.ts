@@ -524,6 +524,9 @@ export function processGutenbergText(
 
   if (noteDepth > 0) return UNCLOSED_NOTE;
 
+  if (out.every((p) => matchForm(p).toLowerCase() === titleLc)) {
+    return { ok: false, reason: 'empty-after-clean' };
+  }
   const content = out.join('\n\n').trim();
   const wordCount = content ? content.split(/\s+/).length : 0;
   if (wordCount === 0) return { ok: false, reason: 'empty-after-clean' };
