@@ -71,7 +71,14 @@ describe('UserController /user/:id authorization', () => {
     ['DELETE', (id) => request(app.getHttpServer()).delete(`/user/${id}`)],
   ];
 
-  describe.each(routes)('%s /user/:id', (_method, call) => {
+  const serviceCallFor = (method: string, id: string) =>
+    ({
+      GET: [userService.getUser, [id]],
+      PUT: [userService.updateUser, [id, { name: 'x' }]],
+      DELETE: [userService.deleteUserAccount, [id, false]],
+    })[method] as [jest.Mock, unknown[]];
+
+  describe.each(routes)('%s /user/:id', (method, call) => {
     it('rejects anonymous callers with 401', async () => {
       await call(BOB).expect(401);
       expect(userService.getUser).not.toHaveBeenCalled();
@@ -89,6 +96,9 @@ describe('UserController /user/:id authorization', () => {
       const res = await call(ALICE)
         .set('Authorization', bearer('alice'))
         .expect(200);
+      const [alice, aliceArgs] = serviceCallFor(method, ALICE);
+      expect(alice).toHaveBeenCalledWith(...aliceArgs);
+      expect(JSON.stringify(res.body)).toContain(ALICE);
       expect(JSON.stringify(res.body)).not.toMatch(/passwordHash|pinHash/);
     });
 
@@ -96,6 +106,9 @@ describe('UserController /user/:id authorization', () => {
       const res = await call(BOB)
         .set('Authorization', bearer('admin'))
         .expect(200);
+      const [bob, bobArgs] = serviceCallFor(method, BOB);
+      expect(bob).toHaveBeenCalledWith(...bobArgs);
+      expect(JSON.stringify(res.body)).toContain(BOB);
       expect(JSON.stringify(res.body)).not.toMatch(/passwordHash|pinHash/);
     });
   });

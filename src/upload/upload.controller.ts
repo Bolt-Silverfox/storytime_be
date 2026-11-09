@@ -28,7 +28,9 @@ export class UploadController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
   async upload(@UploadedFile() file: Express.Multer.File) {
     const result = await this.uploadService.uploadFile(file);
     return {

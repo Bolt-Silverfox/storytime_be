@@ -66,30 +66,40 @@ export class NotificationSettingsService {
   async create(
     dto: CreateNotificationPreferenceDto,
   ): Promise<NotificationPreferenceDto> {
-    // Verify user or kid exists and is not soft deleted
-    if (dto.userId) {
-      const user = await this.notificationPreferenceRepository.findUser(
-        dto.userId,
-      );
-      if (!user) throw new NotFoundException('User not found');
+    const [pref] = await this.createMany([dto]);
+    return pref;
+  }
+
+  async createMany(
+    dtos: CreateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    for (const dto of dtos) {
+      if (dto.userId) {
+        const user = await this.notificationPreferenceRepository.findUser(
+          dto.userId,
+        );
+        if (!user) throw new NotFoundException('User not found');
+      }
+
+      if (dto.kidId) {
+        const kid = await this.notificationPreferenceRepository.findKid(
+          dto.kidId,
+        );
+        if (!kid) throw new NotFoundException('Kid not found');
+      }
     }
 
-    if (dto.kidId) {
-      const kid = await this.notificationPreferenceRepository.findKid(
-        dto.kidId,
+    const prefs =
+      await this.notificationPreferenceRepository.createNotificationPreferencesAtomic(
+        dtos.map((dto) => ({
+          type: dto.type,
+          category: dto.category,
+          enabled: dto.enabled,
+          userId: dto.userId,
+          kidId: dto.kidId,
+        })),
       );
-      if (!kid) throw new NotFoundException('Kid not found');
-    }
-
-    const pref =
-      await this.notificationPreferenceRepository.createNotificationPreference({
-        type: dto.type,
-        category: dto.category,
-        enabled: dto.enabled,
-        userId: dto.userId,
-        kidId: dto.kidId,
-      });
-    return this.toNotificationPreferenceDto(pref);
+    return prefs.map((pref) => this.toNotificationPreferenceDto(pref));
   }
 
   async update(

@@ -24,6 +24,16 @@ export interface INotificationPreferenceRepository {
     kidId?: string;
   }): Promise<NotificationPreference>;
 
+  createNotificationPreferencesAtomic(
+    items: {
+      type: NotificationType;
+      category: NotificationCategory;
+      enabled: boolean;
+      userId?: string;
+      kidId?: string;
+    }[],
+  ): Promise<NotificationPreference[]>;
+
   // Update notification preference (only matches non-deleted rows)
   updateNotificationPreference(
     id: string,

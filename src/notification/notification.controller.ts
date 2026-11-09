@@ -81,9 +81,7 @@ export class NotificationController {
         });
       }
     }
-    return Promise.all(
-      scoped.map((dto) => this.notificationService.create(dto)),
-    );
+    return this.notificationService.createMany(scoped);
   }
 
   @Patch()
@@ -193,6 +191,11 @@ export class NotificationController {
 
   private async assertPreferenceAccess(req: AuthenticatedRequest, id: string) {
     const owner = await this.notificationService.getPreferenceOwner(id);
+    if (owner.kidId && owner.userId) {
+      await this.accessControl.assertKidAccess(req.authUserData, owner.kidId);
+      this.accessControl.assertSelfOrAdmin(req.authUserData, owner.userId);
+      return;
+    }
     await this.accessControl.assertOwner(req.authUserData, owner);
   }
 }

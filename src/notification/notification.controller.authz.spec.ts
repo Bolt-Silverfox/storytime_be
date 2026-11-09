@@ -16,7 +16,7 @@ const PREF_ID = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
 describe('NotificationController (preferences) authorization', () => {
   let app: INestApplication;
   const notifications = {
-    create: jest.fn(),
+    createMany: jest.fn(),
     update: jest.fn(),
     bulkUpdate: jest.fn(),
     getForUser: jest.fn(),
@@ -26,7 +26,7 @@ describe('NotificationController (preferences) authorization', () => {
     delete: jest.fn(),
     undoDelete: jest.fn(),
   };
-  const mutators = ['create', 'update', 'delete', 'undoDelete'] as const;
+  const mutators = ['createMany', 'update', 'delete', 'undoDelete'] as const;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -34,7 +34,9 @@ describe('NotificationController (preferences) authorization', () => {
     notifications.getForKid.mockResolvedValue([]);
     notifications.getById.mockResolvedValue({ id: PREF_ID, userId: ALICE });
     notifications.getPreferenceOwner.mockResolvedValue({ userId: ALICE });
-    notifications.create.mockImplementation((dto) => Promise.resolve(dto));
+    notifications.createMany.mockImplementation((dtos) =>
+      Promise.resolve(dtos),
+    );
     app = await createAuthzApp(
       [NotificationController],
       [{ provide: NotificationService, useValue: notifications }],
@@ -104,6 +106,46 @@ describe('NotificationController (preferences) authorization', () => {
     for (const m of mutators) expect(notifications[m]).not.toHaveBeenCalled();
   });
 
+  describe('a preference carrying both userId and kidId needs both owners', () => {
+    const send = (
+      method: 'patch' | 'delete',
+      who: 'alice' | 'bob' | 'admin',
+    ) =>
+      method === 'patch'
+        ? http()
+            .patch(`/notification-preferences/${PREF_ID}`)
+            .set('Authorization', bearer(who))
+            .send({ enabled: false })
+        : http()
+            .delete(`/notification-preferences/${PREF_ID}?permanent=true`)
+            .set('Authorization', bearer(who));
+    const serviceCall = { patch: 'update', delete: 'delete' } as const;
+
+    describe.each(['patch', 'delete'] as const)('%s', (method) => {
+      it("refuses both parents when the user is alice and the kid is bob's", async () => {
+        notifications.getPreferenceOwner.mockResolvedValue({
+          userId: ALICE,
+          kidId: BOB_KID,
+        });
+        await send(method, 'bob').expect(403);
+        await send(method, 'alice').expect(403);
+        expect(notifications[serviceCall[method]]).not.toHaveBeenCalled();
+      });
+
+      it('allows the owner whose user and kid both match, and an admin', async () => {
+        notifications.getPreferenceOwner.mockResolvedValue({
+          userId: ALICE,
+          kidId: ALICE_KID,
+        });
+        await send(method, 'bob').expect(403);
+        expect(notifications[serviceCall[method]]).not.toHaveBeenCalled();
+        await send(method, 'alice').expect(200);
+        await send(method, 'admin').expect(200);
+        expect(notifications[serviceCall[method]]).toHaveBeenCalledTimes(2);
+      });
+    });
+  });
+
   it('lets the owner and an admin delete a preference', async () => {
     await http()
       .delete(`/notification-preferences/${PREF_ID}`)
@@ -123,16 +165,16 @@ describe('NotificationController (preferences) authorization', () => {
       .set('Authorization', bearer('alice'))
       .send([{ ...body, userId: BOB }])
       .expect(403);
-    expect(notifications.create).not.toHaveBeenCalled();
+    expect(notifications.createMany).not.toHaveBeenCalled();
 
     await http()
       .post('/notification-preferences')
       .set('Authorization', bearer('alice'))
       .send([body])
       .expect(201);
-    expect(notifications.create).toHaveBeenCalledWith(
+    expect(notifications.createMany).toHaveBeenCalledWith([
       expect.objectContaining({ userId: ALICE }),
-    );
+    ]);
   });
 
   describe('POST /notification-preferences body validation and kid ownership', () => {
@@ -145,12 +187,15 @@ describe('NotificationController (preferences) authorization', () => {
 
     it("refuses a preference for another parent's kid", async () => {
       await post('alice', [{ ...valid, kidId: BOB_KID }]).expect(403);
-      expect(notifications.create).not.toHaveBeenCalled();
+      expect(notifications.createMany).not.toHaveBeenCalled();
     });
 
     it('accepts a preference for own kid', async () => {
       await post('alice', [{ ...valid, kidId: ALICE_KID }]).expect(201);
-      expect(notifications.create).toHaveBeenCalledTimes(1);
+      expect(notifications.createMany).toHaveBeenCalledTimes(1);
+      expect(notifications.createMany).toHaveBeenCalledWith([
+        expect.objectContaining({ kidId: ALICE_KID }),
+      ]);
     });
 
     it('rejects more than 50 preferences in one request', async () => {
@@ -158,7 +203,7 @@ describe('NotificationController (preferences) authorization', () => {
         'alice',
         Array.from({ length: 51 }, () => valid),
       ).expect(400);
-      expect(notifications.create).not.toHaveBeenCalled();
+      expect(notifications.createMany).not.toHaveBeenCalled();
     });
 
     it.each([
@@ -175,7 +220,7 @@ describe('NotificationController (preferences) authorization', () => {
     ])('rejects %s with 400 before touching the service', async (_l, body) => {
       await post('alice', body).expect(400);
       await post('admin', body).expect(400);
-      expect(notifications.create).not.toHaveBeenCalled();
+      expect(notifications.createMany).not.toHaveBeenCalled();
     });
   });
 

@@ -124,11 +124,13 @@ describe('AvatarAssignmentController authorization', () => {
       .set('Authorization', bearer('alice'))
       .send({ avatarId: 'a', kidId: ALICE_KID })
       .expect(201);
+    expect(avatars.assignAvatarToKid).toHaveBeenLastCalledWith(ALICE_KID, 'a');
     await http()
       .post('/avatars/assign/kid')
       .set('Authorization', bearer('admin'))
       .send({ avatarId: 'a', kidId: BOB_KID })
       .expect(201);
+    expect(avatars.assignAvatarToKid).toHaveBeenLastCalledWith(BOB_KID, 'a');
     await http()
       .post('/avatars/assign/user')
       .set('Authorization', bearer('admin'))

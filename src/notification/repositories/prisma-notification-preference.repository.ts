@@ -44,6 +44,20 @@ export class PrismaNotificationPreferenceRepository implements INotificationPref
     });
   }
 
+  async createNotificationPreferencesAtomic(
+    items: {
+      type: NotificationType;
+      category: NotificationCategory;
+      enabled: boolean;
+      userId?: string;
+      kidId?: string;
+    }[],
+  ): Promise<NotificationPreference[]> {
+    return this.prisma.$transaction(
+      items.map((data) => this.prisma.notificationPreference.create({ data })),
+    );
+  }
+
   async updateNotificationPreference(
     id: string,
     data: Partial<NotificationPreference>,

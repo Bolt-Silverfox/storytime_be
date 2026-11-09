@@ -41,6 +41,7 @@ describe('NotificationPreferenceService', () => {
       findUser: jest.fn(),
       findKid: jest.fn(),
       createNotificationPreference: jest.fn(),
+      createNotificationPreferencesAtomic: jest.fn(),
       updateNotificationPreference: jest.fn(),
       updateNotificationPreferenceById: jest.fn(),
       findManyNotificationPreferences: jest.fn(),

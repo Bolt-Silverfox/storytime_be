@@ -36,4 +36,13 @@ describe('UploadController authorization', () => {
     await post().set('Authorization', bearer('alice')).expect(201);
     expect(uploads.uploadFile).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects a file over 5 MB with 413 without touching storage', async () => {
+    await request(app.getHttpServer())
+      .post('/upload')
+      .set('Authorization', bearer('alice'))
+      .attach('file', Buffer.alloc(5 * 1024 * 1024 + 1), 'big.bin')
+      .expect(413);
+    expect(uploads.uploadFile).not.toHaveBeenCalled();
+  });
 });

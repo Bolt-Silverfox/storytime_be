@@ -156,6 +156,12 @@ export class NotificationService {
     return this.settingsService.create(dto);
   }
 
+  async createMany(
+    dtos: CreateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    return this.settingsService.createMany(dtos);
+  }
+
   async update(
     id: string,
     dto: UpdateNotificationPreferenceDto,
