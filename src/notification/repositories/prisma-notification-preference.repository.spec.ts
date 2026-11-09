@@ -27,7 +27,9 @@ function fakePrisma() {
       try {
         return Promise.resolve(run()).then(resolve, reject);
       } catch (e) {
-        return Promise.reject(e).then(resolve, reject);
+        return Promise.reject(
+          e instanceof Error ? e : new Error(String(e)),
+        ).then(resolve, reject);
       }
     },
     run,
@@ -36,13 +38,13 @@ function fakePrisma() {
     notificationPreference: {
       create: ({ data }: { data: Row }) => lazy(() => insert(data)),
     },
-    $transaction: async (ops: { run: () => unknown }[]) => {
+    $transaction: (ops: { run: () => unknown }[]) => {
       const snapshot = [...rows];
       try {
-        return ops.map((op) => op.run());
+        return Promise.resolve(ops.map((op) => op.run()));
       } catch (e) {
         rows = snapshot;
-        throw e;
+        return Promise.reject(e instanceof Error ? e : new Error(String(e)));
       }
     },
   };
