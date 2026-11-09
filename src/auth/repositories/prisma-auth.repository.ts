@@ -515,14 +515,14 @@ export class PrismaAuthRepository implements IAuthRepository {
           });
         },
         findActiveUserLinkedProviderFields: async (userId) => {
-          return prisma.user.findUnique({
-            where: { id: userId, isDeleted: false },
-            select: {
-              googleId: true,
-              appleId: true,
-              hasLocalPassword: true,
-            },
-          });
+          const rows = await prisma.$queryRaw<
+            Array<{
+              googleId: string | null;
+              appleId: string | null;
+              hasLocalPassword: boolean;
+            }>
+          >`SELECT "googleId", "appleId", "hasLocalPassword" FROM "users" WHERE "id" = ${userId} AND "isDeleted" = false FOR NO KEY UPDATE`;
+          return rows[0] ?? null;
         },
         unlinkProviderField: async (userId, field) => {
           await prisma.user.update({

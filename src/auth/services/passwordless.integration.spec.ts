@@ -6,7 +6,7 @@ import { PasswordlessService } from './passwordless.service';
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
 import { TokenService } from './token.service';
 import * as bcrypt from 'bcryptjs';
-import { UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { PasswordService } from './password.service';
 import {
   AccountAlreadyVerifiedError,
@@ -17,6 +17,7 @@ import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 import { PrismaDeviceTokenRepository } from '@/notification/repositories/prisma-device-token.repository';
+import { AccountLinkingService } from './account-linking.service';
 import { PrismaAdminUserRepository } from '@/admin/repositories/prisma-admin-user.repository';
 import { DeviceTokenService } from '@/notification/services/device-token.service';
 
@@ -1278,7 +1279,7 @@ maybe('PasswordlessService against Postgres', () => {
 
     const gateTransactionStep = (
       model: 'user' | 'token',
-      method: 'delete' | 'deleteMany',
+      method: 'delete' | 'deleteMany' | 'update',
     ) => {
       let reached: () => void = () => undefined;
       let release: () => void = () => undefined;
@@ -1369,6 +1370,89 @@ maybe('PasswordlessService against Postgres', () => {
       expect(taken).not.toBeInstanceOf(Error);
       expect(removed).not.toBeInstanceOf(Error);
       expect(await prisma.user.count({ where: { id: user.id } })).toBe(0);
+    });
+
+    const seedLinkedSquatter = async (label: string) => {
+      const stamp = `${process.pid}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-${label}-${stamp}@example.com`,
+          passwordHash: 'squatter-hash',
+          hasLocalPassword: true,
+          googleId: `pwl-it-${label}-squatter-g-${stamp}`,
+          isEmailVerified: false,
+        },
+      });
+      await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-${label}-s-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+      return { user, ownerGoogleId: `pwl-it-${label}-owner-g-${stamp}` };
+    };
+
+    it('keeps the provider the owner links in a takeover when an unlink read before it', async () => {
+      const gated = gateTransactionStep('user', 'update');
+      const linking = new AccountLinkingService(
+        new PrismaAuthRepository(gated.client as never),
+        { get: () => undefined } as never,
+      );
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user, ownerGoogleId } = await seedLinkedSquatter('unl1');
+
+      const unlink = linking
+        .unlinkProvider(user.id, 'google')
+        .catch((error: unknown) => error);
+      await gated.reached;
+      const takeover = authRepo
+        .takeOverUnverifiedAccount(user.id, {
+          ...takeoverData,
+          googleId: ownerGoogleId,
+        })
+        .catch((error: unknown) => error);
+      await Promise.race([takeover, waitForBlockedStatement('%')]);
+      gated.release();
+      const [unlinked, taken] = await Promise.all([unlink, takeover]);
+
+      expect(unlinked).not.toBeInstanceOf(Error);
+      expect(taken).not.toBeInstanceOf(Error);
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(after.googleId).toBe(ownerGoogleId);
+    });
+
+    it('refuses an unlink that waited on a takeover and then sees a single sign-in method', async () => {
+      const gated = gateTransactionStep('token', 'deleteMany');
+      const authRepo = new PrismaAuthRepository(gated.client as never);
+      const linking = new AccountLinkingService(
+        new PrismaAuthRepository(prisma as never),
+        { get: () => undefined } as never,
+      );
+      const { user, ownerGoogleId } = await seedLinkedSquatter('unl2');
+
+      const takeover = authRepo
+        .takeOverUnverifiedAccount(user.id, {
+          ...takeoverData,
+          googleId: ownerGoogleId,
+        })
+        .catch((error: unknown) => error);
+      await gated.reached;
+      const unlink = linking
+        .unlinkProvider(user.id, 'google')
+        .catch((error: unknown) => error);
+      await Promise.race([unlink, waitForBlockedStatement('%')]);
+      gated.release();
+      const [taken, unlinked] = await Promise.all([takeover, unlink]);
+
+      expect(taken).not.toBeInstanceOf(Error);
+      expect(unlinked).toBeInstanceOf(BadRequestException);
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(after.googleId).toBe(ownerGoogleId);
     });
 
     it('refuses a registration whose session the takeover already revoked', async () => {

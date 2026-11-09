@@ -68,7 +68,7 @@ describe('NotificationRegistry — PasswordlessLogin', () => {
     expect(html).toContain('10 minutes');
   });
 
-  it('is high priority email', () => {
+  it('is sent by email', () => {
     expect(entry.medium).toBe('email');
   });
 });

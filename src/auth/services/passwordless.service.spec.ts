@@ -15,7 +15,12 @@ import {
 
 jest.mock('crypto', () => {
   const actual = jest.requireActual<typeof import('crypto')>('crypto');
-  return { ...actual, timingSafeEqual: jest.fn(actual.timingSafeEqual) };
+  return {
+    ...actual,
+    timingSafeEqual: jest.fn(actual.timingSafeEqual),
+    randomInt: jest.fn(actual.randomInt),
+    randomUUID: jest.fn(actual.randomUUID),
+  };
 });
 
 const PEPPER = 'x'.repeat(48);
@@ -139,6 +144,9 @@ describe('PasswordlessService', () => {
 
     it('a second request invalidates the first code and the first link', async () => {
       const { service, captured } = build();
+      (nodeCrypto.randomInt as jest.Mock)
+        .mockReturnValueOnce(111111)
+        .mockReturnValueOnce(222222);
       await service.request('a@example.com', '1.1.1.1');
       jest.advanceTimersByTime(61_000);
       await service.request('a@example.com', '1.1.1.1');
@@ -446,6 +454,9 @@ describe('PasswordlessService', () => {
         (m) => jest.spyOn(Logger.prototype, m).mockImplementation(),
       );
       const { service, captured } = build();
+      (nodeCrypto.randomUUID as jest.Mock).mockReturnValueOnce(
+        'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+      );
       await service.request('secret.person@example.com', '1.1.1.1');
       const guess = wrongCode(captured[0].code);
       await service

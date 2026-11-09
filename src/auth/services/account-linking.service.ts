@@ -217,9 +217,6 @@ export class AccountLinkingService {
       );
     }
 
-    // Wrap check-and-update in a transaction to prevent TOCTOU: two concurrent
-    // unlink calls could both pass the linkedCount guard and leave the user with
-    // only email (which may not be a usable login method for OAuth-only accounts).
     await this.authRepository.transaction(async (tx) => {
       const user = await tx.findActiveUserLinkedProviderFields(userId);
 

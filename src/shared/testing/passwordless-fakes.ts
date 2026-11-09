@@ -149,6 +149,7 @@ export class InMemoryRedis {
         return Promise.resolve(1);
       }
       cur.n += 1;
+      if (cur.n === 1) cur.expiresAt = now + Number(ttlMs);
       return Promise.resolve(cur.n);
     },
     decr: (key: string): Promise<number> => {

@@ -55,6 +55,17 @@ describe('PasswordlessEventListener', () => {
     );
   });
 
+  it.each([
+    ['https://app.test/app', 'https://app.test/app/auth/magic'],
+    ['https://app.test/app/', 'https://app.test/app/auth/magic'],
+    ['https://app.test/app/?utm=1#x', 'https://app.test/app/auth/magic'],
+  ])('keeps the path prefix of %s', async (base, expected) => {
+    const { listener, notificationService } = build({ success: true }, base);
+    await listener.handlePasswordlessRequested(payload);
+    const data = notificationService.sendNotification.mock.calls[0][1];
+    expect(data.linkUrl).toBe(`${expected}#t=${payload.linkToken}`);
+  });
+
   it('never puts the token in a query string', async () => {
     const { listener, notificationService } = build({ success: true });
     await listener.handlePasswordlessRequested(payload);

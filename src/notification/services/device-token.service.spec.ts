@@ -14,6 +14,7 @@ import { DevicePlatform } from '@prisma/client';
 describe('DeviceTokenService', () => {
   let service: DeviceTokenService;
   let repository: jest.Mocked<IDeviceTokenRepository>;
+  const tx = { sentinel: 'tx' };
 
   const mockDeviceToken = {
     id: 'token-1',
@@ -48,7 +49,7 @@ describe('DeviceTokenService', () => {
       lockLiveSession: jest.fn().mockResolvedValue(true),
       deleteStaleTokens: jest.fn(),
       // Execute the transaction callback immediately with a dummy tx client
-      executeTransaction: jest.fn((fn) => fn({})),
+      executeTransaction: jest.fn((fn) => fn(tx)),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -96,7 +97,7 @@ describe('DeviceTokenService', () => {
           platform: 'ios',
           deviceName: 'iPhone 15',
         }),
-        expect.anything(),
+        tx,
       );
     });
 
@@ -146,6 +147,14 @@ describe('DeviceTokenService', () => {
 
       expect(result.id).toBe('token-1');
       expect(repository.executeTransaction).toHaveBeenCalled();
+      expect(repository.lockLiveSession).toHaveBeenCalledWith(
+        'session-1',
+        'user-1',
+        tx,
+      );
+      expect(repository.findUniqueByToken.mock.calls[0][1]).toBe(tx);
+      expect(repository.updateManyTokens.mock.calls[0][2]).toBe(tx);
+      expect(repository.createToken.mock.calls[0][1]).toBe(tx);
       expect(repository.updateManyTokens).toHaveBeenCalledWith(
         {
           userId: 'user-1',
