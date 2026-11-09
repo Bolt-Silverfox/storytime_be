@@ -11,7 +11,7 @@ confirmed by a lawyer or against the live catalogue.
 
 - Reads only works on the curated allow-list (`src/importers/gutenberg/allowlist.ts`). There is no bulk crawl; an id that is not on the list is rejected without being read.
 - Reads text from a local directory (an rsync mirror copy or a folder you place files in). It never scrapes gutenberg.org pages. A real HTTPS/rsync source is a follow-up (see below).
-- Commits use `SourceCacheService.getOrFetch` with a cache window of 30 days by default (`--ttl-days`). Dry runs reuse fresh cache entries or read the source directly. If a cached payload is missing, either mode reads the source directly. Cached raw files are kept privately under `--cache-dir` (default `.cache/gutenberg`, git-ignored) and are never served.
+- Commits use `SourceCacheService.getOrFetch` with a cache window of 30 days by default (`--ttl-days`). Dry runs reuse fresh cache entries or read the source directly. If a cached payload is missing, a dry run reads the source directly and a commit forces a cache revalidation. Cached raw files are kept privately under `--cache-dir` (default `.cache/gutenberg`, git-ignored) and are never served.
 - Strips edition boilerplate, normalises the text and stores it. No AI rewrite, no wording changes, no cover art, no audio.
 - Creates stories with `isPublished=false`. Publishing is always a manual admin action.
 - No HTTP endpoint. It is an operator script that needs a shell and `DATABASE_URL`.

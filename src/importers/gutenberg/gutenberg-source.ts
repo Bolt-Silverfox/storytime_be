@@ -83,7 +83,7 @@ export class FilesystemGutenbergSource implements GutenbergSource {
       if (!isInsideRoot(this.root, real)) continue; // symlink escape
       let fd: number;
       try {
-        fd = fs.openSync(real, 'r');
+        fd = fs.openSync(real, fs.constants.O_RDONLY | fs.constants.O_NONBLOCK);
       } catch {
         continue;
       }

@@ -160,30 +160,34 @@ const COPYRIGHT_SIGNAL =
   /copyrighted\s+project\s+gutenberg|all\s+rights\s+reserved|^contributor:/i;
 const COPYRIGHT_STATUS = /^copyright\s+status:[ \t]*(.*)$/i;
 const NOT_COPYRIGHTED = /^(?:not\s+copyrighted|public\s+domain)\b/i;
-const TRANSLATION_CREDIT = /\btranslated\b[^\n]{0,100}?\bby\b/i;
+const TRANSLATION_CREDIT =
+  /\b(?:translated|translation|revised|english\s+version)\b[\s\S]{0,100}?\bby\b/gi;
+const CREDIT_END = /^[ \t]*[.,;)\]]*[ \t]*(?:\n|$)/;
 
 function hasCopyrightSignal(head: string[], entry: AllowListEntry): boolean {
   const translator = entry.translator
     ? matchForm(entry.translator.name).toLowerCase()
     : null;
-  const joined = head.map((raw) => matchForm(raw).trim()).join(' ');
-  const credit = new RegExp(TRANSLATION_CREDIT.source, 'gi');
-  for (const m of joined.matchAll(credit)) {
-    const after = joined
-      .slice(m.index + m[0].length)
-      .trimStart()
-      .toLowerCase();
-    if (!(translator && after.startsWith(translator))) return true;
+  const lower = head
+    .map((raw) => matchForm(raw).trim())
+    .join('\n')
+    .toLowerCase();
+  for (const m of lower.matchAll(TRANSLATION_CREDIT)) {
+    let pos = m.index + m[0].length;
+    while (pos < lower.length && /\s/.test(lower[pos])) pos++;
+    if (translator === null || !lower.startsWith(translator, pos)) return true;
+    const tail = lower.slice(
+      pos + translator.length,
+      pos + translator.length + 40,
+    );
+    if (!CREDIT_END.test(tail)) return true;
   }
   return head.some((raw) => {
     const l = matchForm(raw).trim();
     if (COPYRIGHT_SIGNAL.test(l)) return true;
     const status = COPYRIGHT_STATUS.exec(l);
     if (status && !NOT_COPYRIGHTED.test(status[1].trim())) return true;
-    return (
-      TRANSLATION_CREDIT.test(l) &&
-      !(translator && l.toLowerCase().includes(translator))
-    );
+    return false;
   });
 }
 
@@ -479,7 +483,7 @@ export function processGutenbergText(
     }
     // An ebook number inside a story sentence is NOT deleted (that would drop
     // story words); it stays and the final residual check fails the work.
-    if (matchForm(p).toLowerCase() === titleLc) continue; // title page line
+    if (out.length === 0 && matchForm(p).toLowerCase() === titleLc) continue;
 
     let headings = 0;
     while (headings < pLines.length) {

@@ -1,3 +1,4 @@
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -58,6 +59,12 @@ describe('FilesystemGutenbergSource', () => {
       /directory/i,
     );
   });
+
+  it('skips a named pipe instead of blocking on it', async () => {
+    execFileSync('mkfifo', [path.join(dir, '9-0.txt')]);
+    const r = await new FilesystemGutenbergSource(dir).fetch('9', signal);
+    expect(r.status).toBe(404);
+  }, 3000);
 
   it('refuses a file larger than the cap', async () => {
     fs.writeFileSync(path.join(dir, '7-0.txt'), '');

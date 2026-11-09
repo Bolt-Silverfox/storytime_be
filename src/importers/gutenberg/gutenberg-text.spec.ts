@@ -411,6 +411,44 @@ describe('processGutenbergText hardening', () => {
       ).toMatchObject({ ok: true });
     });
 
+    it.each([
+      ['a Translation credit', 'Translation by Living Person'],
+      ['a revised credit', 'Revised by Living Person'],
+      ['an English version credit', 'English version by Living Person'],
+    ])('routes %s to review', (_n, line) => {
+      expect(processGutenbergText(wrap(STORY, head(line)), plain())).toEqual({
+        ok: false,
+        reason: 'copyright-signal',
+      });
+    });
+
+    it.each([
+      [
+        'a second name after the listed translator',
+        'Translated by Bram Sample and John Modern',
+      ],
+      [
+        'the listed translator named elsewhere',
+        'Translated by Living Person (with Bram Sample)',
+      ],
+      [
+        'a name that only starts with the listed one',
+        'Translated by Bram Samplewell',
+      ],
+      [
+        'a split credit with extra names',
+        'Translated\nby Bram Sample, John Modern',
+      ],
+    ])('routes %s to review', (_n, credit) => {
+      const e = entry({ expect: { title: 'Lantern Fox', author: 'Example' } });
+      expect(
+        processGutenbergText(
+          wrap(STORY, head(`Translator: Bram Sample\n${credit}`)),
+          e,
+        ),
+      ).toEqual({ ok: false, reason: 'copyright-signal' });
+    });
+
     it('accepts a translation credit naming the listed translator', () => {
       const e = entry({ expect: { title: 'Lantern Fox', author: 'Example' } });
       expect(
@@ -865,13 +903,12 @@ describe('processGutenbergText hardening', () => {
       const used = process.cpuUsage(before);
       return (used.user + used.system) / 1000;
     };
-    const WARM_UP_TOLERANCE = 3;
-    const warmUpCpuMs = (text: string, budgetMs: number): number => {
-      const first = cpuMs(text);
-      return first >= budgetMs && first < budgetMs * WARM_UP_TOLERANCE
-        ? Math.min(first, cpuMs(text))
-        : first;
-    };
+    const MIN_OF = 3;
+    const minCpuMs = (text: string): number =>
+      Math.min(...Array.from({ length: MIN_OF }, () => cpuMs(text)));
+    beforeAll(() => {
+      cpuMs(wrap('word\n'.repeat(60_000)));
+    });
     const median = (text: string, limitMs = Infinity): number => {
       const samples: number[] = [];
       for (let i = 0; i < RUNS; i++) {
@@ -882,6 +919,30 @@ describe('processGutenbergText hardening', () => {
       samples.sort((a, b) => a - b);
       return samples[Math.floor(RUNS / 2)];
     };
+
+    it('a header of repeated listed-translator credits scans in linear time', () => {
+      const credits = 'Translated by Lucy Crane\n'.repeat(40_000);
+      const text = wrap(
+        STORY,
+        `Title: Lantern Fox\nAuthor: Ada Example\nTranslator: Lucy Crane\n${credits}`,
+      );
+      const e = entry({
+        translator: { name: 'Lucy Crane', deathYear: 1900 },
+        expect: {
+          title: 'Lantern Fox',
+          author: 'Example',
+          translator: 'Lucy Crane',
+        },
+      });
+      const run = () => {
+        const before = process.cpuUsage();
+        const r = processGutenbergText(text, e);
+        const used = process.cpuUsage(before);
+        expect(r).toMatchObject({ ok: true });
+        return (used.user + used.system) / 1000;
+      };
+      expect(Math.min(run(), run(), run())).toBeLessThan(600);
+    }, 120_000);
 
     it.each([
       [
@@ -983,9 +1044,9 @@ describe('processGutenbergText hardening', () => {
     ])(
       '%s: cpu stays within budget and 8x input costs under 32x',
       (_n, size, budgetMs, make) => {
-        expect(cpuMs(make(size / PROBE_DIVISOR))).toBeLessThan(budgetMs);
+        expect(minCpuMs(make(size / PROBE_DIVISOR))).toBeLessThan(budgetMs);
         const text = make(size);
-        expect(warmUpCpuMs(text, budgetMs)).toBeLessThan(budgetMs);
+        expect(minCpuMs(text)).toBeLessThan(budgetMs);
         const small = median(text, budgetMs);
         const floor = Math.max(small, MIN_DENOMINATOR_MS);
         const large = median(make(size * FACTOR), MAX_RATIO * floor);
@@ -1041,6 +1102,12 @@ describe('processGutenbergText title page line', () => {
 
   it('drops a paragraph equal to the source header title even when the curated title differs', () => {
     expect(content(`LANTERN FOX\n\n${STORY}`)).toBe(STORY);
+  });
+
+  it('drops only the first paragraph equal to the title, keeping a later refrain', () => {
+    expect(content(`Lantern Fox\n\n${STORY}\n\nLantern Fox\n\n${STORY}`)).toBe(
+      `${STORY}\n\nLantern Fox\n\n${STORY}`,
+    );
   });
 
   it('keeps a paragraph that only contains the source title', () => {

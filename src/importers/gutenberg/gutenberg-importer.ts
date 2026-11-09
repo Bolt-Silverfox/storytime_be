@@ -360,13 +360,13 @@ export class GutenbergImporter {
     const { source, cache, payloads } = this.deps;
     const pOpts = { maxWords: this.deps.maxWords };
 
-    const process = (text: string) => ({
+    const toProcessed = (text: string) => ({
       kind: 'ok' as const,
       processed: processGutenbergText(text, entry, pOpts),
     });
     const readCached = async (key: string) => {
       try {
-        return process(await payloads.read(key));
+        return toProcessed(await payloads.read(key));
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
         return null;
@@ -383,7 +383,7 @@ export class GutenbergImporter {
       }
       const r = await source.fetch(id, new AbortController().signal);
       if (r.status !== 200) return { kind: 'missing' };
-      return process(r.text);
+      return toProcessed(r.text);
     }
 
     const fetcher: SourceFetcher = async (_prev, signal) => {

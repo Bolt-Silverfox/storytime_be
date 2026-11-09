@@ -382,6 +382,20 @@ describe('SourceCacheService', () => {
       expect(r.fetched).toBe(false);
     });
 
+    it('force keeps waiting for the lease instead of taking the existing fresh entry', async () => {
+      lease = makeFakeLease(2);
+      svc = new SourceCacheService(fake.prisma, lease);
+      await svc.put({ sourceName: 'g', sourceId: '1', result: ok(), now: NOW });
+      const fetcher = jest.fn().mockResolvedValue(ok({ contentHash: 'h2' }));
+      const r = await svc.getOrFetch('g', '1', fetcher, {
+        now: NOW,
+        force: true,
+        pollMs: 1,
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(r.entry.contentHash).toBe('h2');
+    });
+
     it('gives up with SourceCacheLeaseTimeoutError if the lease never frees', async () => {
       lease = makeFakeLease(1000);
       svc = new SourceCacheService(fake.prisma, lease);
