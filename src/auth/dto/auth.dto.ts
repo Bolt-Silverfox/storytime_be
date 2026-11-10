@@ -375,7 +375,11 @@ export class RequestResetDto {
 }
 
 export class ValidateResetTokenDto {
-  @ApiProperty({ example: 'reset-token-from-email' })
+  @ApiProperty({
+    example: '12345678',
+    description:
+      'Reset code from the email. New codes have 8 digits; codes issued before the change have 6 and stay valid until they expire.',
+  })
   @IsNotEmpty()
   token: string;
 
@@ -387,7 +391,11 @@ export class ValidateResetTokenDto {
 }
 
 export class ResetPasswordDto {
-  @ApiProperty({ example: 'reset-token-from-email' })
+  @ApiProperty({
+    example: '12345678',
+    description:
+      'Reset code from the email. New codes have 8 digits; codes issued before the change have 6 and stay valid until they expire.',
+  })
   @IsNotEmpty()
   token: string;
 

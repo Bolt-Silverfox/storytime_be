@@ -20,7 +20,7 @@ import {
 } from '@/shared/testing/prisma-fixtures';
 import { TokenType } from '../dto/auth.dto';
 import { AppEvents } from '@/shared/events';
-import { Role, OnboardingStatus } from '@prisma/client';
+import { Role, OnboardingStatus, Prisma } from '@prisma/client';
 import { RedisService } from '@/redis/redis.service';
 import { FakeRedisClient } from '@/shared/testing/fake-redis';
 
@@ -32,11 +32,13 @@ jest.mock('bcryptjs', () => ({
 import * as bcrypt from 'bcryptjs';
 
 jest.mock('@/shared/utils/generate-token', () => ({
-  generateToken: jest.fn().mockReturnValue({
+  generateResetCode: jest.fn().mockReturnValue({
     token: 'raw-reset-token',
     expiresAt: new Date('2026-03-01T00:00:00Z'),
   }),
 }));
+
+import { generateResetCode } from '@/shared/utils/generate-token';
 
 describe('PasswordService', () => {
   let service: PasswordService;
@@ -148,6 +150,99 @@ describe('PasswordService', () => {
       );
     });
 
+    describe('code issuance', () => {
+      beforeEach(() => {
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
+        authRepository.createToken.mockResolvedValue(makeToken());
+      });
+
+      const uniqueViolation = () =>
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+        });
+
+      it('emails an 8-digit code', async () => {
+        const actual = jest.requireActual<
+          typeof import('@/shared/utils/generate-token')
+        >('@/shared/utils/generate-token');
+        (generateResetCode as jest.Mock).mockImplementationOnce(
+          actual.generateResetCode,
+        );
+
+        await service.requestPasswordReset({ email: 'test@example.com' });
+
+        const [, payload] = eventEmitter.emit.mock.calls.find(
+          ([name]) => name === 'password.reset_requested',
+        ) as [string, { resetToken: string }];
+        expect(payload.resetToken).toMatch(/^\d{8}$/);
+      });
+
+      it('draws a new code when the stored hash collides with another token', async () => {
+        (generateResetCode as jest.Mock)
+          .mockReturnValueOnce({ token: 'code-a', expiresAt: new Date() })
+          .mockReturnValueOnce({ token: 'code-b', expiresAt: new Date() });
+        tokenService.hashToken.mockImplementation((t) => `h:${t}`);
+        authRepository.createToken
+          .mockRejectedValueOnce(uniqueViolation())
+          .mockResolvedValueOnce(makeToken());
+
+        await expect(
+          service.requestPasswordReset({ email: 'test@example.com' }),
+        ).resolves.toEqual({ message: 'Password reset token sent' });
+
+        expect(authRepository.createToken).toHaveBeenCalledTimes(2);
+        expect(authRepository.createToken).toHaveBeenLastCalledWith(
+          expect.objectContaining({ token: 'h:code-b' }),
+        );
+        expect(eventEmitter.emit).toHaveBeenCalledWith(
+          'password.reset_requested',
+          expect.objectContaining({ resetToken: 'code-b' }),
+        );
+      });
+
+      it('never emails a code whose token failed to persist', async () => {
+        (generateResetCode as jest.Mock)
+          .mockReturnValueOnce({ token: 'code-a', expiresAt: new Date() })
+          .mockReturnValueOnce({ token: 'code-b', expiresAt: new Date() });
+        authRepository.createToken
+          .mockRejectedValueOnce(uniqueViolation())
+          .mockResolvedValueOnce(makeToken());
+
+        await service.requestPasswordReset({ email: 'test@example.com' });
+
+        expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+          'password.reset_requested',
+          expect.objectContaining({ resetToken: 'code-a' }),
+        );
+      });
+
+      it('gives up with the original error after repeated collisions', async () => {
+        authRepository.createToken.mockRejectedValue(uniqueViolation());
+
+        await expect(
+          service.requestPasswordReset({ email: 'test@example.com' }),
+        ).rejects.toThrow('Unique constraint failed');
+
+        expect(authRepository.createToken).toHaveBeenCalledTimes(5);
+        expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+          'password.reset_requested',
+          expect.anything(),
+        );
+      });
+
+      it('does not retry unrelated persistence errors', async () => {
+        authRepository.createToken.mockRejectedValue(new Error('db down'));
+
+        await expect(
+          service.requestPasswordReset({ email: 'test@example.com' }),
+        ).rejects.toThrow('db down');
+
+        expect(authRepository.createToken).toHaveBeenCalledTimes(1);
+      });
+    });
+
     describe('issuance cap', () => {
       const request = (email = 'test@example.com') =>
         service.requestPasswordReset({ email });
@@ -181,9 +276,13 @@ describe('PasswordService', () => {
           );
         }
 
+        authRepository.findUserByEmail.mockClear();
+
         await expect(request('ghost@example.com')).resolves.toEqual({
           message: 'Password reset token sent',
         });
+
+        expect(authRepository.findUserByEmail).not.toHaveBeenCalled();
       });
 
       it('shares one counter across email casing and whitespace', async () => {
@@ -490,23 +589,69 @@ describe('PasswordService', () => {
     });
 
     it('lets the owner use a freshly issued code after an attacker burned the previous one', async () => {
-      stubActiveToken('token-1');
-      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      let stored: { id: string; hash: string } | null = {
+        id: 'token-1',
+        hash: 'h:old-code',
+      };
+      tokenService.hashToken.mockImplementation((t) => `h:${t}`);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findLatestTokenByUserId.mockImplementation(() =>
+        Promise.resolve(
+          stored
+            ? makeToken({ id: stored.id, type: TokenType.PASSWORD_RESET })
+            : null,
+        ),
+      );
+      authRepository.findTokenByHashedToken.mockImplementation((hash) =>
+        Promise.resolve(
+          stored && stored.hash === hash
+            ? { ...mockResetToken, id: stored.id }
+            : null,
+        ),
+      );
+      authRepository.deleteToken.mockImplementation((id) => {
+        if (stored?.id === id) stored = null;
+        return Promise.resolve();
+      });
+      authRepository.deleteUserTokensByType.mockImplementation(() => {
+        stored = null;
+        return Promise.resolve();
+      });
+      authRepository.createToken.mockImplementation((data) => {
+        stored = { id: 'token-2', hash: data.token };
+        return Promise.resolve(makeToken({ id: 'token-2' }));
+      });
+      (generateResetCode as jest.Mock).mockReturnValueOnce({
+        token: 'new-code',
+        expiresAt: new Date(Date.now() + 86400000),
+      });
       for (let i = 0; i < 10; i++) {
         await expect(validate(`g${i}`, 'test@example.com')).rejects.toThrow(
           NotFoundException,
         );
       }
+      expect(stored).toBeNull();
 
-      stubActiveToken('token-2');
-      authRepository.findTokenByHashedToken.mockResolvedValue({
-        ...mockResetToken,
-        id: 'token-2',
+      await service.requestPasswordReset({ email: 'test@example.com' });
+
+      expect(stored).toEqual({ id: 'token-2', hash: 'h:new-code' });
+      await expect(validate('new-code', 'test@example.com')).resolves.toEqual({
+        message: 'Valid reset token',
       });
+    });
+
+    it('deletes the active token when the pre-lookup counter is already past the cap', async () => {
+      stubActiveToken();
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      fakeRedis.store.set('password-reset:token-failures:token-1', 5);
+      fakeRedis.ttls.set('password-reset:token-failures:token-1', 3600);
 
       await expect(
         validate('raw-reset-token', 'test@example.com'),
-      ).resolves.toEqual({ message: 'Valid reset token' });
+      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+
+      expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+      expect(authRepository.findTokenByHashedToken).not.toHaveBeenCalled();
     });
 
     it('does not clear the counter when validation fails', async () => {

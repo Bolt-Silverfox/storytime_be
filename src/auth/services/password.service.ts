@@ -7,9 +7,10 @@ import {
   Inject,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { Prisma } from '@prisma/client';
 import { RedisService } from '@/redis/redis.service';
 import { TokenService } from './token.service';
-import { generateToken } from '@/shared/utils/generate-token';
+import { generateResetCode } from '@/shared/utils/generate-token';
 import {
   TokenType,
   RequestResetDto,
@@ -25,6 +26,7 @@ import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 const RESET_MAX_FAILED_ATTEMPTS = 5;
 const RESET_MAX_ISSUANCES = 5;
 const RESET_COUNTER_WINDOW_SECONDS = 60 * 60;
+const RESET_CODE_MAX_COLLISION_RETRIES = 5;
 
 @Injectable()
 export class PasswordService {
@@ -110,6 +112,28 @@ export class PasswordService {
     throw new NotFoundException('Invalid reset token');
   }
 
+  private async issueResetCode(userId: string): Promise<string> {
+    for (let attempt = 1; ; attempt++) {
+      const { token, expiresAt } = generateResetCode(24);
+      try {
+        await this.authRepository.createToken({
+          userId,
+          token: this.tokenService.hashToken(token),
+          expiresAt,
+          type: TokenType.PASSWORD_RESET,
+        });
+        return token;
+      } catch (error) {
+        const collided =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002';
+        if (!collided || attempt >= RESET_CODE_MAX_COLLISION_RETRIES) {
+          throw error;
+        }
+      }
+    }
+  }
+
   /**
    * Request a password reset - sends reset email to user
    */
@@ -164,14 +188,7 @@ export class PasswordService {
       TokenType.PASSWORD_RESET,
     );
 
-    // Generate new reset token (24 hour expiry)
-    const { token, expiresAt } = generateToken(24);
-    await this.authRepository.createToken({
-      userId: user.id,
-      token: this.tokenService.hashToken(token),
-      expiresAt,
-      type: TokenType.PASSWORD_RESET,
-    });
+    const token = await this.issueResetCode(user.id);
 
     // Emit event for password reset notification (handled by PasswordEventListener)
     this.eventEmitter.emit('password.reset_requested', {
