@@ -47,8 +47,14 @@ import { RedisService } from '../src/redis/redis.service';
       provide: RedisService,
       useValue: {
         client: {
-          incr: jest.fn().mockResolvedValue(1),
-          expire: jest.fn().mockResolvedValue(1),
+          multi: jest.fn(() => ({
+            set: jest.fn().mockReturnThis(),
+            incr: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue([
+              [null, 'OK'],
+              [null, 1],
+            ]),
+          })),
           del: jest.fn().mockResolvedValue(1),
         },
       },

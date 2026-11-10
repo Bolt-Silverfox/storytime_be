@@ -47,12 +47,18 @@ export class PasswordService {
   }
 
   private async recordFailedResetAttempt(email: string): Promise<number> {
-    const key = this.resetAttemptsKey(email);
-    const attempts = await this.redis.client.incr(key);
-    if (attempts === 1) {
-      await this.redis.client.expire(key, RESET_ATTEMPT_WINDOW_SECONDS);
-    }
-    return attempts;
+    const results = await this.redis.client
+      .multi()
+      .set(
+        this.resetAttemptsKey(email),
+        0,
+        'EX',
+        RESET_ATTEMPT_WINDOW_SECONDS,
+        'NX',
+      )
+      .incr(this.resetAttemptsKey(email))
+      .exec();
+    return Number(results?.[1]?.[1]);
   }
 
   private async lockOutIfExceeded(email: string, attempts: number) {
@@ -65,9 +71,38 @@ export class PasswordService {
       );
     }
     throw new HttpException(
-      'Too many failed reset attempts. Request a new reset code later.',
+      'Too many failed reset attempts. Try again later.',
       HttpStatus.TOO_MANY_REQUESTS,
     );
+  }
+
+  private async consumeResetAttempt(token: string, email: string) {
+    const attempts = await this.recordFailedResetAttempt(email);
+    await this.lockOutIfExceeded(email, attempts);
+
+    const resetToken = await this.authRepository.findTokenByHashedToken(
+      this.tokenService.hashToken(token),
+      TokenType.PASSWORD_RESET,
+    );
+
+    if (!resetToken) {
+      throw new NotFoundException('Invalid reset token');
+    }
+
+    if (resetToken.user.email !== email) {
+      const ownerAttempts = await this.recordFailedResetAttempt(
+        resetToken.user.email,
+      );
+      await this.lockOutIfExceeded(resetToken.user.email, ownerAttempts);
+      throw new NotFoundException('Invalid reset token');
+    }
+
+    if (resetToken.expiresAt < new Date()) {
+      await this.authRepository.deleteToken(resetToken.id);
+      throw new UnauthorizedException('Reset token has expired');
+    }
+
+    return resetToken;
   }
 
   /**
@@ -149,27 +184,7 @@ export class PasswordService {
     email: string,
     data: ValidateResetTokenDto, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
-    const attempts = await this.recordFailedResetAttempt(email);
-    await this.lockOutIfExceeded(email, attempts);
-
-    const hashedToken = this.tokenService.hashToken(token);
-    const resetToken = await this.authRepository.findTokenByHashedToken(
-      hashedToken,
-      TokenType.PASSWORD_RESET,
-    );
-
-    if (!resetToken) {
-      throw new NotFoundException('Invalid reset token');
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await this.authRepository.deleteToken(resetToken.id);
-      throw new UnauthorizedException('Reset token has expired');
-    }
-
-    if (resetToken.user.email !== email) {
-      throw new UnauthorizedException('Invalid reset token');
-    }
+    await this.consumeResetAttempt(token, email);
 
     await this.redis.client.del(this.resetAttemptsKey(email));
 
@@ -188,31 +203,7 @@ export class PasswordService {
     ip?: string,
     userAgent?: string,
   ): Promise<{ message: string }> {
-    const attempts = await this.recordFailedResetAttempt(email);
-    await this.lockOutIfExceeded(email, attempts);
-
-    const hashedToken = this.tokenService.hashToken(token);
-    const resetToken = await this.authRepository.findTokenByHashedToken(
-      hashedToken,
-      TokenType.PASSWORD_RESET,
-    );
-
-    if (!resetToken) {
-      throw new NotFoundException('Invalid reset token');
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await this.authRepository.deleteToken(resetToken.id);
-      throw new UnauthorizedException('Reset token has expired');
-    }
-
-    if (resetToken.user.email !== email) {
-      const ownerAttempts = await this.recordFailedResetAttempt(
-        resetToken.user.email,
-      );
-      await this.lockOutIfExceeded(resetToken.user.email, ownerAttempts);
-      throw new NotFoundException('Invalid reset token');
-    }
+    const resetToken = await this.consumeResetAttempt(token, email);
 
     await this.redis.client.del(this.resetAttemptsKey(email));
 
