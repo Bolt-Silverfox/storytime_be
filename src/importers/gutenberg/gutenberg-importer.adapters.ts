@@ -27,7 +27,7 @@ export class FsPayloadStore implements PayloadStore {
       throw new Error(`Unsafe payload key: ${key}`);
     }
     const p = path.resolve(this.root, key);
-    if (!p.startsWith(this.root + path.sep))
+    if (!isInsideRoot(this.root, p))
       throw new Error('Payload key escapes root');
     return p;
   }

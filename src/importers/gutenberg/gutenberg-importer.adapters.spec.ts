@@ -23,6 +23,14 @@ describe('FsPayloadStore', () => {
     expect(await store.read('gutenberg/1-abc.txt')).toBe('raw text');
   });
 
+  it('accepts keys under a filesystem-root cache dir and still rejects traversal', async () => {
+    const store = new FsPayloadStore('/');
+    await expect(store.read('gpay-missing-dir/b.txt')).rejects.toThrow(
+      /ENOENT/,
+    );
+    await expect(store.read('../etc/passwd.txt')).rejects.toThrow(/Unsafe/);
+  });
+
   describe('a symlinked payload directory', () => {
     let outside: string;
     let store: FsPayloadStore;
