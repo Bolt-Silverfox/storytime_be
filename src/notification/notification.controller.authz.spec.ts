@@ -146,6 +146,53 @@ describe('NotificationController (preferences) authorization', () => {
     });
   });
 
+  describe('lists hide a dual-owner preference from the other owner', () => {
+    const mixed = {
+      id: PREF_ID,
+      type: 'push',
+      category: 'NEW_LOGIN',
+      enabled: true,
+      userId: ALICE,
+      kidId: BOB_KID,
+    };
+    const own = { ...mixed, id: 'own-row', userId: ALICE, kidId: ALICE_KID };
+    const userOnly = { ...mixed, id: 'user-row', kidId: undefined };
+    const ids = (res: { body: { id: string }[] }) => res.body.map((r) => r.id);
+
+    it("omits the row from alice's user list and keeps her own rows", async () => {
+      notifications.getForUser.mockResolvedValue([mixed, own, userOnly]);
+      const res = await http()
+        .get(`/notification-preferences/users/${ALICE}`)
+        .set('Authorization', bearer('alice'))
+        .expect(200);
+      expect(ids(res)).toEqual(['own-row', 'user-row']);
+    });
+
+    it("omits the row from bob's kid list", async () => {
+      notifications.getForKid.mockResolvedValue([mixed]);
+      const res = await http()
+        .get(`/notification-preferences/kids/${BOB_KID}`)
+        .set('Authorization', bearer('bob'))
+        .expect(200);
+      expect(ids(res)).toEqual([]);
+    });
+
+    it('shows the row to an admin on both lists', async () => {
+      notifications.getForUser.mockResolvedValue([mixed]);
+      notifications.getForKid.mockResolvedValue([mixed]);
+      const byUser = await http()
+        .get(`/notification-preferences/users/${ALICE}`)
+        .set('Authorization', bearer('admin'))
+        .expect(200);
+      const byKid = await http()
+        .get(`/notification-preferences/kids/${BOB_KID}`)
+        .set('Authorization', bearer('admin'))
+        .expect(200);
+      expect(ids(byUser)).toEqual([PREF_ID]);
+      expect(ids(byKid)).toEqual([PREF_ID]);
+    });
+  });
+
   it('lets the owner and an admin delete a preference', async () => {
     await http()
       .delete(`/notification-preferences/${PREF_ID}`)
@@ -230,6 +277,31 @@ describe('NotificationController (preferences) authorization', () => {
         .patch('/notification-preferences')
         .set('Authorization', bearer('alice'))
         .send(body as object);
+
+    it('refuses a dual-owner preference whose kid belongs to another parent and updates nothing', async () => {
+      notifications.getPreferenceOwner.mockResolvedValue({
+        userId: ALICE,
+        kidId: BOB_KID,
+      });
+      await patch([{ id: PREF_ID, enabled: false }]).expect(403);
+      expect(notifications.bulkUpdate).not.toHaveBeenCalled();
+    });
+
+    it('checks every id in the batch, not only the first', async () => {
+      const OTHER_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+      notifications.getPreferenceOwner.mockImplementation((id: string) =>
+        Promise.resolve(
+          id === OTHER_ID
+            ? { userId: ALICE, kidId: BOB_KID }
+            : { userId: ALICE },
+        ),
+      );
+      await patch([
+        { id: PREF_ID, enabled: false },
+        { id: OTHER_ID, enabled: false },
+      ]).expect(403);
+      expect(notifications.bulkUpdate).not.toHaveBeenCalled();
+    });
 
     it('accepts a valid array and passes the session user id', async () => {
       notifications.bulkUpdate.mockResolvedValue([]);

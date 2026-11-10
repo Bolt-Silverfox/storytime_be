@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Controller,
   Post,
   Patch,
@@ -94,6 +95,9 @@ export class NotificationController {
     dtos: BulkUpdateNotificationPreferenceDto[],
   ) {
     this.assertBatchSize(dtos);
+    for (const dto of dtos) {
+      await this.assertPreferenceAccess(req, dto.id);
+    }
     return this.notificationService.bulkUpdate(req.authUserData.userId, dtos);
   }
 
@@ -155,7 +159,21 @@ export class NotificationController {
     @Req() req: AuthenticatedRequest,
   ) {
     this.accessControl.assertSelfOrAdmin(req.authUserData, userId);
-    return this.notificationService.getForUser(userId);
+    const prefs = await this.notificationService.getForUser(userId);
+    if (this.accessControl.isAdmin(req.authUserData)) return prefs;
+    const kidIds = [
+      ...new Set(prefs.flatMap((p) => (p.kidId ? [p.kidId] : []))),
+    ];
+    const accessible = new Set<string>();
+    for (const kidId of kidIds) {
+      try {
+        await this.accessControl.assertKidAccess(req.authUserData, kidId);
+        accessible.add(kidId);
+      } catch (e) {
+        if (!(e instanceof ForbiddenException)) throw e;
+      }
+    }
+    return prefs.filter((p) => !p.kidId || accessible.has(p.kidId));
   }
 
   @Get('kids/:kidId')
@@ -169,7 +187,11 @@ export class NotificationController {
     @Req() req: AuthenticatedRequest,
   ) {
     await this.accessControl.assertKidAccess(req.authUserData, kidId);
-    return this.notificationService.getForKid(kidId);
+    const prefs = await this.notificationService.getForKid(kidId);
+    if (this.accessControl.isAdmin(req.authUserData)) return prefs;
+    return prefs.filter(
+      (p) => !p.userId || p.userId === req.authUserData.userId,
+    );
   }
 
   @Get(':id')
