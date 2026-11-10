@@ -12,6 +12,7 @@ import {
   Query,
   Req,
   UnauthorizedException,
+  UnsupportedMediaTypeException,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -42,7 +43,13 @@ import { StoryQuotaService } from '../story/story-quota.service';
 import { StoryService } from '../story/story.service';
 import { UploadService } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
-import { DEFAULT_VOICE } from './voice.constants';
+import { extname } from 'path';
+import {
+  ALLOWED_VOICE_UPLOAD_EXTENSIONS,
+  ALLOWED_VOICE_UPLOAD_MIME_TYPES,
+  DEFAULT_VOICE,
+  MAX_VOICE_UPLOAD_BYTES,
+} from './voice.constants';
 import { GuestStoryAudioService } from './guest-story-audio.service';
 import {
   BatchStoryAudioDto,
@@ -118,17 +125,35 @@ export class VoiceController {
       required: ['file', 'name'],
     },
   })
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_VOICE_UPLOAD_BYTES, files: 1 },
+      fileFilter: (_req, file, cb) => {
+        const ext = extname(file.originalname ?? '').toLowerCase();
+        const allowed =
+          ALLOWED_VOICE_UPLOAD_MIME_TYPES.includes(file.mimetype) &&
+          ALLOWED_VOICE_UPLOAD_EXTENSIONS.includes(ext);
+        cb(
+          allowed
+            ? null
+            : new UnsupportedMediaTypeException(
+                'Only audio files (mp3, wav, m4a, ogg) are allowed',
+              ),
+          allowed,
+        );
+      },
+    }),
+  )
   @ApiOperation({ summary: 'Upload a custom voice (audio file)' })
   async uploadVoiceFile(
     @UploadedFile(
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
           fileType:
-            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg|audio\/webm)$/,
+            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg)$/,
         })
         .addMaxSizeValidator({
-          maxSize: 25 * 1024 * 1024, // 25MB
+          maxSize: MAX_VOICE_UPLOAD_BYTES,
         })
         .build({
           errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
@@ -140,24 +165,16 @@ export class VoiceController {
   ) {
     const { userId } = req.authUserData;
 
-    // Upload file to Cloudinary
-    const uploadResult = await this.uploadService.uploadFile(file);
-
-    // Save voice record
-    const voice = await this.voiceService.uploadVoice(
+    const { voice, cloudinary } = await this.voiceService.uploadVoiceFile(
       userId,
-      uploadResult.secure_url,
+      file,
       dto,
-      file.buffer,
     );
 
     return {
       message: 'Voice uploaded successfully',
       voice,
-      cloudinary: {
-        url: uploadResult.secure_url,
-        publicId: uploadResult.public_id,
-      },
+      cloudinary,
     };
   }
 

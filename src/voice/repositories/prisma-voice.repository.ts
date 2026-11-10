@@ -2,6 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { IVoiceRepository } from './voice.repository.interface';
 import type { Voice, Prisma } from '@prisma/client';
+import { PENDING_VOICE_GRACE_MS } from '../voice.constants';
+
+const HIDE_PENDING_UPLOADS: Prisma.VoiceWhereInput = {
+  NOT: { type: 'uploaded', url: null },
+};
 
 @Injectable()
 export class PrismaVoiceRepository implements IVoiceRepository {
@@ -20,9 +25,49 @@ export class PrismaVoiceRepository implements IVoiceRepository {
     });
   }
 
+  async createUploadedVoiceWithinCap(
+    userId: string,
+    data: Prisma.VoiceUncheckedCreateInput,
+    cap: number,
+  ): Promise<Voice | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`voice-upload:${userId}`}))`;
+      const cutoff = new Date(Date.now() - PENDING_VOICE_GRACE_MS);
+      await tx.voice.deleteMany({
+        where: {
+          userId,
+          type: 'uploaded',
+          url: null,
+          createdAt: { lt: cutoff },
+        },
+      });
+      const existing = await tx.voice.count({
+        where: {
+          userId,
+          type: 'uploaded',
+          isDeleted: false,
+          OR: [{ url: { not: null } }, { createdAt: { gte: cutoff } }],
+        },
+      });
+      if (existing >= cap) return null;
+      return tx.voice.create({ data });
+    });
+  }
+
+  async updateVoice(
+    id: string,
+    data: Prisma.VoiceUncheckedUpdateInput,
+  ): Promise<Voice> {
+    return this.prisma.voice.update({ where: { id }, data });
+  }
+
+  async hardDeleteVoice(id: string): Promise<void> {
+    await this.prisma.voice.delete({ where: { id } });
+  }
+
   async findManyByUserNotDeleted(userId: string): Promise<Voice[]> {
     return this.prisma.voice.findMany({
-      where: { userId, isDeleted: false },
+      where: { userId, isDeleted: false, ...HIDE_PENDING_UPLOADS },
     });
   }
 
@@ -53,7 +98,7 @@ export class PrismaVoiceRepository implements IVoiceRepository {
 
   async findFirstByIdNotDeleted(id: string): Promise<Voice | null> {
     return this.prisma.voice.findFirst({
-      where: { id, isDeleted: false },
+      where: { id, isDeleted: false, ...HIDE_PENDING_UPLOADS },
     });
   }
 
@@ -70,8 +115,8 @@ export class PrismaVoiceRepository implements IVoiceRepository {
   }
 
   async findUniqueByIdNotDeleted(id: string): Promise<Voice | null> {
-    return this.prisma.voice.findUnique({
-      where: { id, isDeleted: false },
+    return this.prisma.voice.findFirst({
+      where: { id, isDeleted: false, ...HIDE_PENDING_UPLOADS },
     });
   }
 
@@ -97,7 +142,7 @@ export class PrismaVoiceRepository implements IVoiceRepository {
     id: string,
   ): Promise<{ elevenLabsVoiceId: string | null } | null> {
     return this.prisma.voice.findFirst({
-      where: { id, isDeleted: false },
+      where: { id, isDeleted: false, ...HIDE_PENDING_UPLOADS },
       select: { elevenLabsVoiceId: true },
     });
   }

@@ -261,6 +261,13 @@ export class ElevenLabsTTSProvider
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  async deleteVoice(voiceId: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('ElevenLabs client is not initialized');
+    }
+    await this.client.voices.delete(voiceId);
+  }
+
   async addVoice(name: string, fileBuffer: Buffer): Promise<string> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');

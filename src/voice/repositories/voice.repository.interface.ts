@@ -10,6 +10,22 @@ export interface IVoiceRepository {
     data: Prisma.VoiceUncheckedCreateInput,
   ): Promise<{ id: string }>;
 
+  // Atomically create an uploaded voice only if the user holds fewer than
+  // `cap` completed or recently reserved uploaded voices; returns null when at the cap
+  createUploadedVoiceWithinCap(
+    userId: string,
+    data: Prisma.VoiceUncheckedCreateInput,
+    cap: number,
+  ): Promise<Voice | null>;
+
+  updateVoice(
+    id: string,
+    data: Prisma.VoiceUncheckedUpdateInput,
+  ): Promise<Voice>;
+
+  // Permanently remove a voice row (used to release a failed reservation)
+  hardDeleteVoice(id: string): Promise<void>;
+
   // List a user's non-deleted voices
   findManyByUserNotDeleted(userId: string): Promise<Voice[]>;
 

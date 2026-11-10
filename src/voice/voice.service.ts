@@ -26,14 +26,12 @@ export class VoiceService {
     private readonly catalog: VoiceCatalogService,
   ) {}
 
-  // --- Upload a new voice file ---
-  uploadVoice(
+  uploadVoiceFile(
     userId: string,
-    fileUrl: string,
+    file: Express.Multer.File,
     dto: UploadVoiceDto,
-    fileBuffer?: Buffer,
-  ): Promise<VoiceResponseDto> {
-    return this.library.uploadVoice(userId, fileUrl, dto, fileBuffer);
+  ) {
+    return this.library.uploadVoiceFile(userId, file, dto);
   }
 
   // --- Create a voice using ElevenLabs ID ---
