@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Inject,
   Injectable,
   InternalServerErrorException,
@@ -13,7 +14,11 @@ import {
   VoiceResponseDto,
   VoiceSourceType,
 } from '../dto/voice.dto';
-import { VOICE_CONFIG } from '../voice.constants';
+import { UploadApiResponse } from 'cloudinary';
+import { SubscriptionService } from '@/subscription/subscription.service';
+import { UploadService } from '@/upload/upload.service';
+import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
+import { MAX_CUSTOM_VOICES_PER_USER, VOICE_CONFIG } from '../voice.constants';
 import { ElevenLabsTTSProvider } from '../providers/eleven-labs-tts.provider';
 import { VoiceResponseMapper } from './voice-response.mapper';
 import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
@@ -38,41 +43,80 @@ export class VoiceLibraryService {
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     private readonly mapper: VoiceResponseMapper,
     private readonly cbService: CircuitBreakerService,
+    private readonly subscriptionService: SubscriptionService,
+    private readonly uploadService: UploadService,
   ) {}
 
-  // --- Upload a new voice file ---
-  async uploadVoice(
+  async uploadVoiceFile(
     userId: string,
-    fileUrl: string,
+    file: Express.Multer.File,
     dto: UploadVoiceDto,
-    fileBuffer?: Buffer,
-  ): Promise<VoiceResponseDto> {
-    let elevenLabsId = '';
+  ): Promise<{
+    voice: VoiceResponseDto;
+    cloudinary: { url: string; publicId: string };
+  }> {
+    const isPremium = await this.subscriptionService.isPremiumUser(userId);
+    if (!isPremium && FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS <= 0) {
+      throw new ForbiddenException(
+        'Custom voices are available on premium plans only.',
+      );
+    }
+    const cap = isPremium
+      ? MAX_CUSTOM_VOICES_PER_USER
+      : FREE_TIER_LIMITS.VOICES.CUSTOM_SLOTS;
 
-    if (fileBuffer) {
-      try {
-        elevenLabsId = await this.elevenLabsProvider.addVoice(
-          dto.name,
-          fileBuffer,
-        );
-        this.logger.log(`Cloned voice ${dto.name} with ID ${elevenLabsId}`);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Failed to clone voice with ElevenLabs: ${msg}`);
-        throw new InternalServerErrorException(
-          'Voice cloning failed. Please try again later.',
-        );
-      }
+    const reserved = await this.voiceRepository.createUploadedVoiceWithinCap(
+      userId,
+      { userId, name: dto.name, type: VoiceSourceType.UPLOADED },
+      cap,
+    );
+    if (!reserved) {
+      throw new ForbiddenException(
+        `You have reached the limit of ${cap} custom voices.`,
+      );
     }
 
-    const voice = await this.voiceRepository.createVoice({
-      userId,
-      name: dto.name,
-      type: VoiceSourceType.UPLOADED,
-      url: fileUrl,
-      elevenLabsVoiceId: elevenLabsId || null,
-    });
-    return this.mapper.toVoiceResponse(voice);
+    let upload: UploadApiResponse | undefined;
+    try {
+      upload = await this.uploadService.uploadFile(file);
+      const elevenLabsId = await this.cloneVoice(dto.name, file.buffer);
+      const voice = await this.voiceRepository.updateVoice(reserved.id, {
+        url: upload.secure_url,
+        elevenLabsVoiceId: elevenLabsId,
+      });
+      return {
+        voice: this.mapper.toVoiceResponse(voice),
+        cloudinary: { url: upload.secure_url, publicId: upload.public_id },
+      };
+    } catch (error) {
+      if (upload) {
+        await this.uploadService.deleteAudio(upload.public_id).catch((e) => {
+          this.logger.error(
+            `Failed to delete orphaned Cloudinary file ${upload?.public_id}: ${e instanceof Error ? e.message : String(e)}`,
+          );
+        });
+      }
+      await this.voiceRepository.hardDeleteVoice(reserved.id).catch((e) => {
+        this.logger.error(
+          `Failed to release reserved voice ${reserved.id}: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      });
+      throw error;
+    }
+  }
+
+  private async cloneVoice(name: string, buffer: Buffer): Promise<string> {
+    try {
+      const id = await this.elevenLabsProvider.addVoice(name, buffer);
+      this.logger.log(`Cloned voice ${name} with ID ${id}`);
+      return id;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to clone voice with ElevenLabs: ${msg}`);
+      throw new InternalServerErrorException(
+        'Voice cloning failed. Please try again later.',
+      );
+    }
   }
 
   // --- Create a voice using ElevenLabs ID ---

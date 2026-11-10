@@ -14,6 +14,8 @@ import {
   VOICE_USER_REPOSITORY,
   IVoiceUserRepository,
 } from './repositories';
+import { SubscriptionService } from '@/subscription/subscription.service';
+import { UploadService } from '@/upload/upload.service';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 
 const mockCacheManager = {
@@ -34,6 +36,9 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   findSystemVoiceIdByElevenLabsId: jest.fn(),
   findVoiceIdElevenLabsPairs: jest.fn(),
   findElevenLabsIdById: jest.fn(),
+  createUploadedVoiceWithinCap: jest.fn(),
+  updateVoice: jest.fn(),
+  hardDeleteVoice: jest.fn(),
 };
 
 const mockVoiceUserRepository: Record<keyof IVoiceUserRepository, jest.Mock> = {
@@ -67,6 +72,11 @@ describe('VoiceService', () => {
         VoiceCatalogService,
         VoicePreferenceService,
         VoiceLibraryService,
+        {
+          provide: SubscriptionService,
+          useValue: { isPremiumUser: jest.fn() },
+        },
+        { provide: UploadService, useValue: {} },
         { provide: VOICE_REPOSITORY, useValue: mockVoiceRepository },
         { provide: VOICE_USER_REPOSITORY, useValue: mockVoiceUserRepository },
         { provide: ConfigService, useValue: mockConfigService },

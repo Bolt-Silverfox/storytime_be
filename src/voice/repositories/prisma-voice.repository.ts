@@ -20,6 +20,32 @@ export class PrismaVoiceRepository implements IVoiceRepository {
     });
   }
 
+  async createUploadedVoiceWithinCap(
+    userId: string,
+    data: Prisma.VoiceUncheckedCreateInput,
+    cap: number,
+  ): Promise<Voice | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`voice-upload:${userId}`}))`;
+      const existing = await tx.voice.count({
+        where: { userId, type: 'uploaded', isDeleted: false },
+      });
+      if (existing >= cap) return null;
+      return tx.voice.create({ data });
+    });
+  }
+
+  async updateVoice(
+    id: string,
+    data: Prisma.VoiceUncheckedUpdateInput,
+  ): Promise<Voice> {
+    return this.prisma.voice.update({ where: { id }, data });
+  }
+
+  async hardDeleteVoice(id: string): Promise<void> {
+    await this.prisma.voice.delete({ where: { id } });
+  }
+
   async findManyByUserNotDeleted(userId: string): Promise<Voice[]> {
     return this.prisma.voice.findMany({
       where: { userId, isDeleted: false },

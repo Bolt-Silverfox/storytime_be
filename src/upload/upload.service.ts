@@ -162,6 +162,24 @@ export class UploadService {
     }
   }
 
+  async deleteAudio(publicId: string): Promise<void> {
+    try {
+      const result = await cloudinary.uploader.destroy(publicId, {
+        resource_type: 'video',
+      });
+      if (result.result !== 'ok') {
+        throw new InternalServerErrorException(
+          `Delete failed: ${result.result}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Cloudinary audio delete error:', error);
+      throw error instanceof InternalServerErrorException
+        ? error
+        : new InternalServerErrorException('Audio delete failed');
+    }
+  }
+
   async uploadAudioBuffer(buffer: Buffer, filename: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
