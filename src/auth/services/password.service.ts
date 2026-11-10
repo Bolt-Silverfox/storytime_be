@@ -47,17 +47,16 @@ export class PasswordService {
   }
 
   private async recordFailedResetAttempt(email: string): Promise<number> {
+    const key = this.resetAttemptsKey(email);
     const results = await this.redis.client
       .multi()
-      .set(
-        this.resetAttemptsKey(email),
-        0,
-        'EX',
-        RESET_ATTEMPT_WINDOW_SECONDS,
-        'NX',
-      )
-      .incr(this.resetAttemptsKey(email))
+      .set(key, 0, 'EX', RESET_ATTEMPT_WINDOW_SECONDS, 'NX')
+      .incr(key)
+      .ttl(key)
       .exec();
+    if (results?.[2]?.[1] === -1) {
+      await this.redis.client.expire(key, RESET_ATTEMPT_WINDOW_SECONDS);
+    }
     return Number(results?.[1]?.[1]);
   }
 

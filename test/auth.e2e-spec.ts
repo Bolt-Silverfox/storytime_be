@@ -50,11 +50,14 @@ import { RedisService } from '../src/redis/redis.service';
           multi: jest.fn(() => ({
             set: jest.fn().mockReturnThis(),
             incr: jest.fn().mockReturnThis(),
+            ttl: jest.fn().mockReturnThis(),
             exec: jest.fn().mockResolvedValue([
               [null, 'OK'],
               [null, 1],
+              [null, 3600],
             ]),
           })),
+          expire: jest.fn().mockResolvedValue(1),
           del: jest.fn().mockResolvedValue(1),
         },
       },

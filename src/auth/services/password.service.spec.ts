@@ -97,14 +97,19 @@ describe('PasswordService', () => {
     const mockRedis = {
       client: {
         multi: jest.fn(() => {
-          const ops: Array<() => number | string> = [];
+          const ops: Array<() => number | string | null> = [];
           const chain = {
-            set: (key: string, _v: number, _ex: 'EX', ttl: number) => {
+            set: (
+              key: string,
+              _v: number,
+              _ex: 'EX',
+              ttl: number,
+              nx?: 'NX',
+            ) => {
               ops.push(() => {
-                if (!redisStore.has(key)) {
-                  redisStore.set(key, 0);
-                  redisTtls.set(key, ttl);
-                }
+                if (nx === 'NX' && redisStore.has(key)) return null;
+                redisStore.set(key, 0);
+                redisTtls.set(key, ttl);
                 return 'OK';
               });
               return chain;
@@ -117,10 +122,18 @@ describe('PasswordService', () => {
               });
               return chain;
             },
+            ttl: (key: string) => {
+              ops.push(() => redisTtls.get(key) ?? -1);
+              return chain;
+            },
             exec: () =>
               Promise.resolve(ops.map((op) => [null, op()] as [null, unknown])),
           };
           return chain;
+        }),
+        expire: jest.fn((key: string, ttl: number) => {
+          redisTtls.set(key, ttl);
+          return Promise.resolve(1);
         }),
         del: jest.fn((key: string) => {
           redisStore.delete(key);
@@ -799,6 +812,45 @@ describe('PasswordService', () => {
           status: 429,
         });
         expect(authRepository.updateUser).not.toHaveBeenCalled();
+      });
+
+      it('locks the token owner out from charges made through other emails alone', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        for (let i = 0; i < 5; i++) {
+          await expect(
+            service.resetPassword('raw-reset-token', `r${i}@example.com`, 'x', {
+              token: 'raw-reset-token',
+              email: `r${i}@example.com`,
+              newPassword: 'x',
+            }),
+          ).rejects.toThrow(NotFoundException);
+        }
+        expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
+
+        await expect(
+          service.resetPassword('raw-reset-token', 'r5@example.com', 'x', {
+            token: 'raw-reset-token',
+            email: 'r5@example.com',
+            newPassword: 'x',
+          }),
+        ).rejects.toMatchObject({ status: 429 });
+        expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
+          'user-1',
+          TokenType.PASSWORD_RESET,
+        );
+      });
+
+      it('gives a legacy counter with no TTL an expiry on the next attempt', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(null);
+        await expect(attempt('a')).rejects.toThrow(NotFoundException);
+        redisTtls.clear();
+        const [key] = [...redisStore.keys()];
+        redisStore.set(key, 6);
+
+        await expect(attempt('b')).rejects.toMatchObject({ status: 429 });
+
+        expect(redisTtls.get(key)).toBe(3600);
       });
 
       it('lets concurrent guesses through at most 5 times', async () => {
