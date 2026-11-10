@@ -21,6 +21,8 @@ import {
 import { TokenType } from '../dto/auth.dto';
 import { AppEvents } from '@/shared/events';
 import { Role, OnboardingStatus } from '@prisma/client';
+import { HttpException } from '@nestjs/common';
+import { RedisService } from '@/redis/redis.service';
 
 jest.mock('bcryptjs', () => ({
   compare: jest.fn(),
@@ -41,6 +43,8 @@ describe('PasswordService', () => {
   let authRepository: jest.Mocked<IAuthRepository>;
   let tokenService: jest.Mocked<TokenService>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
+  let redisStore: Map<string, number>;
+  let redisTtls: Map<string, number>;
 
   const mockUser = makeUser({
     passwordHash: '$2a$10$hashedpasswordvalue',
@@ -88,9 +92,61 @@ describe('PasswordService', () => {
       emit: jest.fn(),
     };
 
+    redisStore = new Map<string, number>();
+    redisTtls = new Map<string, number>();
+    const mockRedis = {
+      client: {
+        multi: jest.fn(() => {
+          const ops: Array<() => number | string | null> = [];
+          const chain = {
+            set: (
+              key: string,
+              _v: number,
+              _ex: 'EX',
+              ttl: number,
+              nx?: 'NX',
+            ) => {
+              ops.push(() => {
+                if (nx === 'NX' && redisStore.has(key)) return null;
+                redisStore.set(key, 0);
+                redisTtls.set(key, ttl);
+                return 'OK';
+              });
+              return chain;
+            },
+            incr: (key: string) => {
+              ops.push(() => {
+                const next = (redisStore.get(key) ?? 0) + 1;
+                redisStore.set(key, next);
+                return next;
+              });
+              return chain;
+            },
+            ttl: (key: string) => {
+              ops.push(() => redisTtls.get(key) ?? -1);
+              return chain;
+            },
+            exec: () =>
+              Promise.resolve(ops.map((op) => [null, op()] as [null, unknown])),
+          };
+          return chain;
+        }),
+        expire: jest.fn((key: string, ttl: number) => {
+          redisTtls.set(key, ttl);
+          return Promise.resolve(1);
+        }),
+        del: jest.fn((key: string) => {
+          redisStore.delete(key);
+          redisTtls.delete(key);
+          return Promise.resolve(1);
+        }),
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PasswordService,
+        { provide: RedisService, useValue: mockRedis },
         { provide: AUTH_REPOSITORY, useValue: mockAuthRepository },
         { provide: TokenService, useValue: mockTokenService },
         { provide: EventEmitter2, useValue: mockEventEmitter },
@@ -320,7 +376,7 @@ describe('PasswordService', () => {
       expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
     });
 
-    it('should throw UnauthorizedException when email does not match token user', async () => {
+    it('should throw NotFoundException when email does not match token user', async () => {
       // Arrange
       authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
 
@@ -330,7 +386,142 @@ describe('PasswordService', () => {
           token: 'raw-reset-token',
           email: 'wrong@example.com',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+      ).rejects.toThrow(NotFoundException);
+    });
+    it('rejects a live token with a wrong email exactly like an unknown token', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+
+      await expect(
+        service.validateResetToken('raw-reset-token', 'throwaway@example.com', {
+          token: 'raw-reset-token',
+          email: 'throwaway@example.com',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('charges rotating-email guesses to the token owner and locks them out at the cap', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      for (let i = 0; i < 5; i++) {
+        await expect(
+          service.validateResetToken('raw-reset-token', `t${i}@example.com`, {
+            token: 'raw-reset-token',
+            email: `t${i}@example.com`,
+          }),
+        ).rejects.toThrow(NotFoundException);
+      }
+
+      await expect(
+        service.validateResetToken('raw-reset-token', 'test@example.com', {
+          token: 'raw-reset-token',
+          email: 'test@example.com',
+        }),
+      ).rejects.toMatchObject({ status: 429 });
+    });
+
+    it('does not clear the counter when validation fails', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      await expect(
+        service.validateResetToken('x', 'test@example.com', {
+          token: 'x',
+          email: 'test@example.com',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(redisStore.size).toBe(1);
+    });
+
+    it('clears the counter after a successful validation', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      await expect(
+        service.validateResetToken('x', 'test@example.com', {
+          token: 'x',
+          email: 'test@example.com',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+
+      await service.validateResetToken('raw-reset-token', 'test@example.com', {
+        token: 'raw-reset-token',
+        email: 'test@example.com',
+      });
+
+      expect(redisStore.size).toBe(0);
+    });
+
+    it('treats an expired token with a wrong email as unknown and keeps the token', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockResetToken,
+        expiresAt: new Date('2020-01-01'),
+      });
+
+      await expect(
+        service.validateResetToken('raw-reset-token', 'other@example.com', {
+          token: 'raw-reset-token',
+          email: 'other@example.com',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(authRepository.deleteToken).not.toHaveBeenCalled();
+    });
+
+    it('shares one counter across email casing and whitespace', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      for (const e of ['a@example.com', 'A@Example.com', ' a@example.com ']) {
+        await expect(
+          service.validateResetToken('x', e, { token: 'x', email: e }),
+        ).rejects.toThrow(NotFoundException);
+      }
+      expect([...redisStore.values()]).toEqual([3]);
+    });
+
+    it('sets a TTL on the counter in the same atomic operation as the first failure', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      await expect(
+        service.validateResetToken('x', 'test@example.com', {
+          token: 'x',
+          email: 'test@example.com',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect([...redisTtls.values()]).toEqual([3600]);
+    });
+
+    it('does not tell the caller a fresh code unlocks them', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      for (let i = 0; i < 5; i++) {
+        await expect(
+          service.validateResetToken('x', 'test@example.com', {
+            token: 'x',
+            email: 'test@example.com',
+          }),
+        ).rejects.toThrow(NotFoundException);
+      }
+      await expect(
+        service.validateResetToken('x', 'test@example.com', {
+          token: 'x',
+          email: 'test@example.com',
+        }),
+      ).rejects.toThrow(/try again later/i);
+    });
+
+    it('locks out after 5 failed guesses, even for the correct token', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      for (let i = 0; i < 5; i++) {
+        await expect(
+          service.validateResetToken(`guess-${i}`, 'test@example.com', {
+            token: `guess-${i}`,
+            email: 'test@example.com',
+          }),
+        ).rejects.toThrow(NotFoundException);
+      }
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+
+      await expect(
+        service.validateResetToken('raw-reset-token', 'test@example.com', {
+          token: 'raw-reset-token',
+          email: 'test@example.com',
+        }),
+      ).rejects.toMatchObject({ status: 429 });
     });
   });
 
@@ -524,6 +715,175 @@ describe('PasswordService', () => {
       expect(authRepository.deleteAllUserSessions).toHaveBeenCalledWith(
         'user-1',
       );
+    });
+
+    it('treats an expired token with a wrong email as unknown and keeps the token', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockResetToken,
+        expiresAt: new Date('2020-01-01'),
+      });
+
+      await expect(
+        service.resetPassword(
+          'raw-reset-token',
+          'other@example.com',
+          'N1#aaaaa',
+          {
+            token: 'raw-reset-token',
+            email: 'other@example.com',
+            newPassword: 'N1#aaaaa',
+          },
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(authRepository.deleteToken).not.toHaveBeenCalled();
+    });
+
+    describe('email binding', () => {
+      it('rejects a valid token presented with a different email and leaves the account untouched', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+
+        await expect(
+          service.resetPassword(
+            'raw-reset-token',
+            'attacker@example.com',
+            'NewPass1#',
+            {
+              token: 'raw-reset-token',
+              email: 'attacker@example.com',
+              newPassword: 'NewPass1#',
+            },
+          ),
+        ).rejects.toThrow(NotFoundException);
+
+        expect(authRepository.updateUser).not.toHaveBeenCalled();
+        expect(authRepository.deleteAllUserSessions).not.toHaveBeenCalled();
+        expect(authRepository.deleteToken).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('attempt cap', () => {
+      const attempt = (token: string) =>
+        service.resetPassword(token, 'test@example.com', 'NewPass1#', {
+          token,
+          email: 'test@example.com',
+          newPassword: 'NewPass1#',
+        });
+
+      it('locks out and invalidates the user token after 5 failed guesses, even for the correct token', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(null);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        for (let i = 0; i < 5; i++) {
+          await expect(attempt(`guess-${i}`)).rejects.toThrow(
+            NotFoundException,
+          );
+        }
+
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        const sixth = attempt('raw-reset-token');
+
+        await expect(sixth).rejects.toMatchObject({ status: 429 });
+        await expect(sixth).rejects.toBeInstanceOf(HttpException);
+        expect(authRepository.updateUser).not.toHaveBeenCalled();
+        expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
+          'user-1',
+          TokenType.PASSWORD_RESET,
+        );
+      });
+
+      it('charges a mismatched-email guess against the token owner, so rotating emails cannot evade the cap', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        for (let i = 0; i < 5; i++) {
+          await expect(
+            service.resetPassword(
+              'raw-reset-token',
+              `rotating-${i}@example.com`,
+              'NewPass1#',
+              {
+                token: 'raw-reset-token',
+                email: `rotating-${i}@example.com`,
+                newPassword: 'NewPass1#',
+              },
+            ),
+          ).rejects.toThrow(NotFoundException);
+        }
+
+        await expect(attempt('raw-reset-token')).rejects.toMatchObject({
+          status: 429,
+        });
+        expect(authRepository.updateUser).not.toHaveBeenCalled();
+      });
+
+      it('locks the token owner out from charges made through other emails alone', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        for (let i = 0; i < 5; i++) {
+          await expect(
+            service.resetPassword('raw-reset-token', `r${i}@example.com`, 'x', {
+              token: 'raw-reset-token',
+              email: `r${i}@example.com`,
+              newPassword: 'x',
+            }),
+          ).rejects.toThrow(NotFoundException);
+        }
+        expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
+
+        await expect(
+          service.resetPassword('raw-reset-token', 'r5@example.com', 'x', {
+            token: 'raw-reset-token',
+            email: 'r5@example.com',
+            newPassword: 'x',
+          }),
+        ).rejects.toMatchObject({ status: 429 });
+        expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
+          'user-1',
+          TokenType.PASSWORD_RESET,
+        );
+      });
+
+      it('gives a legacy counter with no TTL an expiry on the next attempt', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(null);
+        await expect(attempt('a')).rejects.toThrow(NotFoundException);
+        redisTtls.clear();
+        const [key] = [...redisStore.keys()];
+        redisStore.set(key, 6);
+
+        await expect(attempt('b')).rejects.toMatchObject({ status: 429 });
+
+        expect(redisTtls.get(key)).toBe(3600);
+      });
+
+      it('lets concurrent guesses through at most 5 times', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(null);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+
+        const results = await Promise.allSettled(
+          Array.from({ length: 20 }, (_, i) => attempt(`guess-${i}`)),
+        );
+
+        const lookedUp = results.filter(
+          (r) =>
+            r.status === 'rejected' && r.reason instanceof NotFoundException,
+        );
+        expect(lookedUp).toHaveLength(5);
+        expect(authRepository.findTokenByHashedToken).toHaveBeenCalledTimes(5);
+      });
+
+      it('clears the counter after a successful reset', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(null);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        for (let i = 0; i < 4; i++) {
+          await expect(attempt(`guess-${i}`)).rejects.toThrow(
+            NotFoundException,
+          );
+        }
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        authRepository.updateUser.mockResolvedValue(makeUser());
+
+        await attempt('raw-reset-token');
+
+        expect(redisStore.size).toBe(0);
+      });
     });
   });
 
