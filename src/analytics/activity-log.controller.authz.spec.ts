@@ -162,4 +162,33 @@ describe('ActivityLogController authorization', () => {
       expect.objectContaining({ userId: ALICE }),
     );
   });
+  describe('user log list matches single-log ownership', () => {
+    const own = { id: 'l1', userId: ALICE };
+    const ownKid = { id: 'l2', userId: ALICE, kidId: ALICE_KID };
+    const foreignKid = { id: 'l3', userId: ALICE, kidId: BOB_KID };
+
+    beforeEach(() => {
+      analytics.getForUser.mockResolvedValue([own, ownKid, foreignKid]);
+    });
+
+    it("drops logs whose kid belongs to another family for the user's own list", async () => {
+      const res = await http()
+        .get(`/activity-logs/user/${ALICE}`)
+        .set('Authorization', bearer('alice'))
+        .expect(200);
+      expect(res.body.map((l: { id: string }) => l.id)).toEqual(['l1', 'l2']);
+    });
+
+    it('leaves the list untouched for admins', async () => {
+      const res = await http()
+        .get(`/activity-logs/user/${ALICE}`)
+        .set('Authorization', bearer('admin'))
+        .expect(200);
+      expect(res.body.map((l: { id: string }) => l.id)).toEqual([
+        'l1',
+        'l2',
+        'l3',
+      ]);
+    });
+  });
 });

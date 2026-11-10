@@ -1,6 +1,8 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
+  NotFoundException,
   Post,
   Body,
   Param,
@@ -116,6 +118,18 @@ export class RewardController {
     @Req() req: AuthenticatedRequest,
   ) {
     await this.accessControl.assertKidAccess(req.authUserData, dto.kidId);
+    const reward = await this.rewardService
+      .findOne(dto.rewardId)
+      .catch((err: unknown) => {
+        if (err instanceof NotFoundException) {
+          throw new ForbiddenException('You can only redeem your own rewards');
+        }
+        throw err;
+      });
+    if (reward.kidId && reward.kidId !== dto.kidId) {
+      throw new ForbiddenException('You can only redeem your own rewards');
+    }
+    await this.accessControl.assertOwner(req.authUserData, reward);
     return this.rewardService.redeemReward(dto);
   }
 

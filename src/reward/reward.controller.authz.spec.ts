@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   INestApplication,
+  NotFoundException,
 } from '@nestjs/common';
 import request from 'supertest';
 import { RewardController } from './reward.controller';
@@ -185,5 +186,58 @@ describe('RewardController authorization', () => {
     expect(rewards.create).not.toHaveBeenCalled();
     expect(rewards.redeemReward).not.toHaveBeenCalled();
     expect(rewards.updateRedemptionStatus).not.toHaveBeenCalled();
+  });
+  describe('redeem binds the reward to the authorised kid', () => {
+    const aliceReq = {
+      authUserData: { userId: ALICE, userRole: 'user' },
+    } as never;
+
+    it("refuses redeeming another family's reward against the caller's own kid", async () => {
+      rewards.findOne.mockResolvedValue({ id: REWARD_ID, kidId: BOB_KID });
+      const controller = app.get(RewardController);
+      await expect(
+        controller.redeemReward(
+          { rewardId: REWARD_ID, kidId: ALICE_KID },
+          aliceReq,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(rewards.redeemReward).not.toHaveBeenCalled();
+    });
+
+    it('answers an unknown reward id the same way as a foreign one', async () => {
+      rewards.findOne.mockRejectedValue(new NotFoundException());
+      const controller = app.get(RewardController);
+      await expect(
+        controller.redeemReward(
+          { rewardId: REWARD_ID, kidId: ALICE_KID },
+          aliceReq,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(rewards.redeemReward).not.toHaveBeenCalled();
+    });
+
+    it('refuses an admin redeeming a reward that belongs to a different kid', async () => {
+      rewards.findOne.mockResolvedValue({ id: REWARD_ID, kidId: BOB_KID });
+      const controller = app.get(RewardController);
+      const adminReq = {
+        authUserData: { userId: ALICE, userRole: 'admin' },
+      } as never;
+      await expect(
+        controller.redeemReward(
+          { rewardId: REWARD_ID, kidId: ALICE_KID },
+          adminReq,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(rewards.redeemReward).not.toHaveBeenCalled();
+    });
+
+    it("allows redeeming the kid's own reward", async () => {
+      rewards.findOne.mockResolvedValue({ id: REWARD_ID, kidId: ALICE_KID });
+      rewards.redeemReward.mockResolvedValue({ id: 'r1' });
+      const controller = app.get(RewardController);
+      const dto = { rewardId: REWARD_ID, kidId: ALICE_KID };
+      await controller.redeemReward(dto, aliceReq);
+      expect(rewards.redeemReward).toHaveBeenCalledWith(dto);
+    });
   });
 });

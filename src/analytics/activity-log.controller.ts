@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Param,
@@ -67,7 +68,21 @@ export class ActivityLogController {
     @Req() req: AuthenticatedRequest,
   ) {
     this.accessControl.assertSelfOrAdmin(req.authUserData, userId);
-    return this.analyticsService.getForUser(userId);
+    const logs = await this.analyticsService.getForUser(userId);
+    if (this.accessControl.isAdmin(req.authUserData)) return logs;
+    const kidIds = [...new Set(logs.map((l) => l.kidId).filter(Boolean))];
+    const allowed = new Set<string>();
+    await Promise.all(
+      kidIds.map((kidId) =>
+        this.accessControl
+          .assertKidAccess(req.authUserData, kidId as string)
+          .then(() => allowed.add(kidId as string))
+          .catch((err: unknown) => {
+            if (!(err instanceof ForbiddenException)) throw err;
+          }),
+      ),
+    );
+    return logs.filter((l) => !l.kidId || allowed.has(l.kidId));
   }
 
   @Get('kid/:kidId')
