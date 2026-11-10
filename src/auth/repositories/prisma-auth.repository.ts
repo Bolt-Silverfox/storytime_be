@@ -282,8 +282,18 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
+  async findLatestTokenByUserId(
+    userId: string,
+    type: TokenType,
+  ): Promise<Token | null> {
+    return this.prisma.token.findFirst({
+      where: { userId, type },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async deleteToken(id: string): Promise<void> {
-    await this.prisma.token.delete({ where: { id } });
+    await this.prisma.token.deleteMany({ where: { id } });
   }
 
   async deleteUserTokensByType(userId: string, type: TokenType): Promise<void> {
