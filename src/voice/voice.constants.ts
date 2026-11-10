@@ -4,6 +4,8 @@ export const DEFAULT_VOICE = VoiceType.NIMBUS;
 
 export const MAX_CUSTOM_VOICES_PER_USER = 3;
 
+export const PENDING_VOICE_GRACE_MS = 10 * 60 * 1000;
+
 export const MAX_VOICE_UPLOAD_BYTES = 25 * 1024 * 1024;
 
 export const ALLOWED_VOICE_UPLOAD_MIME_TYPES = [
@@ -13,17 +15,9 @@ export const ALLOWED_VOICE_UPLOAD_MIME_TYPES = [
   'audio/m4a',
   'audio/mp4',
   'audio/ogg',
-  'audio/webm',
 ];
 
-export const ALLOWED_VOICE_UPLOAD_EXTENSIONS = [
-  '.mp3',
-  '.wav',
-  '.m4a',
-  '.mp4',
-  '.ogg',
-  '.webm',
-];
+export const ALLOWED_VOICE_UPLOAD_EXTENSIONS = ['.mp3', '.wav', '.m4a', '.ogg'];
 
 export const VOICE_AVATARS: Record<VoiceType, string> = {
   [VoiceType.MILO]:

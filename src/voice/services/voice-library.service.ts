@@ -77,9 +77,10 @@ export class VoiceLibraryService {
     }
 
     let upload: UploadApiResponse | undefined;
+    let elevenLabsId: string | undefined;
     try {
       upload = await this.uploadService.uploadFile(file);
-      const elevenLabsId = await this.cloneVoice(dto.name, file.buffer);
+      elevenLabsId = await this.cloneVoice(dto.name, file.buffer);
       const voice = await this.voiceRepository.updateVoice(reserved.id, {
         url: upload.secure_url,
         elevenLabsVoiceId: elevenLabsId,
@@ -89,12 +90,24 @@ export class VoiceLibraryService {
         cloudinary: { url: upload.secure_url, publicId: upload.public_id },
       };
     } catch (error) {
+      if (elevenLabsId) {
+        const orphanedVoiceId = elevenLabsId;
+        await this.elevenLabsProvider
+          .deleteVoice(orphanedVoiceId)
+          .catch((e) => {
+            this.logger.error(
+              `Failed to delete orphaned ElevenLabs voice ${orphanedVoiceId}: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          });
+      }
       if (upload) {
-        await this.uploadService.deleteAudio(upload.public_id).catch((e) => {
-          this.logger.error(
-            `Failed to delete orphaned Cloudinary file ${upload?.public_id}: ${e instanceof Error ? e.message : String(e)}`,
-          );
-        });
+        await this.uploadService
+          .deleteAudio(upload.public_id, upload.resource_type)
+          .catch((e) => {
+            this.logger.error(
+              `Failed to delete orphaned Cloudinary file ${upload?.public_id}: ${e instanceof Error ? e.message : String(e)}`,
+            );
+          });
       }
       await this.voiceRepository.hardDeleteVoice(reserved.id).catch((e) => {
         this.logger.error(

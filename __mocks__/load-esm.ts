@@ -32,6 +32,26 @@ export function sniff(buf: Uint8Array): Sniffed {
   if (startsWith(buf, ascii('BM'))) {
     return { mime: 'image/bmp', ext: 'bmp' };
   }
+  if (startsWith(buf, ascii('ID3')) || startsWith(buf, [0xff, 0xfb])) {
+    return { mime: 'audio/mpeg', ext: 'mp3' };
+  }
+  if (startsWith(buf, ascii('RIFF')) && startsWith(buf, ascii('WAVE'), 8)) {
+    return { mime: 'audio/wav', ext: 'wav' };
+  }
+  if (startsWith(buf, ascii('ftyp'), 4)) {
+    const brand = String.fromCharCode(...buf.slice(8, 12));
+    if (brand === 'M4A ') return { mime: 'audio/x-m4a', ext: 'm4a' };
+    return { mime: 'video/mp4', ext: 'mp4' };
+  }
+  if (startsWith(buf, [0x1a, 0x45, 0xdf, 0xa3])) {
+    return { mime: 'video/webm', ext: 'webm' };
+  }
+  if (
+    startsWith(buf, ascii('OggS')) &&
+    startsWith(buf, ascii('\x01vorbis'), 28)
+  ) {
+    return { mime: 'audio/ogg', ext: 'ogg' };
+  }
   return undefined; // text (svg/html), empty, garbage: not recognised
 }
 

@@ -11,7 +11,7 @@ export interface IVoiceRepository {
   ): Promise<{ id: string }>;
 
   // Atomically create an uploaded voice only if the user holds fewer than
-  // `cap` non-deleted uploaded voices; returns null when at the cap
+  // `cap` completed or recently reserved uploaded voices; returns null when at the cap
   createUploadedVoiceWithinCap(
     userId: string,
     data: Prisma.VoiceUncheckedCreateInput,

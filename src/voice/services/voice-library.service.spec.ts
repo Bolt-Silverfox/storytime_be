@@ -12,6 +12,7 @@ import { MAX_CUSTOM_VOICES_PER_USER } from '../voice.constants';
 import {
   ForbiddenException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 
@@ -45,6 +46,7 @@ const mockHttpService = {
 
 const mockElevenLabsProvider = {
   addVoice: jest.fn(),
+  deleteVoice: jest.fn(),
   getVoices: jest.fn(),
 };
 
@@ -181,7 +183,9 @@ describe('VoiceLibraryService', () => {
       mockUploadService.uploadFile.mockResolvedValue({
         secure_url: 'https://cdn/x.mp3',
         public_id: 'storytime/x',
+        resource_type: 'video',
       });
+      mockElevenLabsProvider.deleteVoice.mockResolvedValue(undefined);
       mockUploadService.deleteAudio.mockResolvedValue(undefined);
       mockElevenLabsProvider.addVoice.mockResolvedValue('el-1');
       mockVoiceRepository.updateVoice.mockResolvedValue({
@@ -245,9 +249,64 @@ describe('VoiceLibraryService', () => {
         service.uploadVoiceFile('user-1', file, dto),
       ).rejects.toThrow(InternalServerErrorException);
 
-      expect(mockUploadService.deleteAudio).toHaveBeenCalledWith('storytime/x');
+      expect(mockUploadService.deleteAudio).toHaveBeenCalledWith(
+        'storytime/x',
+        'video',
+      );
       expect(mockVoiceRepository.hardDeleteVoice).toHaveBeenCalledWith('v1');
       expect(mockVoiceRepository.updateVoice).not.toHaveBeenCalled();
+      expect(mockElevenLabsProvider.deleteVoice).not.toHaveBeenCalled();
+    });
+
+    it('deletes the Cloudinary file with the resource type it was uploaded as', async () => {
+      mockUploadService.uploadFile.mockResolvedValue({
+        secure_url: 'https://cdn/x.png',
+        public_id: 'storytime/x',
+        resource_type: 'image',
+      });
+      mockElevenLabsProvider.addVoice.mockRejectedValue(new Error('boom'));
+
+      await expect(
+        service.uploadVoiceFile('user-1', file, dto),
+      ).rejects.toThrow(InternalServerErrorException);
+
+      expect(mockUploadService.deleteAudio).toHaveBeenCalledWith(
+        'storytime/x',
+        'image',
+      );
+    });
+
+    it('deletes the cloned ElevenLabs voice, the file and the row when saving the voice fails', async () => {
+      const failure = new Error('db down');
+      mockVoiceRepository.updateVoice.mockRejectedValue(failure);
+
+      await expect(service.uploadVoiceFile('user-1', file, dto)).rejects.toBe(
+        failure,
+      );
+
+      expect(mockElevenLabsProvider.deleteVoice).toHaveBeenCalledWith('el-1');
+      expect(mockUploadService.deleteAudio).toHaveBeenCalledWith(
+        'storytime/x',
+        'video',
+      );
+      expect(mockVoiceRepository.hardDeleteVoice).toHaveBeenCalledWith('v1');
+    });
+
+    it('logs and still reports the original error when deleting the cloned voice fails', async () => {
+      const failure = new Error('db down');
+      mockVoiceRepository.updateVoice.mockRejectedValue(failure);
+      mockElevenLabsProvider.deleteVoice.mockRejectedValue(
+        new Error('elevenlabs down'),
+      );
+      const logged = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+
+      await expect(service.uploadVoiceFile('user-1', file, dto)).rejects.toBe(
+        failure,
+      );
+
+      expect(logged).toHaveBeenCalledWith(expect.stringContaining('el-1'));
+      expect(mockVoiceRepository.hardDeleteVoice).toHaveBeenCalledWith('v1');
+      logged.mockRestore();
     });
 
     it('still releases the reserved row and reports the clone failure when Cloudinary cleanup fails', async () => {

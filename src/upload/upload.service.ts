@@ -162,10 +162,13 @@ export class UploadService {
     }
   }
 
-  async deleteAudio(publicId: string): Promise<void> {
+  async deleteAudio(
+    publicId: string,
+    resourceType: string = 'video',
+  ): Promise<void> {
     try {
       const result = await cloudinary.uploader.destroy(publicId, {
-        resource_type: 'video',
+        resource_type: resourceType,
       });
       if (result.result !== 'ok') {
         throw new InternalServerErrorException(

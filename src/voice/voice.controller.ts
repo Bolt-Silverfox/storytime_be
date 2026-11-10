@@ -137,7 +137,7 @@ export class VoiceController {
           allowed
             ? null
             : new UnsupportedMediaTypeException(
-                'Only audio files (mp3, wav, m4a, mp4, ogg, webm) are allowed',
+                'Only audio files (mp3, wav, m4a, ogg) are allowed',
               ),
           allowed,
         );
@@ -150,7 +150,7 @@ export class VoiceController {
       new ParseFilePipeBuilder()
         .addFileTypeValidator({
           fileType:
-            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg|audio\/webm)$/,
+            /^(audio\/mpeg|audio\/wav|audio\/x-m4a|audio\/m4a|audio\/mp4|audio\/ogg)$/,
         })
         .addMaxSizeValidator({
           maxSize: MAX_VOICE_UPLOAD_BYTES,
