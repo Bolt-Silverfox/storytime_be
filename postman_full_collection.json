@@ -846,35 +846,6 @@
           }
         }
       ]
-    },
-    {
-      "name": "Upload",
-      "item": [
-        {
-          "name": "Upload File",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "multipart/form-data" }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "file",
-                  "type": "file",
-                  "src": ""
-                }
-              ]
-            },
-            "url": {
-              "raw": "{{baseUrl}}/upload",
-              "host": ["{{baseUrl}}"],
-              "path": ["upload"]
-            }
-          }
-        }
-      ]
     }
   ]
 }
