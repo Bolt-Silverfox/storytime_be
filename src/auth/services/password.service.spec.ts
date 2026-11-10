@@ -21,8 +21,8 @@ import {
 import { TokenType } from '../dto/auth.dto';
 import { AppEvents } from '@/shared/events';
 import { Role, OnboardingStatus } from '@prisma/client';
-import { HttpException } from '@nestjs/common';
 import { RedisService } from '@/redis/redis.service';
+import { FakeRedisClient } from '@/shared/testing/fake-redis';
 
 jest.mock('bcryptjs', () => ({
   compare: jest.fn(),
@@ -43,8 +43,7 @@ describe('PasswordService', () => {
   let authRepository: jest.Mocked<IAuthRepository>;
   let tokenService: jest.Mocked<TokenService>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
-  let redisStore: Map<string, number>;
-  let redisTtls: Map<string, number>;
+  let fakeRedis: FakeRedisClient;
 
   const mockUser = makeUser({
     passwordHash: '$2a$10$hashedpasswordvalue',
@@ -75,6 +74,7 @@ describe('PasswordService', () => {
       deleteUserTokensByType: jest.fn(),
       createToken: jest.fn(),
       findTokenByHashedToken: jest.fn(),
+      findLatestTokenByUserId: jest.fn(),
       deleteToken: jest.fn(),
       updateUser: jest.fn(),
       deleteAllUserSessions: jest.fn(),
@@ -92,56 +92,8 @@ describe('PasswordService', () => {
       emit: jest.fn(),
     };
 
-    redisStore = new Map<string, number>();
-    redisTtls = new Map<string, number>();
-    const mockRedis = {
-      client: {
-        multi: jest.fn(() => {
-          const ops: Array<() => number | string | null> = [];
-          const chain = {
-            set: (
-              key: string,
-              _v: number,
-              _ex: 'EX',
-              ttl: number,
-              nx?: 'NX',
-            ) => {
-              ops.push(() => {
-                if (nx === 'NX' && redisStore.has(key)) return null;
-                redisStore.set(key, 0);
-                redisTtls.set(key, ttl);
-                return 'OK';
-              });
-              return chain;
-            },
-            incr: (key: string) => {
-              ops.push(() => {
-                const next = (redisStore.get(key) ?? 0) + 1;
-                redisStore.set(key, next);
-                return next;
-              });
-              return chain;
-            },
-            ttl: (key: string) => {
-              ops.push(() => redisTtls.get(key) ?? -1);
-              return chain;
-            },
-            exec: () =>
-              Promise.resolve(ops.map((op) => [null, op()] as [null, unknown])),
-          };
-          return chain;
-        }),
-        expire: jest.fn((key: string, ttl: number) => {
-          redisTtls.set(key, ttl);
-          return Promise.resolve(1);
-        }),
-        del: jest.fn((key: string) => {
-          redisStore.delete(key);
-          redisTtls.delete(key);
-          return Promise.resolve(1);
-        }),
-      },
-    };
+    fakeRedis = new FakeRedisClient();
+    const mockRedis = { client: fakeRedis };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -194,6 +146,70 @@ describe('PasswordService', () => {
           resetToken: 'raw-reset-token',
         },
       );
+    });
+
+    describe('issuance cap', () => {
+      const request = (email = 'test@example.com') =>
+        service.requestPasswordReset({ email });
+
+      beforeEach(() => {
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
+        authRepository.createToken.mockResolvedValue(makeToken());
+      });
+
+      it('issues at most 5 codes per email per hour', async () => {
+        for (let i = 0; i < 8; i++) await request();
+
+        expect(authRepository.createToken).toHaveBeenCalledTimes(5);
+        expect(eventEmitter.emit).toHaveBeenCalledTimes(5);
+      });
+
+      it('answers over the cap exactly like a successful request', async () => {
+        for (let i = 0; i < 5; i++) await request();
+
+        await expect(request()).resolves.toEqual({
+          message: 'Password reset token sent',
+        });
+      });
+
+      it('does not reveal whether the email exists once over the cap', async () => {
+        authRepository.findUserByEmail.mockResolvedValue(null);
+        for (let i = 0; i < 5; i++) {
+          await expect(request('ghost@example.com')).rejects.toThrow(
+            NotFoundException,
+          );
+        }
+
+        await expect(request('ghost@example.com')).resolves.toEqual({
+          message: 'Password reset token sent',
+        });
+      });
+
+      it('shares one counter across email casing and whitespace', async () => {
+        for (const e of ['a@example.com', 'A@Example.com', ' a@example.com ']) {
+          await request(e);
+        }
+
+        expect([...fakeRedis.store.values()]).toEqual([3]);
+      });
+
+      it('counts each email separately and sets a TTL with the first request', async () => {
+        await request('one@example.com');
+        await request('two@example.com');
+
+        expect([...fakeRedis.store.values()]).toEqual([1, 1]);
+        expect([...fakeRedis.ttls.values()]).toEqual([3600, 3600]);
+      });
+
+      it('leaves the existing code untouched when over the cap', async () => {
+        for (let i = 0; i < 5; i++) await request();
+        authRepository.deleteUserTokensByType.mockClear();
+
+        await request();
+
+        expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
+      });
     });
 
     it('should throw NotFoundException when user is not found', async () => {
@@ -388,140 +404,181 @@ describe('PasswordService', () => {
         }),
       ).rejects.toThrow(NotFoundException);
     });
+    const validate = (token: string, email: string) =>
+      service.validateResetToken(token, email, { token, email });
+
+    const stubActiveToken = (id = 'token-1') => {
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findLatestTokenByUserId.mockResolvedValue(
+        makeToken({ id, type: TokenType.PASSWORD_RESET }),
+      );
+    };
+
+    const counterKeys = () => [...fakeRedis.store.keys()];
+
     it('rejects a live token with a wrong email exactly like an unknown token', async () => {
       authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
 
       await expect(
-        service.validateResetToken('raw-reset-token', 'throwaway@example.com', {
-          token: 'raw-reset-token',
-          email: 'throwaway@example.com',
-        }),
-      ).rejects.toThrow(NotFoundException);
+        validate('raw-reset-token', 'throwaway@example.com'),
+      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
     });
 
-    it('charges rotating-email guesses to the token owner and locks them out at the cap', async () => {
+    it('invalidates the active token after 5 wrong guesses and answers with the unknown-token 404', async () => {
+      stubActiveToken();
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      for (let i = 0; i < 4; i++) {
+        await expect(validate(`g${i}`, 'test@example.com')).rejects.toThrow(
+          NotFoundException,
+        );
+      }
+      expect(authRepository.deleteToken).not.toHaveBeenCalled();
+
+      await expect(validate('g4', 'test@example.com')).rejects.toThrow(
+        new NotFoundException('Invalid reset token'),
+      );
+
+      expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+      expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
+    });
+
+    it('refuses further guesses once the cap is hit, even with the correct code', async () => {
+      stubActiveToken();
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      for (let i = 0; i < 5; i++) {
+        await expect(validate(`g${i}`, 'test@example.com')).rejects.toThrow(
+          NotFoundException,
+        );
+      }
+      authRepository.findTokenByHashedToken.mockClear();
       authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+
+      const err: unknown = await validate(
+        'raw-reset-token',
+        'test@example.com',
+      ).catch((e: unknown) => e);
+
+      expect(err).toBeInstanceOf(NotFoundException);
+      expect((err as NotFoundException).getStatus()).toBe(404);
+      expect((err as NotFoundException).message).toBe('Invalid reset token');
+      expect(authRepository.findTokenByHashedToken).not.toHaveBeenCalled();
+    });
+
+    it('charges mismatched-email guesses to the token owner, so rotating emails cannot evade the cap', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.findUserByEmail.mockResolvedValue(null);
       for (let i = 0; i < 5; i++) {
         await expect(
-          service.validateResetToken('raw-reset-token', `t${i}@example.com`, {
-            token: 'raw-reset-token',
-            email: `t${i}@example.com`,
-          }),
-        ).rejects.toThrow(NotFoundException);
+          validate('raw-reset-token', `t${i}@example.com`),
+        ).rejects.toThrow(new NotFoundException('Invalid reset token'));
       }
 
+      expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+    });
+
+    it('does not charge anything for an email with no active reset token', async () => {
+      authRepository.findUserByEmail.mockResolvedValue(null);
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      for (let i = 0; i < 20; i++) {
+        await expect(validate(`g${i}`, 'nobody@example.com')).rejects.toThrow(
+          NotFoundException,
+        );
+      }
+
+      expect(counterKeys()).toHaveLength(0);
+      expect(authRepository.deleteToken).not.toHaveBeenCalled();
+    });
+
+    it('lets the owner use a freshly issued code after an attacker burned the previous one', async () => {
+      stubActiveToken('token-1');
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      for (let i = 0; i < 10; i++) {
+        await expect(validate(`g${i}`, 'test@example.com')).rejects.toThrow(
+          NotFoundException,
+        );
+      }
+
+      stubActiveToken('token-2');
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockResetToken,
+        id: 'token-2',
+      });
+
       await expect(
-        service.validateResetToken('raw-reset-token', 'test@example.com', {
-          token: 'raw-reset-token',
-          email: 'test@example.com',
-        }),
-      ).rejects.toMatchObject({ status: 429 });
+        validate('raw-reset-token', 'test@example.com'),
+      ).resolves.toEqual({ message: 'Valid reset token' });
     });
 
     it('does not clear the counter when validation fails', async () => {
+      stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
-      await expect(
-        service.validateResetToken('x', 'test@example.com', {
-          token: 'x',
-          email: 'test@example.com',
-        }),
-      ).rejects.toThrow(NotFoundException);
-      expect(redisStore.size).toBe(1);
+      await expect(validate('x', 'test@example.com')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(counterKeys()).toHaveLength(1);
     });
 
     it('clears the counter after a successful validation', async () => {
+      stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
-      await expect(
-        service.validateResetToken('x', 'test@example.com', {
-          token: 'x',
-          email: 'test@example.com',
-        }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(validate('x', 'test@example.com')).rejects.toThrow(
+        NotFoundException,
+      );
       authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
 
-      await service.validateResetToken('raw-reset-token', 'test@example.com', {
-        token: 'raw-reset-token',
-        email: 'test@example.com',
-      });
+      await validate('raw-reset-token', 'test@example.com');
 
-      expect(redisStore.size).toBe(0);
+      expect(counterKeys()).toHaveLength(0);
     });
 
     it('treats an expired token with a wrong email as unknown and keeps the token', async () => {
+      authRepository.findUserByEmail.mockResolvedValue(null);
       authRepository.findTokenByHashedToken.mockResolvedValue({
         ...mockResetToken,
         expiresAt: new Date('2020-01-01'),
       });
 
       await expect(
-        service.validateResetToken('raw-reset-token', 'other@example.com', {
-          token: 'raw-reset-token',
-          email: 'other@example.com',
-        }),
+        validate('raw-reset-token', 'other@example.com'),
       ).rejects.toThrow(NotFoundException);
       expect(authRepository.deleteToken).not.toHaveBeenCalled();
     });
 
-    it('shares one counter across email casing and whitespace', async () => {
-      authRepository.findTokenByHashedToken.mockResolvedValue(null);
-      for (const e of ['a@example.com', 'A@Example.com', ' a@example.com ']) {
-        await expect(
-          service.validateResetToken('x', e, { token: 'x', email: e }),
-        ).rejects.toThrow(NotFoundException);
-      }
-      expect([...redisStore.values()]).toEqual([3]);
-    });
-
     it('sets a TTL on the counter in the same atomic operation as the first failure', async () => {
+      stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
-      await expect(
-        service.validateResetToken('x', 'test@example.com', {
-          token: 'x',
-          email: 'test@example.com',
-        }),
-      ).rejects.toThrow(NotFoundException);
-      expect([...redisTtls.values()]).toEqual([3600]);
+      await expect(validate('x', 'test@example.com')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect([...fakeRedis.ttls.values()]).toEqual([3600]);
     });
 
-    it('does not tell the caller a fresh code unlocks them', async () => {
+    it('gives a counter with no TTL an expiry on the next attempt', async () => {
+      stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
-      for (let i = 0; i < 5; i++) {
-        await expect(
-          service.validateResetToken('x', 'test@example.com', {
-            token: 'x',
-            email: 'test@example.com',
-          }),
-        ).rejects.toThrow(NotFoundException);
-      }
-      await expect(
-        service.validateResetToken('x', 'test@example.com', {
-          token: 'x',
-          email: 'test@example.com',
-        }),
-      ).rejects.toThrow(/try again later/i);
+      await expect(validate('a', 'test@example.com')).rejects.toThrow(
+        NotFoundException,
+      );
+      fakeRedis.ttls.clear();
+
+      await expect(validate('b', 'test@example.com')).rejects.toThrow(
+        NotFoundException,
+      );
+
+      expect([...fakeRedis.ttls.values()]).toEqual([3600]);
     });
 
-    it('locks out after 5 failed guesses, even for the correct token', async () => {
+    it('lets concurrent guesses be evaluated at most 5 times', async () => {
+      stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
-      for (let i = 0; i < 5; i++) {
-        await expect(
-          service.validateResetToken(`guess-${i}`, 'test@example.com', {
-            token: `guess-${i}`,
-            email: 'test@example.com',
-          }),
-        ).rejects.toThrow(NotFoundException);
-      }
-      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
 
-      await expect(
-        service.validateResetToken('raw-reset-token', 'test@example.com', {
-          token: 'raw-reset-token',
-          email: 'test@example.com',
-        }),
-      ).rejects.toMatchObject({ status: 429 });
+      await Promise.allSettled(
+        Array.from({ length: 20 }, (_, i) =>
+          validate(`g${i}`, 'test@example.com'),
+        ),
+      );
+
+      expect(authRepository.findTokenByHashedToken).toHaveBeenCalledTimes(5);
     });
   });
 
@@ -762,116 +819,64 @@ describe('PasswordService', () => {
     });
 
     describe('attempt cap', () => {
-      const attempt = (token: string) =>
-        service.resetPassword(token, 'test@example.com', 'NewPass1#', {
+      const attempt = (token: string, email = 'test@example.com') =>
+        service.resetPassword(token, email, 'NewPass1#', {
           token,
-          email: 'test@example.com',
+          email,
           newPassword: 'NewPass1#',
         });
 
-      it('locks out and invalidates the user token after 5 failed guesses, even for the correct token', async () => {
-        authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      const stubActiveToken = () => {
         authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findLatestTokenByUserId.mockResolvedValue(
+          makeToken({ type: TokenType.PASSWORD_RESET }),
+        );
+      };
+
+      it('invalidates the token after 5 wrong guesses and never resets with the correct code afterwards', async () => {
+        stubActiveToken();
+        authRepository.findTokenByHashedToken.mockResolvedValue(null);
         for (let i = 0; i < 5; i++) {
           await expect(attempt(`guess-${i}`)).rejects.toThrow(
             NotFoundException,
           );
         }
+        expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
 
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        const sixth = attempt('raw-reset-token');
-
-        await expect(sixth).rejects.toMatchObject({ status: 429 });
-        await expect(sixth).rejects.toBeInstanceOf(HttpException);
-        expect(authRepository.updateUser).not.toHaveBeenCalled();
-        expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
-          'user-1',
-          TokenType.PASSWORD_RESET,
+        await expect(attempt('raw-reset-token')).rejects.toThrow(
+          new NotFoundException('Invalid reset token'),
         );
-      });
-
-      it('charges a mismatched-email guess against the token owner, so rotating emails cannot evade the cap', async () => {
-        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
-        for (let i = 0; i < 5; i++) {
-          await expect(
-            service.resetPassword(
-              'raw-reset-token',
-              `rotating-${i}@example.com`,
-              'NewPass1#',
-              {
-                token: 'raw-reset-token',
-                email: `rotating-${i}@example.com`,
-                newPassword: 'NewPass1#',
-              },
-            ),
-          ).rejects.toThrow(NotFoundException);
-        }
-
-        await expect(attempt('raw-reset-token')).rejects.toMatchObject({
-          status: 429,
-        });
         expect(authRepository.updateUser).not.toHaveBeenCalled();
       });
 
-      it('locks the token owner out from charges made through other emails alone', async () => {
+      it('charges a mismatched-email guess to the token owner', async () => {
+        authRepository.findUserByEmail.mockResolvedValue(null);
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
         for (let i = 0; i < 5; i++) {
           await expect(
-            service.resetPassword('raw-reset-token', `r${i}@example.com`, 'x', {
-              token: 'raw-reset-token',
-              email: `r${i}@example.com`,
-              newPassword: 'x',
-            }),
+            attempt('raw-reset-token', `rotating-${i}@example.com`),
           ).rejects.toThrow(NotFoundException);
         }
-        expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
 
-        await expect(
-          service.resetPassword('raw-reset-token', 'r5@example.com', 'x', {
-            token: 'raw-reset-token',
-            email: 'r5@example.com',
-            newPassword: 'x',
-          }),
-        ).rejects.toMatchObject({ status: 429 });
-        expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
-          'user-1',
-          TokenType.PASSWORD_RESET,
-        );
+        expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+        expect(authRepository.updateUser).not.toHaveBeenCalled();
       });
 
-      it('gives a legacy counter with no TTL an expiry on the next attempt', async () => {
+      it('lets concurrent guesses be evaluated at most 5 times', async () => {
+        stubActiveToken();
         authRepository.findTokenByHashedToken.mockResolvedValue(null);
-        await expect(attempt('a')).rejects.toThrow(NotFoundException);
-        redisTtls.clear();
-        const [key] = [...redisStore.keys()];
-        redisStore.set(key, 6);
 
-        await expect(attempt('b')).rejects.toMatchObject({ status: 429 });
-
-        expect(redisTtls.get(key)).toBe(3600);
-      });
-
-      it('lets concurrent guesses through at most 5 times', async () => {
-        authRepository.findTokenByHashedToken.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
-
-        const results = await Promise.allSettled(
+        await Promise.allSettled(
           Array.from({ length: 20 }, (_, i) => attempt(`guess-${i}`)),
         );
 
-        const lookedUp = results.filter(
-          (r) =>
-            r.status === 'rejected' && r.reason instanceof NotFoundException,
-        );
-        expect(lookedUp).toHaveLength(5);
         expect(authRepository.findTokenByHashedToken).toHaveBeenCalledTimes(5);
       });
 
       it('clears the counter after a successful reset', async () => {
+        stubActiveToken();
         authRepository.findTokenByHashedToken.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
         for (let i = 0; i < 4; i++) {
           await expect(attempt(`guess-${i}`)).rejects.toThrow(
             NotFoundException,
@@ -882,7 +887,7 @@ describe('PasswordService', () => {
 
         await attempt('raw-reset-token');
 
-        expect(redisStore.size).toBe(0);
+        expect(fakeRedis.store.size).toBe(0);
       });
     });
   });
