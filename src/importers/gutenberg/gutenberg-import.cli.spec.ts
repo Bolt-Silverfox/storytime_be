@@ -35,6 +35,7 @@ describe('gutenberg import CLI environment loading', () => {
       ],
       { cwd, timeout: 20000, encoding: 'utf8', env },
     );
+    if (r.error) throw r.error;
     return `${r.stdout}${r.stderr}`;
   };
 
@@ -44,7 +45,8 @@ describe('gutenberg import CLI environment loading', () => {
   });
 
   it('does not refuse --commit when .env holds a localhost DATABASE_URL', () => {
-    const out = run('postgresql://u:p@localhost:5432/app', ['--commit']);
+    const out = run('postgresql://u:p@localhost:1/app', ['--commit']);
+    expect(out).toContain('Import failed:');
     expect(out).not.toContain('Refusing --commit');
   });
 });
