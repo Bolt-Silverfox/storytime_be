@@ -380,7 +380,7 @@ export class SourceCacheService {
     fetcher: SourceFetcher,
     options: CacheOptions = {},
   ): Promise<GetOrFetchResult> {
-    const key = `${sourceName}\u0000${sourceId}`;
+    const key = `${sourceName}\u0000${sourceId}\u0000${options.force ? 'force' : 'plain'}`;
     const running = this.inFlight.get(key);
     // Joiners share the result but did not run the fetcher themselves.
     if (running) return running.then((r) => ({ ...r, fetched: false }));
