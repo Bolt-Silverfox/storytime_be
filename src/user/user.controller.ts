@@ -84,9 +84,11 @@ export class UserController {
     email: string;
     message: string;
     permanent: boolean;
+    isDeleted?: boolean;
+    deletedAt?: Date | null;
   }) {
-    const { id, email, message, permanent } = result;
-    return { id, email, message, permanent };
+    const { id, email, message, permanent, isDeleted, deletedAt } = result;
+    return { id, email, message, permanent, isDeleted, deletedAt };
   }
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
@@ -432,6 +434,8 @@ export class UserController {
           email: 'user@example.com',
           message: 'Account deactivated successfully',
           permanent: false,
+          isDeleted: true,
+          deletedAt: '2025-12-01T13:20:00.000Z',
         },
         message: 'Account deactivated successfully',
       },
@@ -663,6 +667,7 @@ export class UserController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update user profile (self or admin)' })
   @ApiParam({ name: 'id', type: String })
+  @ApiResponse({ status: 200, type: UserDto })
   async updateUser(
     @Param('id') id: string,
     @Body() body: UpdateUserDto,
@@ -677,6 +682,19 @@ export class UserController {
   @UseGuards(AuthSessionGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete user account (self or admin)' })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        id: 'user-id',
+        email: 'user@example.com',
+        message: 'Account deactivated successfully',
+        permanent: false,
+        isDeleted: true,
+        deletedAt: '2025-12-01T13:20:00.000Z',
+      },
+    },
+  })
   @ApiQuery({
     name: 'permanent',
     required: false,

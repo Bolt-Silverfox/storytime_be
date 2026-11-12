@@ -263,6 +263,10 @@ export class UserDto {
   @Optional()
   numberOfKids?: number;
 
+  @ApiProperty({ example: false, required: false })
+  @Optional()
+  biometricsEnabled?: boolean;
+
   constructor(
     user: Partial<UserDto> & {
       profile?: Partial<ProfileDto> | null;
@@ -291,6 +295,7 @@ export class UserDto {
     this.createdAt = user.createdAt as Date;
     this.updatedAt = user.updatedAt as Date;
     this.numberOfKids = user.kids?.length || user.numberOfKids || 0;
+    this.biometricsEnabled = user.biometricsEnabled;
   }
 }
 

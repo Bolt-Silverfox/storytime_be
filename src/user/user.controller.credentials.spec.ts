@@ -47,6 +47,7 @@ describe('UserController responses never carry credential hashes', () => {
     undoDeleteMyAccount: jest.fn(),
     undoDeleteUser: jest.fn(),
     deleteUserAccount: jest.fn(),
+    updateUser: jest.fn(),
   };
   const upload = {
     uploadImage: jest
@@ -136,5 +137,49 @@ describe('UserController responses never carry credential hashes', () => {
       message: 'm',
       permanent: false,
     });
+  });
+
+  it('DELETE /user/me (soft delete) keeps isDeleted and deletedAt', async () => {
+    const deletedAt = '2026-02-01T00:00:00.000Z';
+    userService.deleteUserAccount.mockResolvedValueOnce({
+      ...rowWithSecrets(ALICE),
+      isDeleted: true,
+      deletedAt: new Date(deletedAt),
+    });
+    const res = await http()
+      .delete('/user/me')
+      .set('Authorization', bearer('alice'))
+      .expect(200);
+    expectNoCredentials(res.body);
+    expect(res.body.data).toMatchObject({ isDeleted: true, deletedAt });
+  });
+
+  it('DELETE /user/:id (soft delete) keeps isDeleted and deletedAt', async () => {
+    const deletedAt = '2026-02-01T00:00:00.000Z';
+    userService.deleteUserAccount.mockResolvedValueOnce({
+      ...rowWithSecrets(ALICE),
+      isDeleted: true,
+      deletedAt: new Date(deletedAt),
+    });
+    const res = await http()
+      .delete(`/user/${ALICE}`)
+      .set('Authorization', bearer('alice'))
+      .expect(200);
+    expectNoCredentials(res.body);
+    expect(res.body).toMatchObject({ isDeleted: true, deletedAt });
+  });
+
+  it('PUT /user/:id returns biometricsEnabled', async () => {
+    userService.updateUser.mockResolvedValueOnce({
+      ...rowWithSecrets(ALICE),
+      biometricsEnabled: true,
+    });
+    const res = await http()
+      .put(`/user/${ALICE}`)
+      .set('Authorization', bearer('alice'))
+      .send({ biometricsEnabled: true })
+      .expect(200);
+    expectNoCredentials(res.body);
+    expect(res.body.biometricsEnabled).toBe(true);
   });
 });
