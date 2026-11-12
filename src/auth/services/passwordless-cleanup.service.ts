@@ -1,5 +1,4 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import {
   ILoginChallengeRepository,
@@ -18,16 +17,10 @@ export class PasswordlessCleanupService {
   constructor(
     @Inject(LOGIN_CHALLENGE_REPOSITORY)
     private readonly challenges: ILoginChallengeRepository,
-    private readonly configService: ConfigService,
   ) {}
 
   @Cron('17 * * * *', { name: 'passwordlessChallengeCleanup' })
   async purgeExpired(): Promise<void> {
-    const flag = this.configService.get<boolean | string>(
-      'PASSWORDLESS_LOGIN_ENABLED',
-    );
-    if (flag !== true && flag !== 'true') return;
-
     try {
       const cutoff = new Date(Date.now() - PASSWORDLESS_CLEANUP_GRACE_MS);
       let removed = 0;

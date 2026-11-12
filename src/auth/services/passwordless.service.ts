@@ -12,6 +12,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import * as crypto from 'crypto';
 import { UserDto } from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
 import {
   ILoginChallengeRepository,
   LOGIN_CHALLENGE_REPOSITORY,
@@ -226,6 +227,7 @@ export class PasswordlessService {
       throw this.invalid();
     }
 
+    await this.releaseFailedAttempt(emailHash);
     const consumedEmail = await this.challenges.consumeById(challengeId, now);
     if (!consumedEmail) throw this.invalid();
     return this.completeLogin(consumedEmail, challengeId, ip, guestSessionId);
@@ -251,8 +253,17 @@ export class PasswordlessService {
     ip: string | undefined,
     guestSessionId?: string,
   ): Promise<PasswordlessLoginResult> {
-    const { user, isNewUser, newlyVerified } =
-      await this.findOrCreateUser(emailNormalized);
+    const { user, isNewUser, newlyVerified } = await this.findOrCreateUser(
+      emailNormalized,
+    ).catch((error: unknown) => {
+      if (error instanceof AmbiguousEmailAccountError) {
+        this.logger.warn(
+          `Passwordless login refused for ambiguous email match (challenge ${challengeId ?? 'link'})`,
+        );
+        throw this.invalid();
+      }
+      throw error;
+    });
     if (user.isSuspended || user.isDeleted) {
       this.logger.warn(
         `Passwordless login refused for inactive account (challenge ${challengeId ?? 'link'})`,
@@ -382,6 +393,17 @@ export class PasswordlessService {
       this.logger.error('Passwordless throttle store unavailable');
       return true;
     }
+  }
+
+  private async releaseFailedAttempt(emailHash: string): Promise<void> {
+    await this.throttle
+      .release(
+        `pwl:fail:email:${emailHash}`,
+        PASSWORDLESS_LIMITS.failedVerifyPerEmailDay.windowMs,
+      )
+      .catch(() => {
+        this.logger.error('Passwordless throttle store unavailable');
+      });
   }
 
   private async releaseGlobal(): Promise<void> {

@@ -14,6 +14,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
 import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
+import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
 import appleSigninAuth from 'apple-signin-auth';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents } from '@/shared/events/app-events';
@@ -365,6 +366,28 @@ describe('OAuthService', () => {
         'mixed@example.com',
       );
       expect(authRepository.createUser).not.toHaveBeenCalled();
+    });
+
+    it('refuses without linking or issuing tokens when several verified accounts match the email', async () => {
+      googleClient.verifyIdToken.mockResolvedValue({
+        getPayload: () => ({
+          sub: 'g-sub',
+          email: 'Mixed@example.com',
+          email_verified: true,
+        }),
+      });
+      authRepository.findUserByGoogleId.mockResolvedValue(null);
+      authRepository.findUserByEmailInsensitive.mockRejectedValue(
+        new AmbiguousEmailAccountError(),
+      );
+
+      await expect(
+        service.loginWithGoogleIdToken('valid-token'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(authRepository.linkGoogleAccountIfUnset).not.toHaveBeenCalled();
+      expect(authRepository.createUser).not.toHaveBeenCalled();
+      expect(tokenService.createTokenPair).not.toHaveBeenCalled();
     });
 
     describe('provider reports the email as unverified', () => {

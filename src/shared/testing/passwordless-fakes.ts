@@ -3,6 +3,7 @@ import {
   INCR_WITH_EXPIRY,
 } from '@/auth/services/passwordless-throttle.service';
 import { AccountAlreadyVerifiedError } from '@/auth/repositories/account-already-verified.error';
+import { AmbiguousEmailAccountError } from '@/auth/repositories/ambiguous-email-account.error';
 import type { User, Profile, Avatar, Session } from '@prisma/client';
 import type {
   ILoginChallengeRepository,
@@ -243,30 +244,46 @@ export class InMemoryAuthRepository {
           a.createdAt.getTime() - b.createdAt.getTime() ||
           a.id.localeCompare(b.id),
       );
+    const verified = matches.filter((u) => u.isEmailVerified);
+    if (verified.length > 0) {
+      const exact = verified.find((u) => u.email === email);
+      if (exact) return Promise.resolve(exact);
+      if (verified.length > 1) {
+        return Promise.reject(new AmbiguousEmailAccountError());
+      }
+      return Promise.resolve(verified[0]);
+    }
     return Promise.resolve(
-      matches.find((u) => u.isEmailVerified) ??
-        matches.find((u) => u.email === email) ??
-        matches[0] ??
-        null,
+      matches.find((u) => u.email === email) ?? matches[0] ?? null,
     );
   };
 
   findUserByIdWithProfile = (id: string) =>
     Promise.resolve(this.users.find((u) => u.id === id) ?? null);
 
-  linkGoogleAccountIfUnset = (userId: string, googleId: string) =>
-    this.linkIfUnset(userId, 'googleId', googleId);
+  linkGoogleAccountIfUnset = (
+    userId: string,
+    googleId: string,
+    sessionId?: string,
+  ) => this.linkIfUnset(userId, 'googleId', googleId, sessionId);
 
-  linkAppleAccountIfUnset = (userId: string, appleId: string) =>
-    this.linkIfUnset(userId, 'appleId', appleId);
+  linkAppleAccountIfUnset = (
+    userId: string,
+    appleId: string,
+    sessionId?: string,
+  ) => this.linkIfUnset(userId, 'appleId', appleId, sessionId);
 
   private linkIfUnset(
     userId: string,
     field: 'googleId' | 'appleId',
     value: string,
+    sessionId?: string,
   ) {
     const u = this.users.find((x) => x.id === userId);
-    if (!u || u[field] || !u.isEmailVerified || u.isDeleted) {
+    const sessionMissing =
+      sessionId !== undefined &&
+      !this.sessions.some((s) => s.id === sessionId && s.userId === userId);
+    if (!u || u[field] || !u.isEmailVerified || u.isDeleted || sessionMissing) {
       return Promise.resolve({ count: 0 });
     }
     u[field] = value;
@@ -313,6 +330,18 @@ export class InMemoryAuthRepository {
     const s = { id: `session-${this.sessions.length + 1}`, ...data } as Session;
     this.sessions.push(s);
     return Promise.resolve(s);
+  };
+
+  createSessionForUnverifiedUser = (data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }) => {
+    const u = this.users.find((x) => x.id === data.userId);
+    if (!u || u.isEmailVerified) {
+      return Promise.reject(new AccountAlreadyVerifiedError());
+    }
+    return this.createSession(data);
   };
 
   recordLastLogin = () => Promise.resolve();

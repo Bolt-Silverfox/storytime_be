@@ -12,6 +12,7 @@ import {
   AccountAlreadyVerifiedError,
   PrismaAuthRepository,
 } from '../repositories/prisma-auth.repository';
+import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
 import { PrismaLoginChallengeRepository } from '../repositories/prisma-login-challenge.repository';
 import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
@@ -818,29 +819,188 @@ maybe('PasswordlessService against Postgres', () => {
     });
   });
 
-  it('prefers the oldest verified variant over a newer exact-case verified one', async () => {
+  it('prefers an exact-case verified variant over an older verified one', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
     const stamp = `${process.pid}-${++n}`;
     const upper = `PWL-IT-OLD-${stamp}@EXAMPLE.COM`;
-    const older = await prisma.user.create({
-      data: {
-        email: upper,
-        passwordHash: 'h',
-        isEmailVerified: true,
-        createdAt: new Date(Date.now() - 2000),
-      },
-    });
     await prisma.user.create({
       data: {
         email: upper.toLowerCase(),
         passwordHash: 'h',
         isEmailVerified: true,
+        createdAt: new Date(Date.now() - 2000),
+      },
+    });
+    const exact = await prisma.user.create({
+      data: { email: upper, passwordHash: 'h', isEmailVerified: true },
+    });
+
+    expect((await authRepo.findUserByEmailInsensitive(upper))?.id).toBe(
+      exact.id,
+    );
+  });
+
+  it('refuses when several verified variants match and none is the exact case', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const base = `pwl-it-amb-${stamp}@example.com`;
+    await prisma.user.create({
+      data: { email: base, passwordHash: 'h', isEmailVerified: true },
+    });
+    await prisma.user.create({
+      data: {
+        email: base.toUpperCase(),
+        passwordHash: 'h',
+        isEmailVerified: true,
       },
     });
 
+    await expect(
+      authRepo.findUserByEmailInsensitive(`Pwl-It-Amb-${stamp}@Example.com`),
+    ).rejects.toThrow(AmbiguousEmailAccountError);
+  });
+
+  it('signs an exact-case OAuth email into its own account and leaves the lowercase twin unlinked', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const lower = `pwl-it-twin-${stamp}@example.com`;
+    const twin = await prisma.user.create({
+      data: {
+        email: lower,
+        passwordHash: 'h',
+        isEmailVerified: true,
+        createdAt: new Date(Date.now() - 2000),
+      },
+    });
+    const exact = await prisma.user.create({
+      data: {
+        email: lower.toUpperCase(),
+        passwordHash: 'h',
+        isEmailVerified: true,
+      },
+    });
+
+    const result = await findOrCreateParentByVerifiedEmail(
+      {
+        authRepository: authRepo,
+        passwordService: { hashPassword: () => Promise.resolve('x') },
+      },
+      {
+        email: lower.toUpperCase(),
+        emailVerified: true,
+        googleId: `pwl-it-g-${stamp}`,
+        matchEmailCaseInsensitively: true,
+      },
+    );
+
+    expect(result.user.id).toBe(exact.id);
     expect(
-      (await authRepo.findUserByEmailInsensitive(upper.toLowerCase()))?.id,
-    ).toBe(older.id);
+      (await prisma.user.findUniqueOrThrow({ where: { id: twin.id } }))
+        .googleId,
+    ).toBeNull();
+  });
+
+  it.each([
+    ['suspended', { isSuspended: true }],
+    ['deleted', { isDeleted: true }],
+  ])(
+    'leaves an unverified %s account and its sessions untouched when a takeover is attempted',
+    async (_label, flags) => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const stamp = `${process.pid}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-inactive-${stamp}@example.com`,
+          passwordHash: 'original',
+          isEmailVerified: false,
+          ...flags,
+        },
+      });
+      await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-ia-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+
+      await expect(
+        authRepo.takeOverUnverifiedAccount(user.id, {
+          passwordHash: 'rotated',
+          isEmailVerified: true,
+        }),
+      ).rejects.toThrow(AccountAlreadyVerifiedError);
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(after).toMatchObject({
+        passwordHash: 'original',
+        isEmailVerified: false,
+      });
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        1,
+      );
+    },
+  );
+
+  describe('registration session racing a takeover', () => {
+    const registrant = async () => {
+      const stamp = `${process.pid}-${++n}`;
+      return prisma.user.create({
+        data: {
+          email: `pwl-it-reg-${stamp}@example.com`,
+          passwordHash: 'registrant-hash',
+          isEmailVerified: false,
+        },
+      });
+    };
+    const takeOverData = {
+      passwordHash: 'rotated',
+      isEmailVerified: true,
+    };
+
+    it('refuses the registrant a session once the takeover has committed', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const tokens = new TokenService(
+        new JwtService({ secret: 's' }),
+        authRepo,
+      );
+      const user = await registrant();
+      await authRepo.takeOverUnverifiedAccount(user.id, takeOverData);
+
+      await expect(
+        tokens.createTokenPair(user as never, { requireUnverified: true }),
+      ).rejects.toThrow(AccountAlreadyVerifiedError);
+
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        0,
+      );
+    });
+
+    it('never leaves a registrant session on an account the takeover verified', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const tokens = new TokenService(
+        new JwtService({ secret: 's' }),
+        authRepo,
+      );
+      for (let round = 0; round < 12; round++) {
+        const user = await registrant();
+
+        await Promise.allSettled([
+          authRepo.takeOverUnverifiedAccount(user.id, takeOverData),
+          tokens.createTokenPair(user as never, { requireUnverified: true }),
+        ]);
+
+        const after = await prisma.user.findUniqueOrThrow({
+          where: { id: user.id },
+        });
+        expect(after.isEmailVerified).toBe(true);
+        expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+          0,
+        );
+      }
+    });
   });
 
   it('keeps an existing provider id when a verified-email match arrives with a different one', async () => {

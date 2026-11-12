@@ -993,6 +993,51 @@ describe('PasswordlessService', () => {
       expect(captured).toHaveLength(before + 1);
     });
 
+    it('does not count a correct code toward the failed-attempt cap', async () => {
+      const { service, captured, redis } = build();
+      await service.request('target@example.com', '1.1.1.1');
+
+      await service.verify('target@example.com', captured[0].code, '41.0.0.1');
+
+      const key = `pwl:fail:email:${nodeCrypto.createHmac('sha256', PEPPER).update('target@example.com').digest('hex')}`;
+      expect(Number((await redis.client.get(key)) ?? 0)).toBe(0);
+    });
+
+    it('keeps signing the owner in after more successful logins than the failed-attempt cap', async () => {
+      const { service, captured } = build();
+      for (let i = 0; i < 22; i++) {
+        await service.request('owner@example.com', '203.0.113.5');
+        await expect(
+          service.verify(
+            'owner@example.com',
+            captured[captured.length - 1].code,
+            '203.0.113.5',
+          ),
+        ).resolves.toBeDefined();
+        jest.advanceTimersByTime(61 * 60_000);
+      }
+    });
+
+    it('signs nobody in when several verified accounts match the email and none is the exact case', async () => {
+      const { service, captured, authRepo } = build();
+      for (const email of ['Dup@example.com', 'dUp@example.com']) {
+        await authRepo.createUser({
+          email,
+          passwordHash: 'h',
+          isEmailVerified: true,
+          role: 'parent',
+        });
+      }
+      await service.request('dup@example.com', '1.1.1.1');
+
+      await expectGeneric(
+        service.verify('dup@example.com', captured[0].code, '41.0.0.1'),
+      );
+
+      expect(authRepo.sessions).toHaveLength(0);
+      expect(authRepo.users).toHaveLength(2);
+    });
+
     it('lets the right code through before the cap is reached', async () => {
       const { service, captured } = build();
       await service.request('target@example.com', '1.1.1.1');

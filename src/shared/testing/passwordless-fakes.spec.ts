@@ -3,6 +3,7 @@ import {
   InMemoryLoginChallengeRepository,
   InMemoryRedis,
 } from './passwordless-fakes';
+import { AmbiguousEmailAccountError } from '@/auth/repositories/ambiguous-email-account.error';
 import {
   DECR_CLAMPED,
   INCR_WITH_EXPIRY,
@@ -117,16 +118,34 @@ describe('InMemoryAuthRepository.findUserByEmailInsensitive', () => {
     return user;
   };
 
-  it('prefers the oldest verified match over an exact-case unverified one', async () => {
+  it('prefers the only verified match over an exact-case unverified one', async () => {
     const repo = new InMemoryAuthRepository();
     await seed(repo, 'case@x.co', false, 30);
-    const newerVerified = await seed(repo, 'CASE@x.co', true, 10);
-    const olderVerified = await seed(repo, 'cAsE@x.co', true, 20);
+    const verified = await seed(repo, 'CASE@x.co', true, 20);
 
     const found = await repo.findUserByEmailInsensitive('case@x.co');
 
-    expect(found?.id).toBe(olderVerified.id);
-    expect(found?.id).not.toBe(newerVerified.id);
+    expect(found?.id).toBe(verified.id);
+  });
+
+  it('prefers an exact-case verified match over an older verified variant', async () => {
+    const repo = new InMemoryAuthRepository();
+    await seed(repo, 'a@x.co', true, 30);
+    const exact = await seed(repo, 'A@x.co', true, 10);
+
+    const found = await repo.findUserByEmailInsensitive('A@x.co');
+
+    expect(found?.id).toBe(exact.id);
+  });
+
+  it('refuses when several verified variants match and none is the exact case', async () => {
+    const repo = new InMemoryAuthRepository();
+    await seed(repo, 'a@x.co', true, 30);
+    await seed(repo, 'A@x.co', true, 20);
+
+    await expect(repo.findUserByEmailInsensitive('A@X.co')).rejects.toThrow(
+      AmbiguousEmailAccountError,
+    );
   });
 
   it('falls back to the exact-case match, then the oldest', async () => {
@@ -146,6 +165,68 @@ describe('InMemoryAuthRepository.findUserByEmailInsensitive', () => {
     expect(
       await new InMemoryAuthRepository().findUserByEmailInsensitive('n@x.co'),
     ).toBeNull();
+  });
+});
+
+describe('InMemoryAuthRepository.linkGoogleAccountIfUnset with a session', () => {
+  const setup = async () => {
+    const repo = new InMemoryAuthRepository();
+    const user = await repo.createUser({
+      email: 'a@x.co',
+      passwordHash: 'h',
+      isEmailVerified: true,
+    });
+    const other = await repo.createUser({
+      email: 'b@x.co',
+      passwordHash: 'h',
+      isEmailVerified: true,
+    });
+    const session = await repo.createSession({
+      userId: user.id,
+      token: 't',
+      expiresAt: minutes(60),
+    });
+    return { repo, user, other, session };
+  };
+
+  it('links when the session belongs to the user', async () => {
+    const { repo, user, session } = await setup();
+
+    const result = await repo.linkGoogleAccountIfUnset(
+      user.id,
+      'g1',
+      session.id,
+    );
+
+    expect(result).toEqual({ count: 1 });
+    expect(user.googleId).toBe('g1');
+  });
+
+  it('does not link when the session no longer exists', async () => {
+    const { repo, user, session } = await setup();
+    await repo.deleteAllUserSessions(user.id);
+
+    const result = await repo.linkGoogleAccountIfUnset(
+      user.id,
+      'g1',
+      session.id,
+    );
+
+    expect(result).toEqual({ count: 0 });
+    expect(user.googleId).toBeNull();
+  });
+
+  it('does not link when the session belongs to another user', async () => {
+    const { repo, other, session } = await setup();
+
+    const result = await repo.linkAppleAccountIfUnset(
+      other.id,
+      'ap1',
+      session.id,
+    );
+
+    expect(result).toEqual({ count: 0 });
+    expect(other.appleId).toBeNull();
   });
 });
 

@@ -129,6 +129,11 @@ export interface IAuthRepository {
     token: string;
     expiresAt: Date;
   }): Promise<Session>;
+  createSessionForUnverifiedUser(data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<Session>;
   /**
    * Stamp User.lastLoginAt = now for an active (not suspended / deleted) user.
    * Callers treat this as best-effort.

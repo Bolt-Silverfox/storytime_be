@@ -16,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserEmailVerifiedEvent } from '@/shared/events/app-events';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
+import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
 import {
   AUTH_REPOSITORY,
   IAuthRepository,
@@ -188,7 +189,12 @@ export class OAuthService {
           googleId,
           appleId,
         },
-      );
+      ).catch((error: unknown) => {
+        if (error instanceof AmbiguousEmailAccountError) {
+          throw new UnauthorizedException('This account is not available.');
+        }
+        throw error;
+      });
       ({ user } = resolved);
       if (resolved.newlyVerified) {
         this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, {

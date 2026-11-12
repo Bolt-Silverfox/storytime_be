@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AccountAlreadyVerifiedError } from './account-already-verified.error';
+import { AmbiguousEmailAccountError } from './ambiguous-email-account.error';
 import type {
   User,
   Profile,
@@ -39,13 +40,14 @@ export class PrismaAuthRepository implements IAuthRepository {
     const matches = await this.prisma.$queryRaw<User[]>(
       Prisma.sql`SELECT * FROM "users" WHERE lower("email") = lower(${email}) ORDER BY "createdAt" ASC, "id" ASC`,
     );
-    const verified = matches.find((user) => user.isEmailVerified);
-    return (
-      verified ??
-      matches.find((user) => user.email === email) ??
-      matches[0] ??
-      null
-    );
+    const verified = matches.filter((user) => user.isEmailVerified);
+    if (verified.length > 0) {
+      const exact = verified.find((user) => user.email === email);
+      if (exact) return exact;
+      if (verified.length > 1) throw new AmbiguousEmailAccountError();
+      return verified[0];
+    }
+    return matches.find((user) => user.email === email) ?? matches[0] ?? null;
   }
 
   async findUserByEmailWithRelations(
@@ -251,6 +253,21 @@ export class PrismaAuthRepository implements IAuthRepository {
     return this.prisma.session.create({ data });
   }
 
+  async createSessionForUnverifiedUser(data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<Session> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${data.userId} FOR SHARE`;
+      const unverified = await tx.user.count({
+        where: { id: data.userId, isEmailVerified: false },
+      });
+      if (unverified === 0) throw new AccountAlreadyVerifiedError();
+      return tx.session.create({ data });
+    });
+  }
+
   async recordLastLogin(userId: string): Promise<void> {
     // updateMany so a missing / suspended / deleted user is a silent no-op, not a throw.
     await this.prisma.user.updateMany({
@@ -300,7 +317,12 @@ export class PrismaAuthRepository implements IAuthRepository {
       await tx.deviceToken.deleteMany({ where: { userId: id } });
       await tx.token.deleteMany({ where: { userId: id } });
       const { count } = await tx.user.updateMany({
-        where: { id, isEmailVerified: false },
+        where: {
+          id,
+          isEmailVerified: false,
+          isSuspended: false,
+          isDeleted: false,
+        },
         data: data as Parameters<typeof tx.user.updateMany>[0]['data'],
       });
       if (count === 0) throw new AccountAlreadyVerifiedError();

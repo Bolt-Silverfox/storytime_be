@@ -13,6 +13,7 @@ import {
   LoginResponseDto,
 } from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -103,7 +104,17 @@ export class OnboardingService {
     });
     this.eventEmitter.emit('admin.sse.stats', { trigger: 'user_created' });
 
-    const tokenData = await this.tokenService.createTokenPair(user);
+    let tokenData;
+    try {
+      tokenData = await this.tokenService.createTokenPair(user, {
+        requireUnverified: true,
+      });
+    } catch (error) {
+      if (error instanceof AccountAlreadyVerifiedError) {
+        throw new ResourceAlreadyExistsException('User', 'email', data.email);
+      }
+      throw error;
+    }
 
     return {
       user: new UserDto({ ...user, numberOfKids: 0 }),
