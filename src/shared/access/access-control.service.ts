@@ -41,6 +41,7 @@ export class AccessControlService {
   async assertKidAccess(auth: JwtPayload, kidId: string): Promise<void> {
     this.assertId(kidId, 'kid');
     if (this.isAdmin(auth)) return;
+    this.assertId(auth.userId, 'user');
     const kid = await this.prisma.kid.findFirst({
       where: { id: kidId, parentId: auth.userId, isDeleted: false },
       select: { id: true },

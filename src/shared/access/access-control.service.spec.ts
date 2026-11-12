@@ -73,4 +73,17 @@ describe('AccessControlService input hardening', () => {
       }),
     );
   });
+
+  it.each([
+    ['undefined', undefined],
+    ['empty string', ''],
+  ])(
+    'assertKidAccess fails closed for a non-admin whose userId is %s',
+    async (_label, userId) => {
+      await expect(
+        service.assertKidAccess(auth(userId as string), 'some-kid'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(findFirst).not.toHaveBeenCalled();
+    },
+  );
 });
