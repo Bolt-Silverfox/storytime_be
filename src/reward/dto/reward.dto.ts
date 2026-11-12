@@ -6,7 +6,9 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   Min,
+  ValidateIf,
 } from 'class-validator';
 
 export const REWARD_REDEMPTION_STATUSES = [
@@ -28,6 +30,7 @@ export class CreateRewardDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
+  @Max(2147483647)
   @ApiProperty()
   points: number;
   @IsOptional()
@@ -41,7 +44,7 @@ export class CreateRewardDto {
 }
 
 export class UpdateRewardDto {
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @IsNotEmpty()
   @ApiProperty({ required: false })
@@ -50,10 +53,11 @@ export class UpdateRewardDto {
   @IsString()
   @ApiProperty({ required: false })
   description?: string;
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @Type(() => Number)
   @IsInt()
   @Min(0)
+  @Max(2147483647)
   @ApiProperty({ required: false })
   points?: number;
   @IsOptional()

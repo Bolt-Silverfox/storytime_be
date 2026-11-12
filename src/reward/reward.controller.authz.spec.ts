@@ -274,6 +274,30 @@ describe('RewardController authorization', () => {
       expect(rewards.create).toHaveBeenCalledTimes(1);
     });
 
+    it('rejects null for non-nullable update fields and out-of-range points', async () => {
+      const patch = (body: object) =>
+        asAlice(http().patch(`/rewards/${REWARD_ID}`).send(body));
+      await patch({ name: null }).expect(400);
+      await patch({ points: null }).expect(400);
+      await patch({ points: 3_000_000_000 }).expect(400);
+      await patch({ points: 2_147_483_647 }).expect(200);
+      expect(rewards.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects negative and overflowing points on create', async () => {
+      const body = { name: 'n', kidId: ALICE_KID };
+      const create = (points: number) =>
+        asAlice(
+          http()
+            .post('/rewards')
+            .send({ ...body, points }),
+        );
+      await create(-1).expect(400);
+      await create(3_000_000_000).expect(400);
+      await create(2_147_483_647).expect(201);
+      expect(rewards.create).toHaveBeenCalledTimes(1);
+    });
+
     it('PATCH /rewards/:id accepts a partial body and rejects unknown properties', async () => {
       await asAlice(
         http().patch(`/rewards/${REWARD_ID}`).send({ points: 5, name: 'n' }),

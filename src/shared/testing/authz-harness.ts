@@ -103,6 +103,7 @@ export async function createAuthzApp(
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      transformOptions: { enableImplicitConversion: true },
     }),
   );
   await app.init();

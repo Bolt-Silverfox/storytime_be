@@ -142,6 +142,15 @@ describe('ReportsController authorization', () => {
       expect(screenTime.startScreenTimeSession).toHaveBeenCalledTimes(1);
     });
 
+    it('POST /reports/screen-time/start rejects an empty kidId', async () => {
+      await http()
+        .post('/reports/screen-time/start')
+        .set('Authorization', bearer('alice'))
+        .send({ kidId: '' })
+        .expect(400);
+      expect(screenTime.startScreenTimeSession).not.toHaveBeenCalled();
+    });
+
     it('POST /reports/screen-time/end accepts a valid body and rejects unknown properties', async () => {
       await http()
         .post('/reports/screen-time/end')
