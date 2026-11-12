@@ -1156,6 +1156,74 @@ describe('processGutenbergText title page line', () => {
   });
 });
 
+describe('processGutenbergText title page residue', () => {
+  const run = (body: string) => processGutenbergText(wrap(body), plain());
+  const STORY_WORDS = STORY.split(' ').length;
+
+  it.each([
+    [
+      'a byline paragraph after the title',
+      `Lantern Fox\n\nBy Ada Example\n\n${STORY}`,
+    ],
+    [
+      'a lower-case byline with a full stop',
+      `Lantern Fox\n\nby ada example.\n\n${STORY}`,
+    ],
+    ['a byline with no title paragraph', `BY ADA EXAMPLE\n\n${STORY}`],
+    [
+      'a byline in the title paragraph',
+      `LANTERN FOX\nBy Ada Example\n\n${STORY}`,
+    ],
+    [
+      'a byline around an illustration',
+      `Lantern Fox\n\n[Illustration]\n\nBy Ada Example\n\n${STORY}`,
+    ],
+  ])('drops %s from content and word count', (_n, body) => {
+    const r = run(body);
+    if (!r.ok) throw new Error(`expected ok, got ${r.reason}`);
+    expect(r.content).toBe(STORY);
+    expect(r.wordCount).toBe(STORY_WORDS);
+  });
+
+  it.each([
+    [
+      'a subtitle paragraph after the title',
+      "Lantern Fox\n\nOr, The Fox's Lantern\n\n" + STORY,
+    ],
+    [
+      'an all-capitals tagline after the title',
+      `Lantern Fox\n\nA TALE FOR CHILDREN.\n\n${STORY}`,
+    ],
+    [
+      'a subtitle line in the title paragraph',
+      `LANTERN FOX\nA tale for children\n\n${STORY}`,
+    ],
+    [
+      'a byline naming someone else',
+      `Lantern Fox\n\nBy Someone Else\n\n${STORY}`,
+    ],
+    [
+      'a title paragraph followed by a non-byline line',
+      `Lantern Fox\nBy the light of the moon, a fox walked home.\n\n${STORY}`,
+    ],
+  ])('routes %s to review', (_n, body) => {
+    expect(run(body)).toEqual({ ok: false, reason: 'title-page-ambiguous' });
+  });
+
+  it('keeps a full first sentence that follows the title', () => {
+    const r = run(`Lantern Fox\n\n${STORY}`);
+    expect(r).toMatchObject({ ok: true, content: STORY });
+  });
+
+  it('does not treat a byline after story text as title page residue', () => {
+    const r = run(`${STORY}\n\nBy Ada Example\n\n${STORY}`);
+    expect(r).toMatchObject({
+      ok: true,
+      content: `${STORY}\n\nBy Ada Example\n\n${STORY}`,
+    });
+  });
+});
+
 describe('processGutenbergText word cap', () => {
   it('never allows more than the hard cap, even when maxWords is raised', () => {
     const body = Array.from({ length: 700 }, () => STORY).join('\n\n');

@@ -47,7 +47,8 @@ routes (`/admin/...`) are exempt so reviewers still see the source. The guest
 mapping applies the same helper. Responses that do not go through the HTTP
 interceptor chain (websockets, queue payloads, logs) are not covered: do not put
 raw story rows there. CC BY sources keep `sourceUrl` because the licence needs
-the link back.
+the link back, except that a CC BY row whose `sourceName` or `sourceUrl` looks
+like a gutenberg host or path is deliberately over-masked.
 
 ### How internal fields stay hidden
 

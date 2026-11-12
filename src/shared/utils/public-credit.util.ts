@@ -45,9 +45,12 @@ const isWalkable = (v: unknown): v is object =>
   !(v instanceof ArrayBuffer);
 
 /**
- * Returns `value` with sourceName/sourceUrl nulled on every nested object that
- * is a public-domain credit row. Copy on write: never mutates the input (it may
- * be a cached object) and returns the same reference when nothing changed.
+ * Returns `value` with sourceName/sourceUrl nulled on nested objects that are
+ * public-domain credit rows. Not every nested row is masked: a cyclic
+ * back-reference is returned as the original object, and a toJSON that depends
+ * on its key argument is called without one, so its keyed output is not seen.
+ * Copy on write: never mutates the input (it may be a cached object) and
+ * returns the same reference when nothing changed.
  */
 export function maskSourceFieldsForPublic<T>(value: T): T {
   return walk(value, new Map(), 0) as T;

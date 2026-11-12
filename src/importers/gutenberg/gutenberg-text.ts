@@ -21,6 +21,7 @@ export type ProcessFailure =
   | 'residual-reference'
   | 'empty-after-clean'
   | 'heading-ambiguous'
+  | 'title-page-ambiguous'
   | 'illustration-unclosed'
   | 'oversized';
 
@@ -276,6 +277,38 @@ const HEADING_AMBIGUOUS = {
   ok: false,
   reason: 'heading-ambiguous',
 } as const;
+const TITLE_PAGE_AMBIGUOUS = {
+  ok: false,
+  reason: 'title-page-ambiguous',
+} as const;
+
+const BYLINE = /^by\s+(.+?)[\s.]*$/i;
+const MAX_TAGLINE_WORDS = 12;
+const nameTokens = (s: string): string[] =>
+  s
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+
+function isBylineFor(text: string, author: string | null): boolean {
+  const m = BYLINE.exec(text);
+  if (!m || !author) return false;
+  const named = nameTokens(m[1]);
+  const known = new Set(nameTokens(author));
+  return named.length > 0 && named.every((t) => known.has(t));
+}
+
+function looksLikeTagline(lines: string[]): boolean {
+  if (lines.length !== 1 || HEADING.test(lines[0])) return false;
+  const line = lines[0];
+  if (line.split(/\s+/).length > MAX_TAGLINE_WORDS) return false;
+  return (
+    !/[.!?…"”’']$/.test(line) ||
+    !/\p{Ll}/u.test(line) ||
+    /^(?:or|being)\b[\s,]/i.test(line)
+  );
+}
 
 /** Linear removal of [Illustration ...]; an unclosed one is reported, not dropped. */
 function stripIllustrations(p: string): {
@@ -430,6 +463,7 @@ export function processGutenbergText(
   const titleLc = hTitle === null ? null : hTitle.toLowerCase();
 
   let titleDropped = false;
+  let afterTitle = false;
   let next = 0;
   let carry: string[] | null = null;
   while (carry || next < paras.length) {
@@ -484,14 +518,34 @@ export function processGutenbergText(
     }
     // An ebook number inside a story sentence is NOT deleted (that would drop
     // story words); it stays and the final residual check fails the work.
-    if (
-      !titleDropped &&
-      out.length === 0 &&
-      matchForm(p).toLowerCase() === titleLc
-    ) {
+    const leading = out.length === 0;
+    const isTitle = (t: string) => matchForm(t).toLowerCase() === titleLc;
+    if (!titleDropped && leading && isTitle(p)) {
       titleDropped = true;
+      afterTitle = true;
       continue;
     }
+    if (leading && !titleDropped && pLines.length > 1 && isTitle(pLines[0])) {
+      if (!isBylineFor(matchForm(unwrap(pLines.slice(1))), hAuthor))
+        return TITLE_PAGE_AMBIGUOUS;
+      titleDropped = true;
+      afterTitle = true;
+      notes.add('title page byline removed');
+      continue;
+    }
+    if (leading && isBylineFor(matchForm(p), hAuthor)) {
+      notes.add('title page byline removed');
+      continue;
+    }
+    if (
+      leading &&
+      afterTitle &&
+      !isTitle(p) &&
+      looksLikeTagline(pLines.map(matchForm))
+    ) {
+      return TITLE_PAGE_AMBIGUOUS;
+    }
+    afterTitle = false;
 
     let headings = 0;
     while (headings < pLines.length) {

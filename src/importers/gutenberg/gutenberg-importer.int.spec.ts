@@ -20,10 +20,14 @@ const describeDb = canRunDestructiveDbTests(process.env.DATABASE_URL)
   : describe.skip;
 
 const FX = path.resolve('test/fixtures/gutenberg');
-const tag = `gint${Date.now()}`;
+const runKey = `${Date.now()}${Math.floor(Math.random() * 1e6)}`;
+const tag = `gint${runKey}`;
+const FOX_ID = `9${runKey}1`;
+const SPOON_ID = `9${runKey}2`;
+const OWN_IDS = [FOX_ID, SPOON_ID];
 
 const entry = (over: Partial<AllowListEntry>): AllowListEntry => ({
-  ebookId: '90001',
+  ebookId: FOX_ID,
   title: 'The Little Lantern Fox',
   authorName: 'Ada Example',
   translator: { name: 'Bram Sample', deathYear: 1900 },
@@ -43,7 +47,7 @@ const entry = (over: Partial<AllowListEntry>): AllowListEntry => ({
 const LIST = [
   entry({}),
   entry({
-    ebookId: '90002',
+    ebookId: SPOON_ID,
     title: 'The Moon Spoon',
     authorName: 'Cy Invented',
     translator: undefined,
@@ -80,10 +84,10 @@ describeDb('GutenbergImporter (real Postgres)', () => {
 
   const clean = async () => {
     await prisma.story.deleteMany({
-      where: { sourceName: 'gutenberg', sourceId: { in: ['90001', '90002'] } },
+      where: { sourceName: 'gutenberg', sourceId: { in: OWN_IDS } },
     });
     await prisma.sourceCache.deleteMany({
-      where: { sourceName: 'gutenberg', sourceId: { in: ['90001', '90002'] } },
+      where: { sourceName: 'gutenberg', sourceId: { in: OWN_IDS } },
     });
   };
 
@@ -100,9 +104,12 @@ describeDb('GutenbergImporter (real Postgres)', () => {
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gcache-'));
     fs.copyFileSync(
       path.join(FX, '90001-0.txt'),
-      path.join(srcDir, '90001-0.txt'),
+      path.join(srcDir, `${FOX_ID}-0.txt`),
     );
-    fs.copyFileSync(path.join(FX, '90002.txt'), path.join(srcDir, '90002.txt'));
+    fs.copyFileSync(
+      path.join(FX, '90002.txt'),
+      path.join(srcDir, `${SPOON_ID}.txt`),
+    );
   });
   afterEach(() => {
     fs.rmSync(srcDir, { recursive: true, force: true });
@@ -117,7 +124,7 @@ describeDb('GutenbergImporter (real Postgres)', () => {
 
   const stories = () =>
     prisma.story.findMany({
-      where: { sourceName: 'gutenberg', sourceId: { in: ['90001', '90002'] } },
+      where: { sourceName: 'gutenberg', sourceId: { in: OWN_IDS } },
       omit: {
         sourceId: false,
         contentHash: false,
@@ -135,7 +142,7 @@ describeDb('GutenbergImporter (real Postgres)', () => {
       await prisma.sourceCache.count({
         where: {
           sourceName: 'gutenberg',
-          sourceId: { in: ['90001', '90002'] },
+          sourceId: { in: OWN_IDS },
         },
       }),
     ).toBe(0);
@@ -164,7 +171,7 @@ describeDb('GutenbergImporter (real Postgres)', () => {
         expect(f).not.toMatch(GUTENBERG_REFERENCE);
       }
     }
-    const fox = rows.find((s) => s.sourceId === '90001')!;
+    const fox = rows.find((s) => s.sourceId === FOX_ID)!;
     expect(fox.categories.map((c) => c.name)).toEqual([`${tag}-cat`]);
     expect(fox.themes).toHaveLength(1);
     expect(r.items[0].unmapped?.categories).toEqual([`${tag}-missing`]);
@@ -179,32 +186,32 @@ describeDb('GutenbergImporter (real Postgres)', () => {
     const r2 = await build().run({ mode: 'commit' });
     expect(r2.summary['skip-exists']).toBe(2);
     expect(await stories()).toHaveLength(2);
-    expect(reads.sort()).toEqual(['90001', '90002']);
+    expect(reads.sort()).toEqual(OWN_IDS);
   });
 
   it('changed upstream text sets contentChanged, leaves the story and its publish state alone', async () => {
     await build().run({ mode: 'commit' });
     await prisma.story.updateMany({
-      where: { sourceName: 'gutenberg', sourceId: '90001' },
+      where: { sourceName: 'gutenberg', sourceId: FOX_ID },
       data: { isPublished: true },
     });
-    const before = (await stories()).find((s) => s.sourceId === '90001')!;
-    const p = path.join(srcDir, '90001-0.txt');
+    const before = (await stories()).find((s) => s.sourceId === FOX_ID)!;
+    const p = path.join(srcDir, `${FOX_ID}-0.txt`);
     fs.writeFileSync(
       p,
       fs.readFileSync(p, 'utf8').replace('small fox', 'tiny fox'),
     );
     const later = new Date(Date.now() + 40 * 86_400_000); // past the 30-day cache window
     const r = await build(later).run({ mode: 'commit' });
-    expect(r.items.find((i) => i.ebookId === '90001')!.outcome).toBe('changed');
+    expect(r.items.find((i) => i.ebookId === FOX_ID)!.outcome).toBe('changed');
     const cache = await prisma.sourceCache.findUnique({
       where: {
-        sourceName_sourceId: { sourceName: 'gutenberg', sourceId: '90001' },
+        sourceName_sourceId: { sourceName: 'gutenberg', sourceId: FOX_ID },
       },
     });
     expect(cache?.contentChanged).toBe(true);
     expect(cache?.previousContentHash).toBe(before.contentHash);
-    const after = (await stories()).find((s) => s.sourceId === '90001')!;
+    const after = (await stories()).find((s) => s.sourceId === FOX_ID)!;
     expect(after.textContent).toBe(before.textContent);
     expect(after.contentHash).toBe(before.contentHash);
     expect(after.isPublished).toBe(true);
