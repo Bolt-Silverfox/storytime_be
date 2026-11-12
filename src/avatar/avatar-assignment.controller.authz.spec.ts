@@ -11,9 +11,10 @@ import {
   createAuthzApp,
 } from '@/shared/testing/authz-harness';
 
-const PNG = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0,
-]);
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 describe('AvatarAssignmentController authorization', () => {
   let app: INestApplication;
@@ -137,5 +138,28 @@ describe('AvatarAssignmentController authorization', () => {
       .send({ avatarId: 'a', userId: BOB })
       .expect(201);
     expect(avatars.assignAvatarToUser).toHaveBeenLastCalledWith(BOB, 'a');
+  });
+
+  it('lets the kid owner and an admin upload kid avatars', async () => {
+    await http()
+      .post('/avatars/upload/kid')
+      .set('Authorization', bearer('alice'))
+      .field('kidId', ALICE_KID)
+      .attach('image', PNG, { filename: 'a.png', contentType: 'image/png' })
+      .expect(201);
+    expect(avatars.uploadAndAssignKidAvatar).toHaveBeenLastCalledWith(
+      ALICE_KID,
+      expect.objectContaining({ mimetype: 'image/png' }),
+    );
+    await http()
+      .post('/avatars/upload/kid')
+      .set('Authorization', bearer('admin'))
+      .field('kidId', BOB_KID)
+      .attach('image', PNG, { filename: 'a.png', contentType: 'image/png' })
+      .expect(201);
+    expect(avatars.uploadAndAssignKidAvatar).toHaveBeenLastCalledWith(
+      BOB_KID,
+      expect.anything(),
+    );
   });
 });
