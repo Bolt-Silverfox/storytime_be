@@ -750,8 +750,19 @@ describe('Authentication (e2e)', () => {
 function createMockPrismaService() {
   const { users, sessions, tokens } = mockState;
 
-  return {
+  const prisma: Record<string, unknown> = {
+    $queryRaw: jest.fn(() => Promise.resolve([])),
     user: {
+      count: jest.fn(
+        ({ where }: { where: { id: string; isEmailVerified: boolean } }) =>
+          Promise.resolve(
+            [...users.values()].filter(
+              (u) =>
+                u.id === where.id &&
+                u.isEmailVerified === where.isEmailVerified,
+            ).length,
+          ),
+      ),
       findUnique: jest.fn(
         ({ where }: { where: { email?: string; id?: string } }) => {
           if (where.email) {
@@ -953,11 +964,11 @@ function createMockPrismaService() {
     $transaction: jest.fn(
       (operations: unknown[] | ((prisma: unknown) => Promise<unknown>)) => {
         if (typeof operations === 'function') {
-          // Interactive transaction - we don't support this in the mock, just resolve
-          return Promise.resolve(undefined);
+          return operations(prisma);
         }
         return Promise.all(operations as Promise<unknown>[]);
       },
     ),
   };
+  return prisma;
 }
