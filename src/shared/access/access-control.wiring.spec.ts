@@ -9,6 +9,7 @@ import { AvatarModule } from '@/avatar/avatar.module';
 import { RewardModule } from '@/reward/reward.module';
 import { ReportsModule } from '@/reports/reports.module';
 import { AnalyticsModule } from '@/analytics/analytics.module';
+import { StoryModule } from '@/story/story.module';
 
 describe('AccessControlService wiring', () => {
   it.each([
@@ -19,6 +20,7 @@ describe('AccessControlService wiring', () => {
     RewardModule,
     ReportsModule,
     AnalyticsModule,
+    StoryModule,
   ])(
     '$name imports AccessControlModule and has a controller injecting it',
     (mod) => {

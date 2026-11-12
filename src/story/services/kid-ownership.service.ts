@@ -42,9 +42,10 @@ export class KidOwnershipService {
   }
 
   /**
-   * Verifies the story exists and is owned (via its creator kid) by the given
-   * user. Throws NotFoundException when missing, ForbiddenException when it
-   * belongs to another user — preserving the original two-stage semantics.
+   * Verifies the story exists and, unless bypassOwnerCheck is true, that it is
+   * owned (via its creator kid) by the given user. Throws NotFoundException
+   * when missing, ForbiddenException when it belongs to another user. The
+   * existence and soft-delete checks always apply, including on bypass.
    */
   async getOwnedStoryOrThrow(
     storyId: string,
