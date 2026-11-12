@@ -23,6 +23,7 @@ import { DailyChallengeService } from '../src/story/daily-challenge.service';
 import { StoryQuotaService } from '../src/story/story-quota.service';
 import { SceneReadService } from '../src/story/scenes/scene-read.service';
 import { StoryQueueService } from '../src/story/queue';
+import { AccessControlService } from '../src/shared/access/access-control.service';
 import { KidOwnershipService } from '../src/story/services/kid-ownership.service';
 import { STORY_REPOSITORY } from '../src/story/repositories/story.repository.interface';
 import { PrismaStoryRepository } from '../src/story/repositories/prisma-story.repository';
@@ -315,6 +316,7 @@ describe('Story (e2e)', () => {
         // ownership service, so kid/story ownership checks continue to hit the
         // same mockPrismaService.kid.findFirst / story.findFirst stubs.
         KidOwnershipService,
+        AccessControlService,
         { provide: STORY_REPOSITORY, useClass: PrismaStoryRepository },
       ],
     })
