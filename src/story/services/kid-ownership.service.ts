@@ -50,6 +50,7 @@ export class KidOwnershipService {
     storyId: string,
     userId: string,
     includeDeleted = false,
+    bypassOwnerCheck = false,
   ): Promise<StoryWithCreatorParent> {
     const story = await this.storyRepository.findStoryByIdWithCreatorParent(
       storyId,
@@ -58,6 +59,7 @@ export class KidOwnershipService {
     if (!story) {
       throw new NotFoundException(`Story ${storyId} not found`);
     }
+    if (bypassOwnerCheck) return story;
     if (!story.creatorKidId || story.creatorKid?.parentId !== userId) {
       throw new ForbiddenException(
         'You do not have permission to modify this story',
