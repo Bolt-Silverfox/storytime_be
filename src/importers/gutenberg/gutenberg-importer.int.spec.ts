@@ -22,8 +22,9 @@ const describeDb = canRunDestructiveDbTests(process.env.DATABASE_URL)
 const FX = path.resolve('test/fixtures/gutenberg');
 const runKey = `${Date.now()}${Math.floor(Math.random() * 1e6)}`;
 const tag = `gint${runKey}`;
-const FOX_ID = `9${runKey}1`;
-const SPOON_ID = `9${runKey}2`;
+const idBase = 100000 + Math.floor(Math.random() * 900000);
+const FOX_ID = `${idBase}1`;
+const SPOON_ID = `${idBase}2`;
 const OWN_IDS = [FOX_ID, SPOON_ID];
 
 const entry = (over: Partial<AllowListEntry>): AllowListEntry => ({
@@ -82,6 +83,15 @@ describeDb('GutenbergImporter (real Postgres)', () => {
     });
   };
 
+  const stage = (fixture: string, target: string, marker: string) => {
+    const text = fs.readFileSync(path.join(FX, fixture), 'utf8');
+    expect(text).toContain(marker);
+    fs.writeFileSync(
+      path.join(srcDir, target),
+      text.replace(marker, `${marker} (run ${runKey})`),
+    );
+  };
+
   const clean = async () => {
     await prisma.story.deleteMany({
       where: { sourceName: 'gutenberg', sourceId: { in: OWN_IDS } },
@@ -102,14 +112,8 @@ describeDb('GutenbergImporter (real Postgres)', () => {
     reads = [];
     srcDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gsrc-'));
     cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'gcache-'));
-    fs.copyFileSync(
-      path.join(FX, '90001-0.txt'),
-      path.join(srcDir, `${FOX_ID}-0.txt`),
-    );
-    fs.copyFileSync(
-      path.join(FX, '90002.txt'),
-      path.join(srcDir, `${SPOON_ID}.txt`),
-    );
+    stage('90001-0.txt', `${FOX_ID}-0.txt`, 'Once upon a time');
+    stage('90002.txt', `${SPOON_ID}.txt`, 'A spoon fell from the moon');
   });
   afterEach(() => {
     fs.rmSync(srcDir, { recursive: true, force: true });
