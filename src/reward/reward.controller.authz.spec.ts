@@ -240,4 +240,80 @@ describe('RewardController authorization', () => {
       expect(rewards.redeemReward).toHaveBeenCalledWith(dto);
     });
   });
+
+  describe('request body validation', () => {
+    const asAlice = (req: request.Test) =>
+      req.set('Authorization', bearer('alice'));
+
+    beforeEach(() => {
+      rewards.create.mockResolvedValue({ id: REWARD_ID });
+      rewards.redeemReward.mockResolvedValue({ id: 'r1' });
+      rewards.updateRedemptionStatus.mockResolvedValue({ id: 'r1' });
+    });
+
+    it('POST /rewards accepts a valid body and rejects unknown properties', async () => {
+      const body = {
+        name: 'Ice cream',
+        description: 'treat',
+        points: 10,
+        imageUrl: 'https://example.com/a.png',
+        kidId: ALICE_KID,
+      };
+      await asAlice(http().post('/rewards').send(body)).expect(201);
+      expect(rewards.create).toHaveBeenCalledWith(body);
+      await asAlice(
+        http()
+          .post('/rewards')
+          .send({ ...body, extra: 1 }),
+      ).expect(400);
+      await asAlice(
+        http()
+          .post('/rewards')
+          .send({ ...body, points: 'ten' }),
+      ).expect(400);
+      expect(rewards.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('PATCH /rewards/:id accepts a partial body and rejects unknown properties', async () => {
+      await asAlice(
+        http().patch(`/rewards/${REWARD_ID}`).send({ points: 5, name: 'n' }),
+      ).expect(200);
+      expect(rewards.update).toHaveBeenCalledTimes(1);
+      await asAlice(
+        http().patch(`/rewards/${REWARD_ID}`).send({ kidId: BOB_KID }),
+      ).expect(400);
+      expect(rewards.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('POST /rewards/redeem accepts a valid body and rejects unknown properties', async () => {
+      const body = { rewardId: REWARD_ID, kidId: ALICE_KID };
+      await asAlice(http().post('/rewards/redeem').send(body)).expect(201);
+      expect(rewards.redeemReward).toHaveBeenCalledWith(body);
+      await asAlice(
+        http()
+          .post('/rewards/redeem')
+          .send({ ...body, extra: true }),
+      ).expect(400);
+      expect(rewards.redeemReward).toHaveBeenCalledTimes(1);
+    });
+
+    it('PATCH /rewards/redemption/status accepts a known status and rejects others', async () => {
+      const body = { redemptionId: REWARD_ID, status: 'approved' };
+      await asAlice(
+        http().patch('/rewards/redemption/status').send(body),
+      ).expect(200);
+      expect(rewards.updateRedemptionStatus).toHaveBeenCalledWith(body);
+      await asAlice(
+        http()
+          .patch('/rewards/redemption/status')
+          .send({ ...body, extra: 1 }),
+      ).expect(400);
+      await asAlice(
+        http()
+          .patch('/rewards/redemption/status')
+          .send({ ...body, status: 'bogus' }),
+      ).expect(400);
+      expect(rewards.updateRedemptionStatus).toHaveBeenCalledTimes(1);
+    });
+  });
 });

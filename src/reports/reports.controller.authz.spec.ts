@@ -124,4 +124,37 @@ describe('ReportsController authorization', () => {
     await controller.endScreenTime({ sessionId: SESSION }, aliceReq);
     expect(screenTime.endScreenTimeSession).toHaveBeenCalledWith(SESSION);
   });
+
+  describe('screen-time request body validation', () => {
+    it('POST /reports/screen-time/start accepts a valid body and rejects unknown properties', async () => {
+      screenTime.startScreenTimeSession.mockResolvedValue({ sessionId: 's' });
+      await http()
+        .post('/reports/screen-time/start')
+        .set('Authorization', bearer('alice'))
+        .send({ kidId: ALICE_KID })
+        .expect(201);
+      expect(screenTime.startScreenTimeSession).toHaveBeenCalledWith(ALICE_KID);
+      await http()
+        .post('/reports/screen-time/start')
+        .set('Authorization', bearer('alice'))
+        .send({ kidId: ALICE_KID, extra: 1 })
+        .expect(400);
+      expect(screenTime.startScreenTimeSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('POST /reports/screen-time/end accepts a valid body and rejects unknown properties', async () => {
+      await http()
+        .post('/reports/screen-time/end')
+        .set('Authorization', bearer('alice'))
+        .send({ sessionId: SESSION })
+        .expect(201);
+      expect(screenTime.endScreenTimeSession).toHaveBeenCalledWith(SESSION);
+      await http()
+        .post('/reports/screen-time/end')
+        .set('Authorization', bearer('alice'))
+        .send({ sessionId: SESSION, extra: 1 })
+        .expect(400);
+      expect(screenTime.endScreenTimeSession).toHaveBeenCalledTimes(1);
+    });
+  });
 });
