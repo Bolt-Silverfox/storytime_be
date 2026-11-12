@@ -283,11 +283,28 @@ const TITLE_PAGE_AMBIGUOUS = {
 } as const;
 
 const BYLINE = /^by\s+(.+?)[\s.]*$/i;
+const BYLINE_SHAPE =
+  /^by\s+\p{Lu}\S*(?:\s+(?:\p{Lu}\S*|and|&|with|de|la|van|von|der|du|le|di|da)){0,7}[\s.]*$/iu;
 const MAX_TAGLINE_WORDS = 12;
+const LETTER_FOLD: Record<string, string> = {
+  Æ: 'AE',
+  æ: 'ae',
+  Œ: 'OE',
+  œ: 'oe',
+  Ø: 'O',
+  ø: 'o',
+  ß: 'ss',
+  Đ: 'D',
+  đ: 'd',
+  Ł: 'L',
+  ł: 'l',
+};
 const nameTokens = (s: string): string[] =>
   s
+    .replace(/[ÆæŒœØøßĐđŁł]/g, (c) => LETTER_FOLD[c])
+    .normalize('NFKD')
+    .replace(MARKS, '')
     .toLowerCase()
-    .replace(/\([^)]*\)/g, ' ')
     .split(/[^\p{L}\p{N}]+/u)
     .filter(Boolean);
 
@@ -299,14 +316,18 @@ function isBylineFor(text: string, author: string | null): boolean {
   return named.length > 0 && named.every((t) => known.has(t));
 }
 
+const OPENING_STRUCTURE =
+  /^(?:(?:chapter|book|part|stave|section|canto|act|scene|volume|vol\.?)\s+\S|(?:preface|introduction|prologue|epilogue|foreword|contents)\b|[ivxlcdm\d]+[.:]?$)/i;
+const SUBTITLE_FOR =
+  /^(?:a|an)\s+(?:\p{L}+\s+){0,2}(?:story|tale|stories|tales|fable|fables|poem)\s+for\s+\p{L}+(?:\s+\p{L}+){0,2}\.?$/iu;
+
 function looksLikeTagline(lines: string[]): boolean {
-  if (lines.length !== 1 || HEADING.test(lines[0])) return false;
+  if (lines.length !== 1) return false;
   const line = lines[0];
   if (line.split(/\s+/).length > MAX_TAGLINE_WORDS) return false;
+  if (OPENING_STRUCTURE.test(line)) return false;
   return (
-    !/[.!?…"”’']$/.test(line) ||
-    !/\p{Ll}/u.test(line) ||
-    /^(?:or|being)\b[\s,]/i.test(line)
+    !/\p{Ll}/u.test(line) || /^or,\s/i.test(line) || SUBTITLE_FOR.test(line)
   );
 }
 
@@ -519,6 +540,7 @@ export function processGutenbergText(
     // An ebook number inside a story sentence is NOT deleted (that would drop
     // story words); it stays and the final residual check fails the work.
     const leading = out.length === 0;
+    const isByline = (l: string) => BYLINE_SHAPE.test(matchForm(l));
     const isTitle = (t: string) => matchForm(t).toLowerCase() === titleLc;
     if (!titleDropped && leading && isTitle(p)) {
       titleDropped = true;
@@ -533,9 +555,15 @@ export function processGutenbergText(
       notes.add('title page byline removed');
       continue;
     }
+    if (leading && pLines.length > 1 && pLines.slice(1).some(isByline)) {
+      return TITLE_PAGE_AMBIGUOUS;
+    }
     if (leading && isBylineFor(matchForm(p), hAuthor)) {
       notes.add('title page byline removed');
       continue;
+    }
+    if (leading && pLines.length === 1 && isByline(pLines[0])) {
+      return TITLE_PAGE_AMBIGUOUS;
     }
     if (
       leading &&

@@ -1210,6 +1210,67 @@ describe('processGutenbergText title page residue', () => {
     expect(run(body)).toEqual({ ok: false, reason: 'title-page-ambiguous' });
   });
 
+  it.each([
+    ['CHAPTER ONE'],
+    ['Chapter One'],
+    ['CHAPTER THE FIRST'],
+    ['STAVE ONE'],
+    ['PREFACE'],
+    ['I.'],
+    ['Twinkle, twinkle, little star'],
+    ['The fox walked home'],
+  ])('keeps %s as the opening after the title', (opening) => {
+    const r = run(`Lantern Fox\n\n${opening}\n\n${STORY}`);
+    if (!r.ok) throw new Error(`expected ok, got ${r.reason}`);
+    expect(r.content).toContain(opening);
+  });
+
+  it.each([
+    ['James Matthew Barrie', 'J. M. Barrie (James Matthew)', 'Barrie'],
+    ['Selma Lagerlof', 'Selma Lagerl\u00f6f', 'Lagerl\u00f6f'],
+    ['Aesop', '\u00c6sop', '\u00c6sop'],
+  ])('drops a byline "By %s" for header author %s', (named, header, key) => {
+    const r = processGutenbergText(
+      wrap(
+        `Lantern Fox\n\nBy ${named}\n\n${STORY}`,
+        `Title: Lantern Fox\nAuthor: ${header}`,
+      ),
+      plain({ expect: { title: 'Lantern Fox', author: key } }),
+    );
+    expect(r).toMatchObject({ ok: true, content: STORY });
+  });
+
+  it.each([['By Dot Drawn'], ['By Ada Example and Dot Drawn']])(
+    'routes a first paragraph "%s" naming someone else to review',
+    (line) => {
+      expect(run(`${line}\n\n${STORY}`)).toEqual({
+        ok: false,
+        reason: 'title-page-ambiguous',
+      });
+    },
+  );
+
+  it('keeps a first sentence that merely starts with "By"', () => {
+    const line = 'By the light of the moon the fox walked home.';
+    expect(run(`${line}\n\n${STORY}`)).toMatchObject({ ok: true });
+  });
+
+  it('routes a wrapped title with a byline in one paragraph to review', () => {
+    expect(run(`THE TALE OF\nLANTERN FOX\nBY ADA EXAMPLE\n\n${STORY}`)).toEqual(
+      { ok: false, reason: 'title-page-ambiguous' },
+    );
+  });
+
+  it.each([['A Story for Children.'], ['A tale for the little ones.']])(
+    'routes the punctuated subtitle "%s" after the title to review',
+    (line) => {
+      expect(run(`Lantern Fox\n\n${line}\n\n${STORY}`)).toEqual({
+        ok: false,
+        reason: 'title-page-ambiguous',
+      });
+    },
+  );
+
   it('keeps a full first sentence that follows the title', () => {
     const r = run(`Lantern Fox\n\n${STORY}`);
     expect(r).toMatchObject({ ok: true, content: STORY });

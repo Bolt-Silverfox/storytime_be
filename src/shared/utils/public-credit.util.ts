@@ -49,6 +49,8 @@ const isWalkable = (v: unknown): v is object =>
  * public-domain credit rows. Not every nested row is masked: a cyclic
  * back-reference is returned as the original object, and a toJSON that depends
  * on its key argument is called without one, so its keyed output is not seen.
+ * A toJSON that drops licenseCode also hides the PD-US marker, so the output
+ * is masked only if sourceName or sourceUrl still names a gutenberg source.
  * Copy on write: never mutates the input (it may be a cached object) and
  * returns the same reference when nothing changed.
  */
