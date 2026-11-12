@@ -228,7 +228,10 @@ export class PasswordlessService {
     }
 
     await this.releaseFailedAttempt(emailHash);
-    const consumedEmail = await this.challenges.consumeById(challengeId, now);
+    const consumedEmail = await this.challenges.consumeById(
+      challengeId,
+      new Date(),
+    );
     if (!consumedEmail) throw this.invalid();
     return this.completeLogin(consumedEmail, challengeId, ip, guestSessionId);
   }

@@ -1038,6 +1038,22 @@ describe('PasswordlessService', () => {
       expect(authRepo.users).toHaveLength(2);
     });
 
+    it('refuses a code whose challenge expires while the verification is in flight', async () => {
+      const { service, captured, repo } = build();
+      await service.request('target@example.com', '1.1.1.1');
+      jest.advanceTimersByTime(600_000 - 1000);
+      const record = repo.recordAttempt.bind(repo);
+      jest.spyOn(repo, 'recordAttempt').mockImplementation(async (...args) => {
+        const attempt = await record(...args);
+        jest.advanceTimersByTime(2000);
+        return attempt;
+      });
+
+      await expectGeneric(
+        service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+      );
+    });
+
     it('lets the right code through before the cap is reached', async () => {
       const { service, captured } = build();
       await service.request('target@example.com', '1.1.1.1');

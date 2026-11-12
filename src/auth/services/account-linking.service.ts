@@ -41,7 +41,9 @@ export class AccountLinkingService {
   }
 
   private async assertSessionStillActive(sessionId?: string): Promise<void> {
-    if (sessionId && !(await this.authRepository.findSessionById(sessionId))) {
+    if (!sessionId) return;
+    const session = await this.authRepository.findSessionById(sessionId);
+    if (!session || session.isDeleted) {
       throw new UnauthorizedException('Session expired. Please sign in again.');
     }
   }

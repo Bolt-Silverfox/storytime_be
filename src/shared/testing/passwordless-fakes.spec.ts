@@ -230,6 +230,43 @@ describe('InMemoryAuthRepository.linkGoogleAccountIfUnset with a session', () =>
   });
 });
 
+describe('InMemoryAuthRepository sessions', () => {
+  const data = (userId: string) => ({
+    userId,
+    token: 't',
+    expiresAt: minutes(60),
+  });
+
+  it('does not reuse the id of a deleted session', async () => {
+    const repo = new InMemoryAuthRepository();
+    const first = await repo.createSession(data('u1'));
+    await repo.deleteAllUserSessions('u1');
+
+    const second = await repo.createSession(data('u1'));
+
+    expect(second.id).not.toBe(first.id);
+  });
+
+  it('does not link through a soft-revoked session', async () => {
+    const repo = new InMemoryAuthRepository();
+    const user = await repo.createUser({
+      email: 'a@x.co',
+      passwordHash: 'h',
+      isEmailVerified: true,
+    });
+    const session = await repo.createSession(data(user.id));
+    session.isDeleted = true;
+
+    const result = await repo.linkGoogleAccountIfUnset(
+      user.id,
+      'g1',
+      session.id,
+    );
+
+    expect(result).toEqual({ count: 0 });
+  });
+});
+
 describe('InMemoryRedis expiry', () => {
   afterEach(() => jest.useRealTimers());
 

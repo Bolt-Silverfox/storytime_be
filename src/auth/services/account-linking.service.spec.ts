@@ -90,6 +90,22 @@ describe('AccountLinkingService', () => {
         ).rejects.toBeInstanceOf(UnauthorizedException);
       });
 
+      it('reports an expired session when the caller session was soft-revoked', async () => {
+        authRepository[repoFn].mockResolvedValue({ count: 0 });
+        authRepository.findSessionById.mockResolvedValue({
+          id: 'session-9',
+          isDeleted: true,
+        });
+        authRepository.findActiveUserById.mockResolvedValue({
+          id: 'user-1',
+          isEmailVerified: true,
+        });
+
+        await expect(
+          service[method]('user-1', 'token', 'session-9'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+      });
+
       it('still reports an already linked provider for a verified account', async () => {
         authRepository[repoFn].mockResolvedValue({ count: 0 });
         authRepository.findActiveUserById.mockResolvedValue({

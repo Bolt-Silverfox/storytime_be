@@ -188,6 +188,7 @@ export class InMemoryRedis {
 export class InMemoryAuthRepository {
   users: Array<User & { profile: Profile | null; avatar: Avatar | null }> = [];
   sessions: Session[] = [];
+  private sessionSeq = 0;
   deviceTokens: Array<{ userId: string; token: string }> = [];
   created: Array<Record<string, unknown>> = [];
 
@@ -282,7 +283,9 @@ export class InMemoryAuthRepository {
     const u = this.users.find((x) => x.id === userId);
     const sessionMissing =
       sessionId !== undefined &&
-      !this.sessions.some((s) => s.id === sessionId && s.userId === userId);
+      !this.sessions.some(
+        (s) => s.id === sessionId && s.userId === userId && !s.isDeleted,
+      );
     if (!u || u[field] || !u.isEmailVerified || u.isDeleted || sessionMissing) {
       return Promise.resolve({ count: 0 });
     }
@@ -327,7 +330,7 @@ export class InMemoryAuthRepository {
     token: string;
     expiresAt: Date;
   }) => {
-    const s = { id: `session-${this.sessions.length + 1}`, ...data } as Session;
+    const s = { id: `session-${++this.sessionSeq}`, ...data } as Session;
     this.sessions.push(s);
     return Promise.resolve(s);
   };

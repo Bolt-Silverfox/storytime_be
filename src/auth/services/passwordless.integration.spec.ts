@@ -426,6 +426,35 @@ maybe('PasswordlessService against Postgres', () => {
     ).toEqual({ count: 1 });
   });
 
+  it('refuses a link tied to a soft-revoked session', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const user = await prisma.user.create({
+      data: {
+        email: `pwl-it-sr-${stamp}@example.com`,
+        passwordHash: 'h',
+        isEmailVerified: true,
+      },
+    });
+    const session = await prisma.session.create({
+      data: {
+        userId: user.id,
+        token: `pwl-it-sr-${stamp}`,
+        expiresAt: new Date(Date.now() + 3_600_000),
+        isDeleted: true,
+        deletedAt: new Date(),
+      },
+    });
+
+    expect(
+      await authRepo.linkGoogleAccountIfUnset(
+        user.id,
+        `pwl-it-g4-${stamp}`,
+        session.id,
+      ),
+    ).toEqual({ count: 0 });
+  });
+
   it('never lets a link in flight during a takeover attach the attacker identity', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
     for (let round = 0; round < 12; round++) {

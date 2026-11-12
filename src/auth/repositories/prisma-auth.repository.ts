@@ -236,7 +236,9 @@ export class PrismaAuthRepository implements IAuthRepository {
           [field]: null,
           isDeleted: false,
           isEmailVerified: true,
-          ...(sessionId ? { auth: { some: { id: sessionId } } } : {}),
+          ...(sessionId
+            ? { auth: { some: { id: sessionId, isDeleted: false } } }
+            : {}),
         },
         data: { [field]: value },
       });
