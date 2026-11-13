@@ -284,6 +284,42 @@ describe('RewardController authorization', () => {
       expect(rewards.update).toHaveBeenCalledTimes(1);
     });
 
+    it.each([
+      ['an empty string', ''],
+      ['a blank string', '  '],
+      ['false', false],
+    ])(
+      'rejects %s as points instead of coercing it to 0',
+      async (_label, points) => {
+        await asAlice(
+          http().post('/rewards').send({ name: 'n', kidId: ALICE_KID, points }),
+        ).expect(400);
+        await asAlice(
+          http().patch(`/rewards/${REWARD_ID}`).send({ points }),
+        ).expect(400);
+        expect(rewards.create).not.toHaveBeenCalled();
+        expect(rewards.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('leaves points untouched when an update omits it', async () => {
+      await asAlice(
+        http().patch(`/rewards/${REWARD_ID}`).send({ name: 'n' }),
+      ).expect(200);
+      expect(rewards.update).toHaveBeenCalledWith(REWARD_ID, { name: 'n' });
+    });
+
+    it('still accepts numeric strings as points', async () => {
+      await asAlice(
+        http()
+          .post('/rewards')
+          .send({ name: 'n', kidId: ALICE_KID, points: '10' }),
+      ).expect(201);
+      expect(rewards.create).toHaveBeenCalledWith(
+        expect.objectContaining({ points: 10 }),
+      );
+    });
+
     it('rejects negative and overflowing points on create', async () => {
       const body = { name: 'n', kidId: ALICE_KID };
       const create = (points: number) =>

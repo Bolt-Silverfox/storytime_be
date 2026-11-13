@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsIn,
   IsInt,
@@ -18,6 +18,19 @@ export const REWARD_REDEMPTION_STATUSES = [
   'completed',
 ] as const;
 
+const toPoints = ({
+  obj,
+  key,
+}: {
+  obj: Record<string, unknown>;
+  key: string;
+}) => {
+  const raw = obj[key];
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'string' && raw.trim() !== '') return Number(raw);
+  return Number.NaN;
+};
+
 export class CreateRewardDto {
   @IsString()
   @IsNotEmpty()
@@ -27,7 +40,7 @@ export class CreateRewardDto {
   @IsString()
   @ApiProperty({ required: false })
   description?: string;
-  @Type(() => Number)
+  @Transform(toPoints)
   @IsInt()
   @Min(0)
   @Max(2147483647)
@@ -54,7 +67,7 @@ export class UpdateRewardDto {
   @ApiProperty({ required: false })
   description?: string;
   @ValidateIf((_, value) => value !== undefined)
-  @Type(() => Number)
+  @Transform(toPoints)
   @IsInt()
   @Min(0)
   @Max(2147483647)
