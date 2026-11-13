@@ -93,7 +93,18 @@ export const envSchema = z
     OTEL_EXPORTER_METRICS_ENDPOINT: z.string().url().optional(),
     OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
     OTEL_EXPORTER_PROMETHEUS_HOST: z.string().optional(),
-    SWAGGER_ENABLED: z.enum(['true', 'false']).optional(),
+    SWAGGER_ENABLED: z.preprocess(
+      (v) => {
+        if (typeof v !== 'string') return v;
+        const trimmed = v.trim().toLowerCase();
+        return trimmed === '' ? undefined : trimmed;
+      },
+      z
+        .enum(['true', 'false'], {
+          error: 'SWAGGER_ENABLED must be "true" or "false"',
+        })
+        .optional(),
+    ),
     OTEL_METRICS_EXPORTER: z.enum(['prometheus', 'otlp']).optional(),
     OTEL_METRIC_EXPORT_INTERVAL: z.coerce.number().optional(),
     PROMETHEUS_PORT: z.coerce.number().optional(),

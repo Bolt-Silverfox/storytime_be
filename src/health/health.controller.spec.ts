@@ -17,7 +17,8 @@ import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service
 /**
  * Exercises the real terminus 12 HealthCheckService through HTTP, so the
  * response contract consumed by the container HEALTHCHECK and probes
- * (status code + `{ status, checks }` body) is pinned.
+ * (status code + `{ status, checks }` body, before the app-level envelope)
+ * is pinned.
  */
 describe('HealthController (HTTP contract)', () => {
   let app: INestApplication;

@@ -22,6 +22,9 @@ describe('isSwaggerEnabled', () => {
       isSwaggerEnabled({ NODE_ENV: 'production', SWAGGER_ENABLED: 'true' }),
     ).toBe(true);
     expect(
+      isSwaggerEnabled({ NODE_ENV: 'production', SWAGGER_ENABLED: 'TRUE' }),
+    ).toBe(true);
+    expect(
       isSwaggerEnabled({ NODE_ENV: 'production', SWAGGER_ENABLED: '1' }),
     ).toBe(false);
     expect(

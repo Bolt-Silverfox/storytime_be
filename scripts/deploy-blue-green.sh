@@ -21,6 +21,8 @@ GREEN_PORT="${GREEN_PORT:-3501}"
 INSTANCES="${PM2_INSTANCES:-max}"
 
 # Health endpoints (global prefix is /api/v1). /ready = liveness, /full = deep.
+# /full reports SMTP from a background probe that has no result for the first
+# seconds after boot, so it is polled until the deadline instead of tried once.
 HEALTH_READY_PATH="${HEALTH_READY_PATH:-/api/v1/health/ready}"
 HEALTH_FULL_PATH="${HEALTH_FULL_PATH:-/api/v1/health/full}"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-120}"   # seconds to wait for the new color
@@ -60,11 +62,14 @@ until curl -fsS --connect-timeout 3 --max-time 10 "http://127.0.0.1:${new_port}$
   sleep 3
 done
 
-if ! curl -fsS --connect-timeout 3 --max-time 10 "http://127.0.0.1:${new_port}${HEALTH_FULL_PATH}" >/dev/null 2>&1; then
-  err "New color '$new' failed the deep health check (${HEALTH_FULL_PATH}) — rolling back."
-  pm2 delete "${APP}-${new}" >/dev/null 2>&1 || true
-  exit 1
-fi
+until curl -fsS --connect-timeout 3 --max-time 10 "http://127.0.0.1:${new_port}${HEALTH_FULL_PATH}" >/dev/null 2>&1; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    err "New color '$new' failed the deep health check (${HEALTH_FULL_PATH}) — rolling back."
+    pm2 delete "${APP}-${new}" >/dev/null 2>&1 || true
+    exit 1
+  fi
+  sleep 3
+done
 log "New color '$new' is healthy."
 
 # --- 4. Flip nginx to the new color ------------------------------------------

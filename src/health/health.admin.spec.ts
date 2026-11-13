@@ -1,9 +1,5 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  INestApplication,
-} from '@nestjs/common';
+import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Test } from '@nestjs/testing';
 import { HealthIndicatorService, TerminusModule } from '@nestjs/terminus';
@@ -19,18 +15,9 @@ import {
   TTSCircuitBreakerHealthIndicator,
 } from './indicators';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
+import { PrismaService } from '@/prisma/prisma.service';
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { AdminGuard } from '@/shared/guards/admin.guard';
-
-class HeaderGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest<{
-      headers: Record<string, string>;
-    }>();
-    if (req.headers['x-admin'] !== '1') throw new ForbiddenException();
-    return true;
-  }
-}
 
 describe('admin health endpoints', () => {
   let app: INestApplication;
@@ -43,6 +30,38 @@ describe('admin health endpoints', () => {
       controllers: [AdminHealthController],
       providers: [
         HealthChecks,
+        AuthSessionGuard,
+        AdminGuard,
+        {
+          provide: JwtService,
+          useValue: {
+            verify: (token: string) => {
+              if (token === 'admin-token' || token === 'user-token') {
+                return {
+                  userId: 'user-id-123',
+                  authSessionId: 'session-1',
+                  userRole: token === 'admin-token' ? 'admin' : 'user',
+                };
+              }
+              throw new Error('bad token');
+            },
+          },
+        },
+        {
+          provide: PrismaService,
+          useValue: {
+            session: {
+              findUnique: () =>
+                Promise.resolve({
+                  id: 'session-1',
+                  deletedAt: null,
+                  isDeleted: false,
+                  expiresAt: new Date(Date.now() + 60_000),
+                  lastActivityAt: new Date(),
+                }),
+            },
+          },
+        },
         CircuitBreakerService,
         CircuitBreakerHealthIndicator,
         TTSCircuitBreakerHealthIndicator,
@@ -81,12 +100,7 @@ describe('admin health endpoints', () => {
           },
         },
       ],
-    })
-      .overrideGuard(AuthSessionGuard)
-      .useClass(HeaderGuard)
-      .overrideGuard(AdminGuard)
-      .useClass(HeaderGuard)
-      .compile();
+    }).compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
@@ -105,14 +119,21 @@ describe('admin health endpoints', () => {
     expect(guards).toEqual([AuthSessionGuard, AdminGuard]);
   });
 
-  it('rejects callers who are not admins', async () => {
-    await request(server()).get('/health/admin/ready').expect(403);
+  it('rejects anonymous callers with 401', async () => {
+    await request(server()).get('/health/admin/ready').expect(401);
+  });
+
+  it('rejects authenticated non-admins with 403', async () => {
+    await request(server())
+      .get('/health/admin/ready')
+      .set('Authorization', 'Bearer user-token')
+      .expect(403);
   });
 
   it('gives admins the full detail payload', async () => {
     const res = await request(server())
       .get('/health/admin/ready')
-      .set('x-admin', '1')
+      .set('Authorization', 'Bearer admin-token')
       .expect(503);
 
     expect(res.body.error.redis).toEqual({
@@ -128,7 +149,7 @@ describe('admin health endpoints', () => {
   it('runs the live SMTP check for admins', async () => {
     const res = await request(server())
       .get('/health/admin/smtp')
-      .set('x-admin', '1')
+      .set('Authorization', 'Bearer admin-token')
       .expect(200);
 
     expect(liveSmtp).toHaveBeenCalledTimes(1);
