@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Avatar, User, Kid } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { retireAvatarIfUnreferenced } from '../retire-avatar';
 import { IAvatarRepository } from './avatar.repository.interface';
 
 @Injectable()
@@ -118,6 +119,12 @@ export class PrismaAvatarRepository implements IAvatarRepository {
   }
 
   // Usage counts
+  retireAvatarIfUnreferenced(avatarId: string): Promise<string | null> {
+    return this.prisma.$transaction((tx) =>
+      retireAvatarIfUnreferenced(tx, avatarId),
+    );
+  }
+
   async countUsersUsingAvatar(avatarId: string): Promise<number> {
     return this.prisma.user.count({ where: { avatarId } });
   }

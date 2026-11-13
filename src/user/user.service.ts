@@ -460,10 +460,6 @@ export class UserService {
     return this.userRepository.updateParentAvatar(userId, body.avatarId);
   }
 
-  countAvatarReferences(avatarId: string): Promise<number> {
-    return this.userRepository.countAvatarReferences(avatarId);
-  }
-
   async createAndAssignAvatar(userId: string, url: string, publicId: string) {
     return this.userRepository.createAndAssignAvatar(userId, url, publicId);
   }

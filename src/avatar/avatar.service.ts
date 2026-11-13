@@ -73,24 +73,19 @@ export class AvatarService {
     }
   }
 
-  private async cleanupOldCustomAvatar(avatarId: string) {
-    const oldAvatar = await this.avatarRepository.findById(avatarId);
-
-    if (oldAvatar && oldAvatar.publicId && !oldAvatar.isSystemAvatar) {
-      try {
-        await this.uploadService.deleteImage(oldAvatar.publicId);
-
-        const usersUsing =
-          await this.avatarRepository.countUsersUsingAvatar(avatarId);
-        const kidsUsing =
-          await this.avatarRepository.countKidsUsingAvatar(avatarId);
-
-        if (usersUsing === 0 && kidsUsing === 0) {
-          await this.avatarRepository.hardDelete(avatarId);
-        }
-      } catch (error) {
-        this.logger.warn('Failed to delete old avatar:', error);
-      }
+  private async releaseReplacedAvatar(
+    previous: { id: string; publicId: string | null; isSystemAvatar: boolean },
+    current: { id: string },
+  ) {
+    if (previous.isSystemAvatar || !previous.publicId) return;
+    try {
+      const publicId =
+        previous.id === current.id
+          ? previous.publicId
+          : await this.avatarRepository.retireAvatarIfUnreferenced(previous.id);
+      if (publicId) await this.uploadService.deleteImage(publicId);
+    } catch (error) {
+      this.logger.warn('Failed to delete old avatar:', error);
     }
   }
 
@@ -336,9 +331,9 @@ export class AvatarService {
       throw new NotFoundException('User not found');
     }
 
-    if (user.avatarId) {
-      await this.cleanupOldCustomAvatar(user.avatarId);
-    }
+    const previous = user.avatarId
+      ? await this.avatarRepository.findById(user.avatarId)
+      : null;
 
     const avatar = await this.handleCustomAvatarUpload(
       userId,
@@ -348,9 +343,12 @@ export class AvatarService {
       owner,
     );
 
-    return this.withoutCredentials(
-      await this.avatarRepository.updateUserAvatar(userId, avatar.id),
+    const updated = await this.avatarRepository.updateUserAvatar(
+      userId,
+      avatar.id,
     );
+    if (previous) await this.releaseReplacedAvatar(previous, avatar);
+    return this.withoutCredentials(updated);
   }
 
   async uploadAndAssignKidAvatar(
@@ -364,9 +362,9 @@ export class AvatarService {
       throw new NotFoundException('Kid not found');
     }
 
-    if (kid.avatarId) {
-      await this.cleanupOldCustomAvatar(kid.avatarId);
-    }
+    const previous = kid.avatarId
+      ? await this.avatarRepository.findById(kid.avatarId)
+      : null;
 
     const avatar = await this.handleCustomAvatarUpload(
       kidId,
@@ -376,6 +374,11 @@ export class AvatarService {
       owner,
     );
 
-    return this.avatarRepository.updateKidAvatar(kidId, avatar.id);
+    const updated = await this.avatarRepository.updateKidAvatar(
+      kidId,
+      avatar.id,
+    );
+    if (previous) await this.releaseReplacedAvatar(previous, avatar);
+    return updated;
   }
 }

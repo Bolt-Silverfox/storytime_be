@@ -9,6 +9,7 @@ import {
   SupportTicket,
 } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { retireAvatarIfUnreferenced } from '@/avatar/retire-avatar';
 import {
   IUserRepository,
   UserWithRelations,
@@ -212,19 +213,11 @@ export class PrismaUserRepository implements IUserRepository {
     return this.prisma.avatar.create({ data });
   }
 
-  async countAvatarReferences(avatarId: string): Promise<number> {
-    const [users, kids] = await Promise.all([
-      this.prisma.user.count({ where: { avatarId } }),
-      this.prisma.kid.count({ where: { avatarId } }),
-    ]);
-    return users + kids;
-  }
-
   async createAndAssignAvatar(
     userId: string,
     url: string,
     publicId: string,
-  ): Promise<UserWithAvatar> {
+  ): Promise<{ user: UserWithAvatar; retiredPublicId: string | null }> {
     return this.prisma.$transaction(async (tx) => {
       // Fetch current avatar so we can retire it after assigning the new one
       const user = await tx.user.findUnique({
@@ -251,21 +244,15 @@ export class PrismaUserRepository implements IUserRepository {
         include: { avatar: true },
       });
 
-      // Delete the previous custom avatar if it exists and wasn't a system avatar.
-      // deleteMany is idempotent — safe if the record was already deleted concurrently.
-      if (user?.avatarId) {
-        const [usersUsing, kidsUsing] = await Promise.all([
-          tx.user.count({ where: { avatarId: user.avatarId } }),
-          tx.kid.count({ where: { avatarId: user.avatarId } }),
-        ]);
-        if (usersUsing === 0 && kidsUsing === 0) {
-          await tx.avatar.deleteMany({
-            where: { id: user.avatarId, isSystemAvatar: false },
-          });
-        }
-      }
+      // Retire the previous custom avatar only if nothing else references it,
+      // counted after this user moved off it and under a row lock so a
+      // concurrent assignment cannot be orphaned. The returned asset id is
+      // non-null only when this transaction deleted the row.
+      const retiredPublicId = user.avatarId
+        ? await retireAvatarIfUnreferenced(tx, user.avatarId)
+        : null;
 
-      return updated;
+      return { user: updated, retiredPublicId };
     });
   }
 
