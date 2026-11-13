@@ -82,6 +82,7 @@ export interface IAuthRepository {
     id: string,
     data: Partial<{
       passwordHash: string;
+      hasLocalPassword: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;

@@ -346,6 +346,7 @@ describe('PasswordlessService', () => {
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
       expect(ctx.authRepo.users).toHaveLength(0);
+      expect(ctx.repo.rows[0].consumedAt).toBeNull();
     });
   });
 

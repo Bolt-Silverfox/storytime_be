@@ -163,6 +163,7 @@ export class PasswordService {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.authRepository.updateUser(resetToken.userId, {
       passwordHash: hashedPassword,
+      hasLocalPassword: true,
     });
 
     // Clean up: delete token and invalidate all sessions

@@ -202,13 +202,16 @@ describe('validateEnv', () => {
       },
     );
 
-    it('accepts random base64 peppers', () => {
+    it('accepts deterministic base64 peppers', () => {
       for (let i = 0; i < 2000; i++) {
         expect(() =>
           validateEnv({
             ...base,
             PASSWORDLESS_LOGIN_ENABLED: 'true',
-            PASSWORDLESS_PEPPER: crypto.randomBytes(32).toString('base64'),
+            PASSWORDLESS_PEPPER: crypto
+              .createHash('sha256')
+              .update(`pepper-fixture-${i}`)
+              .digest('base64'),
           }),
         ).not.toThrow();
       }

@@ -360,6 +360,7 @@ describe('PasswordService', () => {
       });
       expect(authRepository.updateUser).toHaveBeenCalledWith('user-1', {
         passwordHash: expect.any(String),
+        hasLocalPassword: true,
       });
       expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
       expect(authRepository.deleteAllUserSessions).toHaveBeenCalledWith(

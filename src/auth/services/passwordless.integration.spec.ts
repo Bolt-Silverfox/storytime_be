@@ -534,7 +534,7 @@ maybe('PasswordlessService against Postgres', () => {
         `pwl-it-wait-g-${stamp}`,
         session.id,
       );
-      await new Promise((resolve) => setTimeout(resolve, 400));
+      await waitForBlockedStatement('SELECT "id" FROM "users"%FOR UPDATE%');
     });
 
     expect(await link).toEqual({ count: 0 });
@@ -1041,6 +1041,35 @@ maybe('PasswordlessService against Postgres', () => {
         );
       }
     });
+  });
+
+  it('lets only one of two concurrent first sign-ins for differently cased spellings of a mailbox create an account', async () => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${process.pid}-${++n}`;
+    const lower = `pwl-it-case${stamp}@example.com`;
+    const mixed = `PWL-it-Case${stamp}@example.com`;
+    const signIn = (email: string) =>
+      findOrCreateParentByVerifiedEmail(
+        {
+          authRepository: authRepo,
+          passwordService: { hashPassword: () => Promise.resolve('x') },
+        },
+        {
+          email,
+          emailVerified: true,
+          matchEmailCaseInsensitively: true,
+        },
+      );
+
+    const results = await Promise.all([signIn(lower), signIn(mixed)]);
+
+    expect(results.filter((r) => r.isNewUser)).toHaveLength(1);
+    expect(results[0].user.id).toBe(results[1].user.id);
+    expect(
+      await prisma.user.count({
+        where: { email: { equals: lower, mode: 'insensitive' } },
+      }),
+    ).toBe(1);
   });
 
   it('keeps an existing provider id when a verified-email match arrives with a different one', async () => {

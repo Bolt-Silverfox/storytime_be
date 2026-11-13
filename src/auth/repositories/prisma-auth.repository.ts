@@ -122,9 +122,24 @@ export class PrismaAuthRepository implements IAuthRepository {
     isEmailVerified?: boolean;
     profile?: { create: { country: string } };
   }): Promise<UserWithProfileAndAvatar> {
-    return this.prisma.user.create({
-      data: data as Parameters<typeof this.prisma.user.create>[0]['data'],
-      include: { profile: true, avatar: true },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(lower(${data.email}), 0))`;
+      const taken = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "users" WHERE lower("email") = lower(${data.email}) LIMIT 1`;
+      if (taken.length > 0) {
+        throw new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on the fields: (`email`)',
+          {
+            code: 'P2002',
+            clientVersion: Prisma.prismaVersion.client,
+            meta: { target: ['email'] },
+          },
+        );
+      }
+      return tx.user.create({
+        data: data as Parameters<typeof tx.user.create>[0]['data'],
+        include: { profile: true, avatar: true },
+      });
     });
   }
 
@@ -132,6 +147,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     id: string,
     data: Partial<{
       passwordHash: string;
+      hasLocalPassword: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;
