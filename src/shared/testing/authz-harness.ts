@@ -42,8 +42,10 @@ export interface DbUser {
 }
 
 export const dbUsers: Record<string, DbUser> = {};
+export const dbControl = { failLookups: false };
 
 const resetDbUsers = () => {
+  dbControl.failLookups = false;
   const active = { isSuspended: false, isDeleted: false };
   for (const key of Object.keys(dbUsers)) delete dbUsers[key];
   dbUsers[ALICE] = { role: 'parent', ...active };
@@ -75,7 +77,9 @@ export async function createAuthzApp(
   const prisma = {
     user: {
       findUnique: jest.fn(({ where }: { where: { id: string } }) =>
-        Promise.resolve(dbUsers[where.id] ?? null),
+        dbControl.failLookups
+          ? Promise.reject(new Error('db down'))
+          : Promise.resolve(dbUsers[where.id] ?? null),
       ),
     },
     session: {

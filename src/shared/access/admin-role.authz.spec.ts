@@ -1,4 +1,15 @@
-import { INestApplication } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  INestApplication,
+  Logger,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 import request from 'supertest';
 import { RewardController } from '@/reward/reward.controller';
 import { RewardService } from '@/reward/reward.service';
@@ -13,8 +24,18 @@ import {
   BOB_KID,
   bearer,
   createAuthzApp,
+  dbControl,
   dbUsers,
 } from '@/shared/testing/authz-harness';
+
+@Controller('whoami')
+@UseGuards(AuthSessionGuard)
+class WhoAmIController {
+  @Get()
+  whoami(@Req() req: AuthenticatedRequest) {
+    return { role: req.authUserData.userRole };
+  }
+}
 
 describe('admin access is confirmed against the database, not the JWT claim', () => {
   let app: INestApplication;
@@ -25,7 +46,12 @@ describe('admin access is confirmed against the database, not the JWT claim', ()
   beforeEach(async () => {
     jest.clearAllMocks();
     app = await createAuthzApp(
-      [RewardController, NotificationController, AnalyticsController],
+      [
+        RewardController,
+        NotificationController,
+        AnalyticsController,
+        WhoAmIController,
+      ],
       [
         { provide: RewardService, useValue: rewards },
         { provide: NotificationService, useValue: notifications },
@@ -83,15 +109,13 @@ describe('admin access is confirmed against the database, not the JWT claim', ()
       .expect(403);
   });
 
-  it('fails closed when the role lookup throws', async () => {
-    const original = Object.getOwnPropertyDescriptor(dbUsers, ADMIN);
-    Object.defineProperty(dbUsers, ADMIN, {
-      configurable: true,
-      get: () => {
-        throw new Error('db down');
-      },
-    });
+  it('fails closed when the role lookup rejects, and warns with the user id only', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    dbControl.failLookups = true;
     await stats().expect(403);
-    if (original) Object.defineProperty(dbUsers, ADMIN, original);
+    const logged = warn.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(logged).toContain(ADMIN);
+    expect(logged).not.toContain('@example.com');
+    warn.mockRestore();
   });
 });

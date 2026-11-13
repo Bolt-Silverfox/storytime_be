@@ -80,6 +80,9 @@ export class AuthSessionGuard implements CanActivate {
       const active = user && !user.isSuspended && !user.isDeleted;
       return active && user.role === 'admin' ? 'admin' : 'user';
     } catch {
+      this.logger.warn(
+        `Admin role lookup failed, treating as non-admin [userId=${payload.userId}]`,
+      );
       return 'user';
     }
   }
