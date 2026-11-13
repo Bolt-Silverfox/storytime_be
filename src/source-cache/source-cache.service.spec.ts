@@ -241,6 +241,31 @@ describe('SourceCacheService', () => {
       expect(again.fetched).toBe(false);
     });
 
+    it('force re-fetches an entry that is still fresh', async () => {
+      const fetcher = jest.fn().mockResolvedValue(ok());
+      await svc.getOrFetch('g', '1', fetcher, { now: NOW, ttlMs: DAY });
+      const again = await svc.getOrFetch('g', '1', fetcher, {
+        now: new Date(NOW.getTime() + DAY / 2),
+        force: true,
+      });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+      expect(again.fetched).toBe(true);
+    });
+
+    it('a forced call never joins a non-forced call already in flight', async () => {
+      await svc.put({ sourceName: 'g', sourceId: '1', result: ok(), now: NOW });
+      const plain = jest.fn().mockResolvedValue(ok());
+      const forced = jest.fn().mockResolvedValue(ok({ contentHash: 'h2' }));
+      const [a, b] = await Promise.all([
+        svc.getOrFetch('g', '1', plain, { now: NOW }),
+        svc.getOrFetch('g', '1', forced, { now: NOW, force: true }),
+      ]);
+      expect(a.fetched).toBe(false);
+      expect(forced).toHaveBeenCalledTimes(1);
+      expect(b.fetched).toBe(true);
+      expect(b.entry.contentHash).toBe('h2');
+    });
+
     it('re-fetches an expired entry and passes the previous entry (for etag)', async () => {
       const fetcher = jest
         .fn()
@@ -316,6 +341,31 @@ describe('SourceCacheService', () => {
       expect([ra.fetched, rb.fetched]).toEqual([true, false]);
     });
 
+    it('uses a separate lease owner for each flight and releases with the same owner', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const fetcher = jest.fn(async () => {
+        await gate;
+        return ok();
+      });
+      const plain = svc.getOrFetch('g', '1', fetcher, { now: NOW });
+      const forced = svc.getOrFetch('g', '1', fetcher, {
+        now: NOW,
+        force: true,
+      });
+      await new Promise((r) => setImmediate(r));
+      release();
+      await Promise.all([plain, forced]);
+      const claimed = (lease.claim as jest.Mock).mock.calls.map(
+        (c: unknown[]) => c[1],
+      );
+      const released = (lease.release as jest.Mock).mock.calls.map(
+        (c: unknown[]) => c[1],
+      );
+      expect(new Set(claimed).size).toBe(2);
+      expect([...released].sort()).toEqual([...claimed].sort());
+    });
+
     it('does not share a flight across different keys', async () => {
       const fetcher = jest.fn().mockResolvedValue(ok());
       await Promise.all([
@@ -369,6 +419,20 @@ describe('SourceCacheService', () => {
       const r = await p;
       expect(fetcher).not.toHaveBeenCalled();
       expect(r.fetched).toBe(false);
+    });
+
+    it('force keeps waiting for the lease instead of taking the existing fresh entry', async () => {
+      lease = makeFakeLease(2);
+      svc = new SourceCacheService(fake.prisma, lease);
+      await svc.put({ sourceName: 'g', sourceId: '1', result: ok(), now: NOW });
+      const fetcher = jest.fn().mockResolvedValue(ok({ contentHash: 'h2' }));
+      const r = await svc.getOrFetch('g', '1', fetcher, {
+        now: NOW,
+        force: true,
+        pollMs: 1,
+      });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(r.entry.contentHash).toBe('h2');
     });
 
     it('gives up with SourceCacheLeaseTimeoutError if the lease never frees', async () => {
