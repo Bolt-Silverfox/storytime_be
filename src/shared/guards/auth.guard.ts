@@ -70,6 +70,20 @@ export class AuthSessionGuard implements CanActivate {
     return this.validateRequest(request);
   }
 
+  private async confirmedRole(payload: JwtPayload): Promise<string> {
+    if (payload.userRole !== 'admin') return payload.userRole;
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { role: true, isSuspended: true, isDeleted: true },
+      });
+      const active = user && !user.isSuspended && !user.isDeleted;
+      return active && user.role === 'admin' ? 'admin' : 'user';
+    } catch {
+      return 'user';
+    }
+  }
+
   private async validateRequest(request: Request): Promise<boolean> {
     const authHeader = request.headers.authorization;
 
@@ -131,7 +145,10 @@ export class AuthSessionGuard implements CanActivate {
       this.logger.debug(
         `Auth success [userId=${payload.userId.substring(0, 8)}...]`,
       );
-      (request as AuthenticatedRequest).authUserData = payload;
+      (request as AuthenticatedRequest).authUserData = {
+        ...payload,
+        userRole: await this.confirmedRole(payload),
+      };
       return true;
     } catch (error) {
       if (error instanceof UnauthorizedException) {

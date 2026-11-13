@@ -35,6 +35,22 @@ function payload(userId: string, userRole: string): JwtPayload {
   };
 }
 
+export interface DbUser {
+  role: string;
+  isSuspended: boolean;
+  isDeleted: boolean;
+}
+
+export const dbUsers: Record<string, DbUser> = {};
+
+const resetDbUsers = () => {
+  const active = { isSuspended: false, isDeleted: false };
+  for (const key of Object.keys(dbUsers)) delete dbUsers[key];
+  dbUsers[ALICE] = { role: 'parent', ...active };
+  dbUsers[BOB] = { role: 'parent', ...active };
+  dbUsers[ADMIN] = { role: 'admin', ...active };
+};
+
 export type Who = 'alice' | 'bob' | 'admin';
 
 export const bearer = (who: Who) => `Bearer ${who}`;
@@ -55,7 +71,13 @@ export async function createAuthzApp(
       return found;
     },
   };
+  resetDbUsers();
   const prisma = {
+    user: {
+      findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+        Promise.resolve(dbUsers[where.id] ?? null),
+      ),
+    },
     session: {
       findUnique: jest.fn().mockResolvedValue({
         id: 'session',
