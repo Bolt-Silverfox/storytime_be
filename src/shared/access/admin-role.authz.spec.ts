@@ -118,4 +118,38 @@ describe('admin access is confirmed against the database, not the JWT claim', ()
     expect(logged).not.toContain('@example.com');
     warn.mockRestore();
   });
+
+  describe('the role an ex-admin is left with is a real Role', () => {
+    const role = async () =>
+      (
+        await request(app.getHttpServer())
+          .get('/whoami')
+          .set('Authorization', admin())
+          .expect(200)
+      ).body.role;
+
+    it('keeps admin for an active database admin', async () => {
+      expect(await role()).toBe('admin');
+    });
+
+    it.each([
+      ['demoted to parent', { role: 'parent' }, 'parent'],
+      ['demoted to kid', { role: 'kid' }, 'kid'],
+      ['suspended', { isSuspended: true }, 'parent'],
+      ['soft-deleted', { isDeleted: true }, 'parent'],
+    ])(
+      'uses the database role when the user is %s',
+      async (_l, patch, want) => {
+        dbUsers[ADMIN] = { ...dbUsers[ADMIN], ...patch };
+        expect(await role()).toBe(want);
+      },
+    );
+
+    it('falls back to parent when the row is gone or the lookup fails', async () => {
+      delete dbUsers[ADMIN];
+      expect(await role()).toBe('parent');
+      dbControl.failLookups = true;
+      expect(await role()).toBe('parent');
+    });
+  });
 });
