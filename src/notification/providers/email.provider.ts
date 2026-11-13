@@ -50,7 +50,10 @@ export class EmailProvider implements INotificationProvider {
       };
 
       const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log(`Email sent successfully to ${email}: ${info.messageId}`);
+      const [local, domain] = email.split('@');
+      this.logger.log(
+        `Email sent successfully to ${local.charAt(0)}***@${domain}: ${info.messageId}`,
+      );
 
       return {
         success: true,

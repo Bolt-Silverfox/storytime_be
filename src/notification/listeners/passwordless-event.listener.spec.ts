@@ -57,6 +57,8 @@ describe('PasswordlessEventListener', () => {
 
   it.each([
     ['https://app.test/app', 'https://app.test/app/auth/magic'],
+    ['https://app.test/app?utm=1', 'https://app.test/app/auth/magic'],
+    ['https://app.test/app#section', 'https://app.test/app/auth/magic'],
     ['https://app.test/app/', 'https://app.test/app/auth/magic'],
     ['https://app.test/app/?utm=1#x', 'https://app.test/app/auth/magic'],
   ])('keeps the path prefix of %s', async (base, expected) => {

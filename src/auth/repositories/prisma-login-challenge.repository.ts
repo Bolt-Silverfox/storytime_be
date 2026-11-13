@@ -13,16 +13,17 @@ export class PrismaLoginChallengeRepository implements ILoginChallengeRepository
   constructor(private readonly prisma: PrismaService) {}
 
   async replaceOpenChallenge(data: NewLoginChallenge): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.loginChallenge.updateMany({
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${data.emailNormalized}, 0))`;
+      await tx.loginChallenge.updateMany({
         where: {
           emailNormalized: data.emailNormalized,
           consumedAt: null,
           invalidatedAt: null,
         },
         data: { invalidatedAt: data.now },
-      }),
-      this.prisma.loginChallenge.create({
+      });
+      await tx.loginChallenge.create({
         data: {
           id: data.id,
           emailNormalized: data.emailNormalized,
@@ -32,8 +33,8 @@ export class PrismaLoginChallengeRepository implements ILoginChallengeRepository
           requestIpHash: data.requestIpHash,
           createdAt: data.now,
         },
-      }),
-    ]);
+      });
+    });
   }
 
   async findOpenIdByEmail(

@@ -84,11 +84,21 @@ maybe('PasswordlessService against Postgres', () => {
   afterAll(async () => {
     await prisma.loginChallenge.deleteMany({
       where: {
-        emailNormalized: { startsWith: 'pwl-it-', mode: 'insensitive' },
+        emailNormalized: {
+          startsWith: 'pwl-it-',
+          contains: `-${process.pid}-`,
+          mode: 'insensitive',
+        },
       },
     });
     await prisma.user.deleteMany({
-      where: { email: { startsWith: 'pwl-it-', mode: 'insensitive' } },
+      where: {
+        email: {
+          startsWith: 'pwl-it-',
+          contains: `-${process.pid}-`,
+          mode: 'insensitive',
+        },
+      },
     });
     await prisma.$disconnect();
   });
@@ -1662,6 +1672,175 @@ maybe('PasswordlessService against Postgres', () => {
       expect(
         await prisma.deviceToken.count({ where: { userId: user.id } }),
       ).toBe(0);
+    });
+  });
+
+  describe('concurrent challenge replacement', () => {
+    it('leaves exactly one open challenge per email when requests race', async () => {
+      const challenges = new PrismaLoginChallengeRepository(prisma as never);
+      for (let round = 0; round < 6; round++) {
+        const email = `pwl-it-race-ch-${process.pid}-${++n}@example.com`;
+
+        await Promise.all(
+          Array.from({ length: 8 }, (_, i) =>
+            challenges.replaceOpenChallenge({
+              id: crypto.randomUUID(),
+              emailNormalized: email,
+              codeHash: `c${i}`,
+              linkTokenHash: crypto.randomUUID(),
+              expiresAt: new Date(Date.now() + 600_000),
+              requestIpHash: null,
+              now: new Date(),
+            }),
+          ),
+        );
+
+        expect(
+          await prisma.loginChallenge.count({
+            where: {
+              emailNormalized: email,
+              consumedAt: null,
+              invalidatedAt: null,
+            },
+          }),
+        ).toBe(1);
+      }
+    });
+  });
+
+  describe('password change and session state', () => {
+    it('refuses a password change tied to a soft-revoked session', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const stamp = `${process.pid}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-pw-${stamp}@example.com`,
+          passwordHash: 'old',
+          isEmailVerified: true,
+        },
+      });
+      const session = await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-pw-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+          isDeleted: true,
+          deletedAt: new Date(),
+        },
+      });
+
+      const changed = await authRepo.transaction((tx) =>
+        tx.changePasswordIfUnchanged(user.id, 'old', 'new', session.id),
+      );
+
+      expect(changed).toBe(false);
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: user.id } }))
+          .passwordHash,
+      ).toBe('old');
+    });
+  });
+
+  describe('session creation and takeover on the same user row', () => {
+    const unverifiedUser = async () =>
+      prisma.user.create({
+        data: {
+          email: `pwl-it-lk-${process.pid}-${++n}@example.com`,
+          passwordHash: 'registrant',
+          isEmailVerified: false,
+        },
+      });
+    const sessionData = (userId: string) => ({
+      userId,
+      token: crypto.randomUUID(),
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+
+    it('refuses a session paused behind a takeover that then commits', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const user = await unverifiedUser();
+      let create: Promise<unknown> = Promise.resolve();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${user.id} FOR NO KEY UPDATE`;
+        create = authRepo
+          .createSessionForUnverifiedUser(sessionData(user.id))
+          .then(
+            () => null,
+            (e: unknown) => e,
+          );
+        await waitForBlockedStatement('%FOR SHARE%');
+        await tx.session.deleteMany({ where: { userId: user.id } });
+        await tx.user.update({
+          where: { id: user.id },
+          data: { isEmailVerified: true },
+        });
+      });
+
+      expect(await create).toBeInstanceOf(AccountAlreadyVerifiedError);
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        0,
+      );
+    });
+
+    it('revokes a session inserted while the takeover was waiting on the lock', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const user = await unverifiedUser();
+      let takeover: Promise<unknown> = Promise.resolve();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${user.id} FOR SHARE`;
+        takeover = authRepo.takeOverUnverifiedAccount(user.id, {
+          passwordHash: 'rotated',
+          isEmailVerified: true,
+        });
+        await waitForBlockedStatement('%FOR NO KEY UPDATE%');
+        await tx.session.create({ data: sessionData(user.id) });
+      });
+      await takeover;
+
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        0,
+      );
+    });
+  });
+
+  describe('device-token live-session lock', () => {
+    it('blocks a soft revocation of the session until the registering transaction ends', async () => {
+      const repo = new PrismaDeviceTokenRepository(prisma as never);
+      const stamp = `${process.pid}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-dt-${stamp}@example.com`,
+          passwordHash: 'h',
+          isEmailVerified: true,
+        },
+      });
+      const session = await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-dt-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+      let revoke: Promise<unknown> = Promise.resolve();
+
+      await prisma.$transaction(async (tx) => {
+        expect(await repo.lockLiveSession(session.id, user.id, tx)).toBe(true);
+        revoke = prisma.session
+          .updateMany({
+            where: { userId: user.id },
+            data: { isDeleted: true, deletedAt: new Date() },
+          })
+          .then((result) => result);
+        await waitForBlockedStatement('%UPDATE%sessions%', 3_000);
+      });
+      await revoke;
+
+      expect(
+        (await prisma.session.findUniqueOrThrow({ where: { id: session.id } }))
+          .isDeleted,
+      ).toBe(true);
     });
   });
 });

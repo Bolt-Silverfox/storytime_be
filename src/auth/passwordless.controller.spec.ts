@@ -5,7 +5,8 @@ import request from 'supertest';
 import { PasswordlessController } from './passwordless.controller';
 import { PasswordlessService } from './services/passwordless.service';
 import { PasswordlessEnabledGuard } from './guards/passwordless-enabled.guard';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
 import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import { HttpExceptionFilter } from '@/shared/filters/http-exception.filter';
@@ -95,6 +96,47 @@ describe('PasswordlessController with the real throttle guard', () => {
 
     await post('burst@example.com').expect(429);
     await post('other@example.com').expect(200);
+  });
+});
+
+describe('PasswordlessController consume with the global throttle guard enabled', () => {
+  let app: INestApplication;
+  const limit = THROTTLE_LIMITS.AUTH_PASSWORDLESS_CONSUME.limit;
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot([{ name: 'short', ttl: 60_000, limit: 1000 }]),
+      ],
+      controllers: [PasswordlessController],
+      providers: [
+        {
+          provide: PasswordlessService,
+          useValue: { consume: jest.fn().mockResolvedValue({ jwt: 'j' }) },
+        },
+        PasswordlessEnabledGuard,
+        AuthThrottleGuard,
+        { provide: APP_GUARD, useClass: ThrottlerGuard },
+        { provide: ConfigService, useValue: { get: () => true } },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
+    await app.init();
+  });
+  afterAll(() => app.close());
+
+  it('allows the configured number of token-only consumes before throttling', async () => {
+    const consume = () =>
+      request(app.getHttpServer())
+        .post('/auth/passwordless/consume')
+        .send({ token: 'A'.repeat(43) });
+
+    for (let i = 0; i < limit; i += 1) await consume().expect(200);
+
+    await consume().expect(429);
   });
 });
 

@@ -21,10 +21,9 @@ export class PasswordlessEventListener {
   }): Promise<void> {
     try {
       const base = this.configService.get<string>('WEB_APP_BASE_URL') ?? '';
-      const linkUrl = new URL(
-        'auth/magic',
-        base.endsWith('/') ? base : `${base}/`,
-      );
+      const baseUrl = new URL(base);
+      if (!baseUrl.pathname.endsWith('/')) baseUrl.pathname += '/';
+      const linkUrl = new URL('auth/magic', baseUrl);
       linkUrl.hash = `t=${payload.linkToken}`;
       const resp = await this.notificationService.sendNotification(
         'PasswordlessLogin',

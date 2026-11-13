@@ -26,14 +26,21 @@ export class PasswordlessGuestMergeService {
     if (!isNewUser || !UUID_V4_LIKE.test(guestSessionId)) return;
     const sid = guestSessionId.toLowerCase();
 
+    const claimKey = `pwl:guest-claim:${sid}`;
+    const pending = `${userId}:pending`;
     const claimed = await this.redis.client.set(
-      `pwl:guest-claim:${sid}`,
-      '1',
+      claimKey,
+      pending,
       'EX',
       CLAIM_TTL_SECONDS,
       'NX',
     );
-    if (claimed !== 'OK') return;
+    if (
+      claimed !== 'OK' &&
+      (await this.redis.client.get(claimKey)) !== pending
+    ) {
+      return;
+    }
 
     const history = await this.guestSessions.getGuestReadingHistory(sid);
     if (!history) return;
@@ -52,6 +59,12 @@ export class PasswordlessGuestMergeService {
       );
     }
     await this.guestSessions.deleteGuestSession(sid);
+    await this.redis.client.set(
+      claimKey,
+      `${userId}:done`,
+      'EX',
+      CLAIM_TTL_SECONDS,
+    );
     this.logger.log(
       `Carried over ${existing.length} guest stories for user ${userId.slice(0, 8)}`,
     );

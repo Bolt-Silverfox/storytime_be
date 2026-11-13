@@ -112,7 +112,10 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
 }
 
 export class InMemoryRedis {
-  private store = new Map<string, { n: number; expiresAt: number }>();
+  private store = new Map<
+    string,
+    { n: number; expiresAt: number; text?: string }
+  >();
   down = false;
 
   client = {
@@ -120,7 +123,7 @@ export class InMemoryRedis {
       if (this.down) return Promise.reject(new Error('redis down'));
       const cur = this.store.get(key);
       return Promise.resolve(
-        cur && cur.expiresAt > Date.now() ? String(cur.n) : null,
+        cur && cur.expiresAt > Date.now() ? (cur.text ?? String(cur.n)) : null,
       );
     },
     eval: (
@@ -178,6 +181,7 @@ export class InMemoryRedis {
       }
       this.store.set(key, {
         n: Number(value),
+        text: value,
         expiresAt: now + (unit === 'PX' ? ttl : ttl * 1000),
       });
       return Promise.resolve('OK');

@@ -59,6 +59,41 @@ describe('PasswordlessGuestMergeService', () => {
     expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
   });
 
+  it('lets the same user resume after a progress write failed, and still refuses other users', async () => {
+    const { service, guestSessions } = build({ s1: {}, s2: {} });
+    guestSessions.upsertUserStoryProgress.mockRejectedValueOnce(
+      new Error('db down'),
+    );
+
+    await expect(service.carryOver('u1', GUEST, true)).rejects.toThrow(
+      'db down',
+    );
+    await service.carryOver('u2', GUEST, true);
+    expect(guestSessions.deleteGuestSession).not.toHaveBeenCalled();
+
+    await service.carryOver('u1', GUEST, true);
+
+    expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
+    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledWith(
+      'u1',
+      's2',
+      0,
+      false,
+    );
+    expect(
+      guestSessions.upsertUserStoryProgress.mock.calls.every(
+        ([userId]) => userId === 'u1',
+      ),
+    ).toBe(true);
+  });
+
+  it('does not repeat a completed carry-over for the same user', async () => {
+    const { service, guestSessions } = build({ s1: {} });
+    await service.carryOver('u1', GUEST, true);
+    await service.carryOver('u1', GUEST, true);
+    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
+  });
+
   it('ignores a header that is not a UUID without touching redis or the session', async () => {
     const { service, guestSessions } = build({ s1: {} });
     await service.carryOver('u1', 'not-a-uuid', true);

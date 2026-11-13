@@ -153,7 +153,7 @@ export class PrismaDeviceTokenRepository implements IDeviceTokenRepository {
       SELECT "id" FROM "sessions"
       WHERE "id" = ${sessionId} AND "userId" = ${userId}
         AND "isDeleted" = false AND "deletedAt" IS NULL
-      FOR KEY SHARE`;
+      FOR SHARE`;
     return rows.length === 1;
   }
 

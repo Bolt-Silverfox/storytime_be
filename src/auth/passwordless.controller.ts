@@ -78,7 +78,6 @@ export class PasswordlessController {
   }
 
   @Post('consume')
-  @UseGuards(AuthThrottleGuard)
   @Throttle({
     short: {
       limit: THROTTLE_LIMITS.AUTH_PASSWORDLESS_CONSUME.limit,

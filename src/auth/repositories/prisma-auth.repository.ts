@@ -524,7 +524,7 @@ export class PrismaAuthRepository implements IAuthRepository {
             where: {
               id: userId,
               passwordHash: expectedHash,
-              auth: { some: { id: sessionId } },
+              auth: { some: { id: sessionId, isDeleted: false } },
             },
             data: { passwordHash: newHash },
           });
