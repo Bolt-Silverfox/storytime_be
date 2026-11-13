@@ -8,6 +8,7 @@ type Row = {
   id: string;
   userId: string;
   publicId: string | null;
+  resourceType?: string | null;
   bytes: number;
   pending: boolean;
   createdAt: Date;
@@ -36,6 +37,9 @@ function fakePrisma() {
     (w.NOT === undefined || r.id !== w.NOT.id);
 
   const userUpload = {
+    findFirst: jest.fn(({ where }: { where: Where }) =>
+      Promise.resolve(rows.find((r) => matches(r, where)) ?? null),
+    ),
     deleteMany: jest.fn(({ where }: { where: Where }) => {
       let count = 0;
       for (let i = rows.length - 1; i >= 0; i--) {
@@ -346,13 +350,67 @@ describe('UploadService per-user upload cap', () => {
     expect(prisma.rows).toHaveLength(0);
   });
 
-  it('keeps the row when the Cloudinary delete fails', async () => {
+  it('keeps the row when the Cloudinary delete fails and no type was recorded', async () => {
     seed({ userId: 'u1', bytes: 10 * MB, publicId: 'stays' });
     jest
       .spyOn(cloudinary.uploader, 'destroy')
       .mockResolvedValue({ result: 'not found' });
     await expect(service.deleteImage('stays')).rejects.toThrow();
     expect(prisma.rows).toHaveLength(1);
+  });
+
+  it('releases the row when Cloudinary reports the recorded asset type as not found', async () => {
+    seed({
+      userId: 'u1',
+      bytes: 10 * MB,
+      publicId: 'gone-already',
+      resourceType: 'video',
+    });
+    const destroy = jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'not found' });
+    await expect(service.deleteImage('gone-already')).resolves.toBeUndefined();
+    expect(destroy).toHaveBeenCalledWith('gone-already', {
+      resource_type: 'video',
+    });
+    expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('keeps the row when not found was answered for a type other than the recorded one', async () => {
+    seed({
+      userId: 'u1',
+      bytes: 10 * MB,
+      publicId: 'wrong-type',
+      resourceType: 'video',
+    });
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'not found' });
+    await expect(service.deleteImage('wrong-type', 'image')).rejects.toThrow();
+    expect(prisma.rows).toHaveLength(1);
+  });
+
+  it('keeps the row on any other non-ok answer even with a recorded type', async () => {
+    seed({
+      userId: 'u1',
+      bytes: 10 * MB,
+      publicId: 'odd',
+      resourceType: 'image',
+    });
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'error' });
+    await expect(service.deleteImage('odd')).rejects.toThrow();
+    expect(prisma.rows).toHaveLength(1);
+  });
+
+  it('records the Cloudinary resource type when an upload is finalised', async () => {
+    cloudinaryReplies('p-type', MB, 'video');
+    await service.uploadFile(file(MB), { userId: 'u1' });
+    expect(prisma.rows[0]).toMatchObject({
+      publicId: 'p-type',
+      resourceType: 'video',
+    });
   });
 
   it('does not count or cap admin uploads', async () => {

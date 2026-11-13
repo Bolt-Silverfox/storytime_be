@@ -73,6 +73,7 @@ export class UploadService {
           where: { id: reservationId },
           data: {
             publicId: result.public_id,
+            resourceType: result.resource_type,
             bytes: result.bytes,
             pending: false,
           },
@@ -277,12 +278,19 @@ export class UploadService {
 
   async deleteImage(publicId: string, resourceType?: string): Promise<void> {
     try {
-      const result = resourceType
-        ? await cloudinary.uploader.destroy(publicId, {
-            resource_type: resourceType,
-          })
+      const recorded = await this.prisma.userUpload.findFirst({
+        where: { publicId },
+        select: { resourceType: true },
+      });
+      const type = resourceType ?? recorded?.resourceType ?? undefined;
+      const result = type
+        ? await cloudinary.uploader.destroy(publicId, { resource_type: type })
         : await cloudinary.uploader.destroy(publicId);
-      if (result.result !== 'ok') {
+      const goneAlready =
+        result.result === 'not found' &&
+        !!recorded?.resourceType &&
+        recorded.resourceType === type;
+      if (result.result !== 'ok' && !goneAlready) {
         this.logger.error('Cloudinary delete failed:', result);
         throw new InternalServerErrorException(
           `Delete failed: ${result.result}`,

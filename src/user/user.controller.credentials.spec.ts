@@ -50,6 +50,7 @@ describe('UserController responses never carry credential hashes', () => {
     deleteUserAccount: jest.fn(),
     updateUser: jest.fn(),
     getUser: jest.fn(),
+    countAvatarReferences: jest.fn(),
   };
   const upload = {
     uploadImage: jest
@@ -65,6 +66,7 @@ describe('UserController responses never carry credential hashes', () => {
         Promise.resolve(rowWithSecrets(id)),
       );
     }
+    userService.countAvatarReferences.mockResolvedValue(0);
     app = await createAuthzApp(
       [UserController],
       [
@@ -124,7 +126,7 @@ describe('UserController responses never carry credential hashes', () => {
     it('deletes the previous custom avatar asset', async () => {
       userService.getUser.mockResolvedValueOnce({
         id: ALICE,
-        avatar: { publicId: 'old-asset', isSystemAvatar: false },
+        avatar: { id: 'old-id', publicId: 'old-asset', isSystemAvatar: false },
       });
       await upload$().expect(201);
       expect(upload.deleteImage).toHaveBeenCalledWith('old-asset');
@@ -134,7 +136,7 @@ describe('UserController responses never carry credential hashes', () => {
       const order: string[] = [];
       userService.getUser.mockResolvedValueOnce({
         id: ALICE,
-        avatar: { publicId: 'old-asset', isSystemAvatar: false },
+        avatar: { id: 'old-id', publicId: 'old-asset', isSystemAvatar: false },
       });
       userService.createAndAssignAvatar.mockImplementationOnce(() => {
         order.push('assign');
@@ -154,6 +156,17 @@ describe('UserController responses never carry credential hashes', () => {
       expect(upload.deleteImage).toHaveBeenCalledWith('p');
     });
 
+    it('keeps the old asset while another user or kid still uses that avatar', async () => {
+      userService.getUser.mockResolvedValueOnce({
+        id: ALICE,
+        avatar: { id: 'old-id', publicId: 'old-asset', isSystemAvatar: false },
+      });
+      userService.countAvatarReferences.mockResolvedValueOnce(1);
+      await upload$().expect(201);
+      expect(userService.countAvatarReferences).toHaveBeenCalledWith('old-id');
+      expect(upload.deleteImage).not.toHaveBeenCalled();
+    });
+
     it('leaves a system avatar alone', async () => {
       userService.getUser.mockResolvedValueOnce({
         id: ALICE,
@@ -166,7 +179,7 @@ describe('UserController responses never carry credential hashes', () => {
     it('still succeeds when releasing the old asset fails', async () => {
       userService.getUser.mockResolvedValueOnce({
         id: ALICE,
-        avatar: { publicId: 'old-asset', isSystemAvatar: false },
+        avatar: { id: 'old-id', publicId: 'old-asset', isSystemAvatar: false },
       });
       upload.deleteImage.mockRejectedValueOnce(new Error('cloudinary down'));
       await upload$().expect(201);

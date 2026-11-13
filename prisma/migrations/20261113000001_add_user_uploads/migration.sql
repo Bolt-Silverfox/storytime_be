@@ -5,6 +5,7 @@ CREATE TABLE "user_uploads" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "publicId" TEXT,
+    "resourceType" TEXT,
     "bytes" INTEGER NOT NULL,
     "pending" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

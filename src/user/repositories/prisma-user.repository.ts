@@ -212,6 +212,14 @@ export class PrismaUserRepository implements IUserRepository {
     return this.prisma.avatar.create({ data });
   }
 
+  async countAvatarReferences(avatarId: string): Promise<number> {
+    const [users, kids] = await Promise.all([
+      this.prisma.user.count({ where: { avatarId } }),
+      this.prisma.kid.count({ where: { avatarId } }),
+    ]);
+    return users + kids;
+  }
+
   async createAndAssignAvatar(
     userId: string,
     url: string,
@@ -246,9 +254,15 @@ export class PrismaUserRepository implements IUserRepository {
       // Delete the previous custom avatar if it exists and wasn't a system avatar.
       // deleteMany is idempotent — safe if the record was already deleted concurrently.
       if (user?.avatarId) {
-        await tx.avatar.deleteMany({
-          where: { id: user.avatarId, isSystemAvatar: false },
-        });
+        const [usersUsing, kidsUsing] = await Promise.all([
+          tx.user.count({ where: { avatarId: user.avatarId } }),
+          tx.kid.count({ where: { avatarId: user.avatarId } }),
+        ]);
+        if (usersUsing === 0 && kidsUsing === 0) {
+          await tx.avatar.deleteMany({
+            where: { id: user.avatarId, isSystemAvatar: false },
+          });
+        }
       }
 
       return updated;

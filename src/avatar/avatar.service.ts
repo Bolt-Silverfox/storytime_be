@@ -141,13 +141,26 @@ export class AvatarService {
       throw new BadRequestException('Avatar URL is required');
     }
 
-    return this.avatarRepository.create({
-      name: avatarName,
-      url: avatarUrl,
-      publicId: uploadResult?.public_id || null,
-      isSystemAvatar: isSystemAvatar,
-      createdBy: createdByUserId,
-    });
+    try {
+      return await this.avatarRepository.create({
+        name: avatarName,
+        url: avatarUrl,
+        publicId: uploadResult?.public_id || null,
+        isSystemAvatar: isSystemAvatar,
+        createdBy: createdByUserId,
+      });
+    } catch (error) {
+      if (uploadResult) {
+        await this.uploadService
+          .deleteImage(uploadResult.public_id)
+          .catch((cleanupError: Error) =>
+            this.logger.warn(
+              `Failed to release avatar upload "${uploadResult.public_id}": ${cleanupError.message}`,
+            ),
+          );
+      }
+      throw error;
+    }
   }
 
   async updateAvatar(

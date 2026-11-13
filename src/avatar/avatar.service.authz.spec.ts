@@ -22,6 +22,7 @@ describe('AvatarService user responses', () => {
       .mockResolvedValue({ id: 'k1', avatarId: null }),
   };
   const upload = {
+    deleteImage: jest.fn().mockResolvedValue(undefined),
     uploadImage: jest
       .fn()
       .mockResolvedValue({ secure_url: 'https://x/y.png', public_id: 'p' }),
@@ -77,6 +78,39 @@ describe('AvatarService user responses', () => {
     ])('passes it through for a %s', async (_label, run) => {
       upload.uploadImage.mockRejectedValueOnce(quota());
       await expect(run()).rejects.toBeInstanceOf(PayloadTooLargeException);
+    });
+  });
+
+  describe('createAvatar when saving the avatar row fails', () => {
+    const file = { size: 1 } as never;
+
+    beforeEach(() => {
+      upload.deleteImage.mockClear();
+      upload.uploadImage.mockResolvedValue({
+        secure_url: 'https://x/y.png',
+        public_id: 'new-asset',
+      });
+    });
+
+    it('deletes the uploaded asset and rethrows the original error', async () => {
+      const failure = new Error('db down');
+      repo.create.mockRejectedValueOnce(failure);
+      await expect(
+        service.createAvatar({ name: 'x' }, file, false, undefined, {
+          userId: 'u1',
+          exempt: false,
+        }),
+      ).rejects.toBe(failure);
+      expect(upload.deleteImage).toHaveBeenCalledWith('new-asset');
+    });
+
+    it('still rethrows the original error when the cleanup fails too', async () => {
+      const failure = new Error('db down');
+      repo.create.mockRejectedValueOnce(failure);
+      upload.deleteImage.mockRejectedValueOnce(new Error('cdn down'));
+      await expect(
+        service.createAvatar({ name: 'x' }, file, false),
+      ).rejects.toBe(failure);
     });
   });
 });

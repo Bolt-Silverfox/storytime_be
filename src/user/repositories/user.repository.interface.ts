@@ -161,6 +161,8 @@ export interface IUserRepository {
     name: string;
     isSystemAvatar: boolean;
   }): Promise<Avatar>;
+  countAvatarReferences(avatarId: string): Promise<number>;
+
   createAndAssignAvatar(
     userId: string,
     url: string,

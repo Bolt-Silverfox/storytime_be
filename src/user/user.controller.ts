@@ -249,7 +249,11 @@ export class UserController {
           uploadResult.public_id,
         ),
       );
-      if (previous?.publicId && !previous.isSystemAvatar) {
+      if (
+        previous?.publicId &&
+        !previous.isSystemAvatar &&
+        (await this.userService.countAvatarReferences(previous.id)) === 0
+      ) {
         await this.uploadService
           .deleteImage(previous.publicId)
           .catch((cleanupErr: Error) => {
