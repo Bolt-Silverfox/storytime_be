@@ -106,6 +106,18 @@ describe('NotificationController (preferences) authorization', () => {
     for (const m of mutators) expect(notifications[m]).not.toHaveBeenCalled();
   });
 
+  it.each([{ userId: BOB }, { kidId: BOB_KID }])(
+    'rejects %j on a single update so ownership cannot be reassigned',
+    async (body) => {
+      await http()
+        .patch(`/notification-preferences/${PREF_ID}`)
+        .set('Authorization', bearer('alice'))
+        .send({ enabled: false, ...body })
+        .expect(400);
+      expect(notifications.update).not.toHaveBeenCalled();
+    },
+  );
+
   describe('a preference carrying both userId and kidId needs both owners', () => {
     const send = (
       method: 'patch' | 'delete',
