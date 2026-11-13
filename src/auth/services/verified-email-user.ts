@@ -87,7 +87,7 @@ async function resolveParent(
             isEmailVerified: true,
             googleId: googleId ?? null,
             appleId: appleId ?? null,
-            ...(onboardingStatus ? { onboardingStatus } : {}),
+            onboardingStatus: onboardingStatus ?? 'email_verified',
           },
         );
         return { user, isNewUser: false, newlyVerified: true };

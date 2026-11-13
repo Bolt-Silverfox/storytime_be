@@ -201,6 +201,7 @@ describe('OAuthService', () => {
           appleId: null,
           pinHash: null,
           biometricsEnabled: false,
+          onboardingStatus: 'email_verified',
         });
         expect(
           passwordService.hashPassword.mock.invocationCallOrder[0],

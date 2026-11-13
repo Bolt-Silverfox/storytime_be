@@ -961,6 +961,7 @@ function createMockPrismaService() {
         ]),
       ),
     },
+    $executeRaw: jest.fn(() => Promise.resolve(1)),
     $transaction: jest.fn(
       (operations: unknown[] | ((prisma: unknown) => Promise<unknown>)) => {
         if (typeof operations === 'function') {
