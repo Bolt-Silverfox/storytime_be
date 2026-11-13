@@ -300,9 +300,9 @@ describe('Authentication (e2e)', () => {
     });
 
     it('answers a case-variant duplicate with the resource-exists conflict, not the generic Prisma one', async () => {
-      const prisma = app.get(PrismaService) as unknown as {
-        $queryRaw: jest.Mock;
-      };
+      const prisma = app.get<PrismaService, { $queryRaw: jest.Mock }>(
+        PrismaService,
+      );
       prisma.$queryRaw.mockResolvedValueOnce([{ id: 'legacy-mixed-case-row' }]);
 
       const res = await request(server).post('/api/v1/auth/register').send({

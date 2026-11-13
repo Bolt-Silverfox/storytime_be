@@ -12,6 +12,7 @@ import { PasswordlessThrottleService } from './passwordless-throttle.service';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import { INCR_WITH_EXPIRY } from './passwordless-throttle.service';
+import { PASSWORDLESS_REDIS_TIMEOUT_MS } from './passwordless.constants';
 import {
   InMemoryAuthRepository,
   InMemoryLoginChallengeRepository,
@@ -347,6 +348,79 @@ describe('PasswordlessService', () => {
 
       expect(ctx.authRepo.users).toHaveLength(0);
       expect(ctx.repo.rows[0].consumedAt).toBeNull();
+    });
+  });
+
+  describe('a stalled Redis connection', () => {
+    const T = PASSWORDLESS_REDIS_TIMEOUT_MS;
+
+    const existingOwner = async (ctx: ReturnType<typeof build>) => {
+      await ctx.authRepo.createUser({
+        email: 'owner@example.com',
+        passwordHash: 'h',
+        isEmailVerified: true,
+        role: 'parent',
+      });
+      await ctx.service.request('owner@example.com', '203.0.113.9');
+      return ctx.captured[ctx.captured.length - 1].code;
+    };
+
+    it('answers a request with 503 after one call timeout', async () => {
+      const ctx = build();
+      ctx.redis.hung = true;
+      const outcome = ctx.service
+        .request('owner@example.com', '203.0.113.9')
+        .then(
+          () => null,
+          (error: unknown) => error,
+        );
+
+      await jest.advanceTimersByTimeAsync(T);
+
+      expect(await outcome).toBeInstanceOf(ServiceUnavailableException);
+      expect(ctx.captured).toHaveLength(0);
+      expect(ctx.repo.rows).toHaveLength(0);
+    });
+
+    it('lets a verify through the fail-open limits within a few call timeouts', async () => {
+      const ctx = build();
+      const code = await existingOwner(ctx);
+      ctx.redis.hung = true;
+      const outcome = ctx.service.verify(
+        'owner@example.com',
+        code,
+        '203.0.113.9',
+      );
+
+      await jest.advanceTimersByTimeAsync(4 * T);
+
+      await expect(outcome).resolves.toMatchObject({ isNewUser: false });
+    });
+
+    it('lets a consume through the fail-open limits within a call timeout', async () => {
+      const ctx = build();
+      await existingOwner(ctx);
+      const { linkToken } = ctx.captured[ctx.captured.length - 1];
+      ctx.redis.hung = true;
+      const outcome = ctx.service.consume(linkToken, '203.0.113.9');
+
+      await jest.advanceTimersByTimeAsync(4 * T);
+
+      await expect(outcome).resolves.toMatchObject({ isNewUser: false });
+    });
+
+    it('does not make the login wait for the known-network marker', async () => {
+      const ctx = build();
+      const code = await existingOwner(ctx);
+      ctx.redis.hungCommands = ['set'];
+      const settled = jest.fn();
+
+      void ctx.service
+        .verify('owner@example.com', code, '203.0.113.9')
+        .then(settled);
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(settled).toHaveBeenCalledTimes(1);
     });
   });
 

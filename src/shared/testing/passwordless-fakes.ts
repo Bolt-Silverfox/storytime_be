@@ -117,9 +117,16 @@ export class InMemoryRedis {
     { n: number; expiresAt: number; text?: string }
   >();
   down = false;
+  hung = false;
+  hungCommands: string[] = [];
+
+  private stalls(command: string): boolean {
+    return this.hung || this.hungCommands.includes(command);
+  }
 
   client = {
     get: (key: string): Promise<string | null> => {
+      if (this.stalls('get')) return new Promise(() => undefined);
       if (this.down) return Promise.reject(new Error('redis down'));
       const cur = this.store.get(key);
       return Promise.resolve(
@@ -132,6 +139,7 @@ export class InMemoryRedis {
       key: string,
       ttlMs: string,
     ): Promise<number> => {
+      if (this.stalls('eval')) return new Promise(() => undefined);
       if (this.down) return Promise.reject(new Error('redis down'));
       const now = Date.now();
       if (script === DECR_CLAMPED) {
@@ -157,6 +165,7 @@ export class InMemoryRedis {
       return Promise.resolve(cur.n);
     },
     decr: (key: string): Promise<number> => {
+      if (this.stalls('decr')) return new Promise(() => undefined);
       if (this.down) return Promise.reject(new Error('redis down'));
       const cur = this.store.get(key);
       if (!cur || cur.expiresAt <= Date.now()) {
@@ -173,6 +182,7 @@ export class InMemoryRedis {
       ttl: number,
       mode?: 'NX',
     ): Promise<string | null> => {
+      if (this.stalls('set')) return new Promise(() => undefined);
       if (this.down) return Promise.reject(new Error('redis down'));
       const now = Date.now();
       const cur = this.store.get(key);

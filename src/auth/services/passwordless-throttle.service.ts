@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RedisService } from '@/redis/redis.service';
+import { PASSWORDLESS_REDIS_TIMEOUT_MS } from './passwordless.constants';
 
 export const INCR_WITH_EXPIRY = `
 local n = redis.call('INCR', KEYS[1])
@@ -16,28 +17,38 @@ end
 return n
 `;
 
+const withTimeout = <T>(command: Promise<T>): Promise<T> => {
+  let timer: NodeJS.Timeout;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('Passwordless throttle call timed out')),
+      PASSWORDLESS_REDIS_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([command, timeout]).finally(() => clearTimeout(timer));
+};
+
 @Injectable()
 export class PasswordlessThrottleService {
   constructor(private readonly redis: RedisService) {}
 
   async release(key: string, windowMs: number): Promise<void> {
-    await this.redis.client.eval(DECR_CLAMPED, 1, key, String(windowMs));
+    await withTimeout(
+      this.redis.client.eval(DECR_CLAMPED, 1, key, String(windowMs)),
+    );
   }
 
   async mark(key: string, ttlSeconds: number): Promise<void> {
-    await this.redis.client.set(key, '1', 'EX', ttlSeconds);
+    await withTimeout(this.redis.client.set(key, '1', 'EX', ttlSeconds));
   }
 
   async peek(key: string): Promise<number> {
-    return Number((await this.redis.client.get(key)) ?? 0);
+    return Number((await withTimeout(this.redis.client.get(key))) ?? 0);
   }
 
   async hit(key: string, windowMs: number): Promise<number> {
-    const count = await this.redis.client.eval(
-      INCR_WITH_EXPIRY,
-      1,
-      key,
-      String(windowMs),
+    const count = await withTimeout(
+      this.redis.client.eval(INCR_WITH_EXPIRY, 1, key, String(windowMs)),
     );
     return Number(count);
   }

@@ -280,7 +280,7 @@ export class PasswordlessService {
     const userDto = new UserDto({ ...user, numberOfKids });
     const tokenData = await this.tokenService.createTokenPair(userDto);
 
-    await this.throttle
+    void this.throttle
       .mark(
         this.knownNetworkKey(this.hmac(emailNormalized), ip),
         PASSWORDLESS_KNOWN_NETWORK_TTL_SECONDS,
