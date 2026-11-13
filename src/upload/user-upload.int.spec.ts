@@ -77,7 +77,7 @@ describeDb('user_uploads (real Postgres)', () => {
     ).rejects.toBeInstanceOf(PayloadTooLargeException);
     jest
       .spyOn(cloudinary.uploader, 'destroy')
-      .mockResolvedValue({ result: 'ok' } as never);
+      .mockResolvedValue({ result: 'ok' });
     await service.deleteImage(first.public_id);
     await service.uploadImage(file(120 * MB), 'avatars', owner);
     expect(await raw.userUpload.count({ where: { userId } })).toBe(1);
