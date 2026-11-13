@@ -19,12 +19,13 @@ import { GuestStoryAudioService } from './guest-story-audio.service';
 const mockVoiceService = {
   listVoices: jest.fn(),
   fetchAvailableVoices: jest.fn(),
+  uploadVoice: jest.fn(),
 };
 
 const mockStoryService = {
   getStoryById: jest.fn(),
 };
-const mockUploadService = {};
+const mockUploadService = { uploadFile: jest.fn() };
 const mockTextToSpeechService = {
   batchTextToSpeechEager: jest.fn(),
 };
@@ -428,6 +429,19 @@ describe('VoiceController', () => {
         id,
         { allowSharedGuest: true },
       );
+    });
+  });
+
+  describe('uploadVoiceFile', () => {
+    it('does not charge the voice sample to the upload quota', async () => {
+      mockUploadService.uploadFile.mockResolvedValue({
+        secure_url: 'https://x/v.mp3',
+        public_id: 'v',
+      });
+      mockVoiceService.uploadVoice.mockResolvedValue({ id: 'voice-1' });
+      const file = { buffer: Buffer.from('a'), size: 1 } as never;
+      await controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest);
+      expect(mockUploadService.uploadFile).toHaveBeenCalledWith(file);
     });
   });
 });

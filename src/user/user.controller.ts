@@ -239,14 +239,26 @@ export class UserController {
       'avatars',
       uploadOwner(req.authUserData),
     );
+    const previous = (await this.userService.getUser(req.authUserData.userId))
+      ?.avatar;
     try {
-      return stripCredentials(
+      const updated = stripCredentials(
         await this.userService.createAndAssignAvatar(
           req.authUserData.userId,
           uploadResult.secure_url,
           uploadResult.public_id,
         ),
       );
+      if (previous?.publicId && !previous.isSystemAvatar) {
+        await this.uploadService
+          .deleteImage(previous.publicId)
+          .catch((cleanupErr: Error) => {
+            this.logger.warn(
+              `Failed to release replaced avatar "${previous.publicId}": ${cleanupErr.message}`,
+            );
+          });
+      }
+      return updated;
     } catch (err) {
       // Compensating action: clean up the Cloudinary asset if the DB transaction fails
       await this.uploadService

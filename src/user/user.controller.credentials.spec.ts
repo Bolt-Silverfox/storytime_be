@@ -49,12 +49,13 @@ describe('UserController responses never carry credential hashes', () => {
     undoDeleteUser: jest.fn(),
     deleteUserAccount: jest.fn(),
     updateUser: jest.fn(),
+    getUser: jest.fn(),
   };
   const upload = {
     uploadImage: jest
       .fn()
       .mockResolvedValue({ secure_url: 'https://x/y.png', public_id: 'p' }),
-    deleteImage: jest.fn(),
+    deleteImage: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -111,6 +112,41 @@ describe('UserController responses never carry credential hashes', () => {
       { userId: ALICE, exempt: false },
     );
     expectNoCredentials(res.body);
+  });
+
+  describe('replacing the avatar releases the previous upload', () => {
+    const upload$ = () =>
+      http()
+        .post('/user/me/upload-avatar')
+        .set('Authorization', bearer('alice'))
+        .attach('file', PNG, { filename: 'a.png', contentType: 'image/png' });
+
+    it('deletes the previous custom avatar asset', async () => {
+      userService.getUser.mockResolvedValueOnce({
+        id: ALICE,
+        avatar: { publicId: 'old-asset', isSystemAvatar: false },
+      });
+      await upload$().expect(201);
+      expect(upload.deleteImage).toHaveBeenCalledWith('old-asset');
+    });
+
+    it('leaves a system avatar alone', async () => {
+      userService.getUser.mockResolvedValueOnce({
+        id: ALICE,
+        avatar: { publicId: 'system-asset', isSystemAvatar: true },
+      });
+      await upload$().expect(201);
+      expect(upload.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('still succeeds when releasing the old asset fails', async () => {
+      userService.getUser.mockResolvedValueOnce({
+        id: ALICE,
+        avatar: { publicId: 'old-asset', isSystemAvatar: false },
+      });
+      upload.deleteImage.mockRejectedValueOnce(new Error('cloudinary down'));
+      await upload$().expect(201);
+    });
   });
 
   it('POST /user/me/undo-delete', async () => {

@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  PayloadTooLargeException,
   Logger,
 } from '@nestjs/common';
 import { UploadService, UploadOwner } from '../upload/upload.service';
@@ -44,6 +45,7 @@ export class AvatarService {
         owner,
       );
     } catch (error) {
+      if (error instanceof PayloadTooLargeException) throw error;
       this.logger.error(
         `Failed to upload ${entityType} avatar to Cloudinary:`,
         error,
@@ -98,13 +100,19 @@ export class AvatarService {
     file: Express.Multer.File,
     isSystemAvatar: boolean = false,
     createdByUserId?: string,
+    owner?: UploadOwner,
   ) {
     let uploadResult: { secure_url: string; public_id: string } | undefined;
 
     if (file) {
       try {
-        uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+        uploadResult = await this.uploadService.uploadImage(
+          file,
+          'avatars',
+          owner,
+        );
       } catch (error) {
+        if (error instanceof PayloadTooLargeException) throw error;
         this.logger.error('Failed to upload image to Cloudinary:', error);
         throw new BadRequestException('Failed to upload image');
       }
