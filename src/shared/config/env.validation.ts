@@ -71,6 +71,8 @@ const envSchema = z
     MAIL_ENCRYPTION: z.enum(['TLS', 'SSL']).optional().default('TLS'),
     JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
     ADMIN_SECRET: z.string().min(1, 'ADMIN_SECRET is required'),
+    BULL_BOARD_USER: z.string().optional(),
+    BULL_BOARD_PASSWORD: z.string().optional(),
     SECRET: z.string().min(1, 'SECRET is required'),
     WEB_APP_BASE_URL: z.string().url('WEB_APP_BASE_URL must be a valid URL'),
     GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),

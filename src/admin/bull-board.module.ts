@@ -1,26 +1,17 @@
 import { Module } from '@nestjs/common';
 import { BullBoardModule } from '@bull-board/nestjs';
-import { ExpressAdapter } from '@bull-board/express';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { STORY_QUEUE_NAME } from '../story/queue/story-queue.constants';
 import { EMAIL_QUEUE_NAME } from '../notification/queue/email-queue.constants';
+import { bullBoardOptionsFromConfig } from './bull-board-auth';
 
-/**
- * Bull Board Module for queue monitoring dashboard
- *
- * Access: /admin/queues
- *
- * Features:
- * - Real-time job monitoring
- * - Job retry/remove capabilities
- * - Queue statistics (completed, failed, waiting, active)
- * - Job details and error inspection
- */
 @Module({
   imports: [
-    BullBoardModule.forRoot({
-      route: '/admin/queues',
-      adapter: ExpressAdapter,
+    BullBoardModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => bullBoardOptionsFromConfig(config),
     }),
     BullBoardModule.forFeature(
       {

@@ -35,6 +35,19 @@ const base = {
 };
 
 describe('validateEnv', () => {
+  it('boots without the optional Bull Board credentials and passes them through when set', () => {
+    const bare = validateEnv(base);
+    expect(bare.BULL_BOARD_USER).toBeUndefined();
+    expect(bare.BULL_BOARD_PASSWORD).toBeUndefined();
+    const set = validateEnv({
+      ...base,
+      BULL_BOARD_USER: 'ops',
+      BULL_BOARD_PASSWORD: 'pw',
+    });
+    expect(set.BULL_BOARD_USER).toBe('ops');
+    expect(set.BULL_BOARD_PASSWORD).toBe('pw');
+  });
+
   it('applies defaults', () => {
     const env = validateEnv(base);
     expect(env.PORT).toBe(3000);
