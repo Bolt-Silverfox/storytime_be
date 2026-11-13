@@ -30,7 +30,7 @@ describe('POST /avatars upload accounting', () => {
   afterEach(() => app.close());
 
   const post = (who: 'alice' | 'admin') =>
-    request(app.getHttpServer())
+    request(app.getHttpServer() as Parameters<typeof request>[0])
       .post('/avatars')
       .set('Authorization', bearer(who))
       .field('name', 'mine')

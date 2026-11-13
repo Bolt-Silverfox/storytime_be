@@ -130,6 +130,30 @@ describe('UserController responses never carry credential hashes', () => {
       expect(upload.deleteImage).toHaveBeenCalledWith('old-asset');
     });
 
+    it('deletes the old asset only after the new avatar is committed', async () => {
+      const order: string[] = [];
+      userService.getUser.mockResolvedValueOnce({
+        id: ALICE,
+        avatar: { publicId: 'old-asset', isSystemAvatar: false },
+      });
+      userService.createAndAssignAvatar.mockImplementationOnce(() => {
+        order.push('assign');
+        return Promise.resolve({ id: ALICE });
+      });
+      upload.deleteImage.mockImplementationOnce((id: string) => {
+        order.push(`delete:${id}`);
+        return Promise.resolve();
+      });
+      await upload$().expect(201);
+      expect(order).toEqual(['assign', 'delete:old-asset']);
+    });
+
+    it('releases the new asset when the lookup of the old avatar throws', async () => {
+      userService.getUser.mockRejectedValueOnce(new Error('db down'));
+      await upload$().expect(500);
+      expect(upload.deleteImage).toHaveBeenCalledWith('p');
+    });
+
     it('leaves a system avatar alone', async () => {
       userService.getUser.mockResolvedValueOnce({
         id: ALICE,

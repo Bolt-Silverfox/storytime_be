@@ -34,7 +34,7 @@ export class AvatarService {
     entityId: string,
     entityType: 'user' | 'kid',
     file: Express.Multer.File,
-    entityName: string, // eslint-disable-line @typescript-eslint/no-unused-vars
+    entityName: string,
     owner?: UploadOwner,
   ) {
     let uploadResult;

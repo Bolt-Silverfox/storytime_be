@@ -267,6 +267,34 @@ describe('UploadService per-user upload cap', () => {
     expect(prisma.rows).toHaveLength(0);
   });
 
+  it('logs a warning when destroying the asset after a failed record also fails', async () => {
+    cloudinaryReplies('p8', MB);
+    prisma.userUpload.update.mockRejectedValueOnce(new Error('db down'));
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockRejectedValue(new Error('cdn down'));
+    const warn = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    await expect(
+      service.uploadImage(file(MB), 'avatars', { userId: 'u1' }),
+    ).rejects.toThrow('db down');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('p8'));
+  });
+
+  it('deletes a non-image asset with its resource type and frees the row', async () => {
+    seed({ userId: 'u1', bytes: 4 * MB, publicId: 'voice-1' });
+    const destroy = jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'ok' });
+    await service.deleteImage('voice-1', 'video');
+    expect(destroy).toHaveBeenCalledWith('voice-1', { resource_type: 'video' });
+    expect(prisma.rows).toHaveLength(0);
+  });
+
   it('frees the space when the image is deleted', async () => {
     seed({ userId: 'u1', bytes: 10 * MB, publicId: 'gone' });
     jest

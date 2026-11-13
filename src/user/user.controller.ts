@@ -239,9 +239,9 @@ export class UserController {
       'avatars',
       uploadOwner(req.authUserData),
     );
-    const previous = (await this.userService.getUser(req.authUserData.userId))
-      ?.avatar;
     try {
+      const previous = (await this.userService.getUser(req.authUserData.userId))
+        ?.avatar;
       const updated = stripCredentials(
         await this.userService.createAndAssignAvatar(
           req.authUserData.userId,

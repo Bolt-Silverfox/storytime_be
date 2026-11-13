@@ -25,7 +25,7 @@ const mockVoiceService = {
 const mockStoryService = {
   getStoryById: jest.fn(),
 };
-const mockUploadService = { uploadFile: jest.fn() };
+const mockUploadService = { uploadFile: jest.fn(), deleteImage: jest.fn() };
 const mockTextToSpeechService = {
   batchTextToSpeechEager: jest.fn(),
 };
@@ -433,15 +433,56 @@ describe('VoiceController', () => {
   });
 
   describe('uploadVoiceFile', () => {
-    it('does not charge the voice sample to the upload quota', async () => {
-      mockUploadService.uploadFile.mockResolvedValue({
-        secure_url: 'https://x/v.mp3',
-        public_id: 'v',
-      });
+    const file = { buffer: Buffer.from('a'), size: 1 } as never;
+    const uploaded = {
+      secure_url: 'https://x/v.mp3',
+      public_id: 'v',
+      resource_type: 'video',
+    };
+
+    beforeEach(() => {
+      mockUploadService.uploadFile.mockReset();
+      mockUploadService.deleteImage.mockReset();
+      mockUploadService.uploadFile.mockResolvedValue(uploaded);
+      mockUploadService.deleteImage.mockResolvedValue(undefined);
+    });
+
+    it('charges the voice sample to the caller upload quota', async () => {
       mockVoiceService.uploadVoice.mockResolvedValue({ id: 'voice-1' });
-      const file = { buffer: Buffer.from('a'), size: 1 } as never;
       await controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest);
-      expect(mockUploadService.uploadFile).toHaveBeenCalledWith(file);
+      expect(mockUploadService.uploadFile).toHaveBeenCalledWith(file, {
+        userId: 'user-1',
+        exempt: false,
+      });
+      expect(mockUploadService.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('exempts an admin from the quota', async () => {
+      mockVoiceService.uploadVoice.mockResolvedValue({ id: 'voice-1' });
+      const admin = {
+        authUserData: { userId: 'a-1', userRole: 'admin' },
+      } as AuthenticatedRequest;
+      await controller.uploadVoiceFile(file, { name: 'Dad' }, admin);
+      expect(mockUploadService.uploadFile).toHaveBeenCalledWith(file, {
+        userId: 'a-1',
+        exempt: true,
+      });
+    });
+
+    it('destroys the asset and releases the quota row when cloning fails', async () => {
+      mockVoiceService.uploadVoice.mockRejectedValue(new Error('clone failed'));
+      await expect(
+        controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest),
+      ).rejects.toThrow('clone failed');
+      expect(mockUploadService.deleteImage).toHaveBeenCalledWith('v', 'video');
+    });
+
+    it('still reports the clone failure when the cleanup fails too', async () => {
+      mockVoiceService.uploadVoice.mockRejectedValue(new Error('clone failed'));
+      mockUploadService.deleteImage.mockRejectedValue(new Error('cdn down'));
+      await expect(
+        controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest),
+      ).rejects.toThrow('clone failed');
     });
   });
 });

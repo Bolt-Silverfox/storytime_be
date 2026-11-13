@@ -82,7 +82,11 @@ export class UploadService {
       await this.releaseReservation(reservationId);
       await cloudinary.uploader
         .destroy(result.public_id)
-        .catch(() => undefined);
+        .catch((destroyError: unknown) =>
+          this.logger.warn(
+            `Failed to destroy asset "${result.public_id}" after a failed upload record: ${destroyError instanceof Error ? destroyError.message : String(destroyError)}`,
+          ),
+        );
       throw error;
     }
     return result;
@@ -261,9 +265,13 @@ export class UploadService {
     }
   }
 
-  async deleteImage(publicId: string): Promise<void> {
+  async deleteImage(publicId: string, resourceType?: string): Promise<void> {
     try {
-      const result = await cloudinary.uploader.destroy(publicId);
+      const result = resourceType
+        ? await cloudinary.uploader.destroy(publicId, {
+            resource_type: resourceType,
+          })
+        : await cloudinary.uploader.destroy(publicId);
       if (result.result !== 'ok') {
         this.logger.error('Cloudinary delete failed:', result);
         throw new InternalServerErrorException(
