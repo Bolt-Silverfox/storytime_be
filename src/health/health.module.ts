@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { TerminusModule } from '@nestjs/terminus';
 import { BullModule } from '@nestjs/bullmq';
 import { HealthController } from './health.controller';
+import { AdminHealthController } from './health.admin.controller';
+import { HealthChecks } from './health-checks';
 import { MetricsController } from './metrics.controller';
 import {
   PrismaHealthIndicator,
@@ -25,8 +27,9 @@ import { STORY_QUEUE_NAME } from '@/story/queue/story-queue.constants';
       { name: STORY_QUEUE_NAME },
     ),
   ],
-  controllers: [HealthController, MetricsController],
+  controllers: [HealthController, AdminHealthController, MetricsController],
   providers: [
+    HealthChecks,
     PrismaHealthIndicator,
     RedisHealthIndicator,
     SmtpHealthIndicator,

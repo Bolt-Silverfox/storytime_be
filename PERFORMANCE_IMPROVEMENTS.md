@@ -163,6 +163,7 @@ Memory monitoring covered by Terminus health checks (`checkHeap(500MB)`, `checkR
 
 **Health Endpoints:**
 ```
+Public (status only, no detail; SMTP is the last cached result):
 GET /health          - Liveness
 GET /health/ready    - Readiness (DB, Redis, Queues)
 GET /health/db       - Database
@@ -174,6 +175,11 @@ GET /health/cloudinary - Cloudinary
 GET /health/external - All external services
 GET /health/system   - Memory + Disk
 GET /health/full     - All indicators
+
+Admin (AuthSessionGuard + AdminGuard, full detail, live SMTP check):
+GET /health/admin/{ready,db,redis,smtp,queue,system,full,tts}
+
+Swagger (/docs, /docs-json) is disabled when NODE_ENV=production unless SWAGGER_ENABLED=true.
 ```
 
 ### 6.2 Metrics ✅ LARGELY COMPLETE

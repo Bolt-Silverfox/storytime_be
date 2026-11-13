@@ -5,6 +5,7 @@ import { HealthIndicatorService, TerminusModule } from '@nestjs/terminus';
 import { Queue } from 'bullmq';
 import request from 'supertest';
 import { HealthController } from './health.controller';
+import { HealthChecks } from './health-checks';
 import {
   CircuitBreakerHealthIndicator,
   PrismaHealthIndicator,
@@ -68,6 +69,7 @@ describe('HealthController with an unresponsive Redis', () => {
       imports: [TerminusModule],
       controllers: [HealthController],
       providers: [
+        HealthChecks,
         CircuitBreakerService,
         CircuitBreakerHealthIndicator,
         TTSCircuitBreakerHealthIndicator,
@@ -84,6 +86,7 @@ describe('HealthController with an unresponsive Redis', () => {
           inject: [HealthIndicatorService],
           useFactory: (his: HealthIndicatorService) => ({
             isHealthy: (key: string) => Promise.resolve(his.check(key).up()),
+            cachedHealth: (key: string) => his.check(key).up(),
           }),
         },
         {
@@ -122,16 +125,10 @@ describe('HealthController with an unresponsive Redis', () => {
       const res = await request(server()).get(path).expect(503);
 
       expect(res.body.status).toBe('error');
-      // memory_* may also be down on a busy host; only the Redis-backed ones matter.
-      expect(Object.keys(res.body.error as object)).toEqual(
-        expect.arrayContaining(down),
-      );
       for (const key of down) {
-        expect(res.body.error[key]).toMatchObject({
-          status: 'down',
-          error: `timeout after ${TEST_TIMEOUT_MS}ms`,
-        });
+        expect(res.body.checks[key]).toEqual({ status: 'down' });
       }
+      expect(JSON.stringify(res.body)).not.toContain('timeout after');
     },
   );
 });
