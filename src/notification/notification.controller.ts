@@ -215,21 +215,19 @@ export class NotificationController {
   }
 
   private async assertPreferenceAccess(req: AuthenticatedRequest, id: string) {
-    const owner = await this.notificationService
-      .getPreferenceOwner(id)
-      .catch((e: unknown) => {
-        if (e instanceof NotFoundException) {
-          throw new ForbiddenException(
-            'You do not have access to this resource',
-          );
-        }
-        throw e;
-      });
-    if (owner.kidId && owner.userId) {
-      await this.accessControl.assertKidAccess(req.authUserData, owner.kidId);
-      this.accessControl.assertSelfOrAdmin(req.authUserData, owner.userId);
-      return;
+    try {
+      const owner = await this.notificationService.getPreferenceOwner(id);
+      if (owner.kidId && owner.userId) {
+        await this.accessControl.assertKidAccess(req.authUserData, owner.kidId);
+        this.accessControl.assertSelfOrAdmin(req.authUserData, owner.userId);
+        return;
+      }
+      await this.accessControl.assertOwner(req.authUserData, owner);
+    } catch (e) {
+      if (e instanceof NotFoundException || e instanceof ForbiddenException) {
+        throw new ForbiddenException('You do not have access to this resource');
+      }
+      throw e;
     }
-    await this.accessControl.assertOwner(req.authUserData, owner);
   }
 }

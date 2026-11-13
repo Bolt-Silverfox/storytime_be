@@ -139,6 +139,39 @@ describe('NotificationController (preferences) authorization', () => {
     },
   );
 
+  it('gives the same 403 body for a missing, foreign-user and foreign-kid preference', async () => {
+    const bodies: unknown[] = [];
+    const denied = async () => {
+      const res = await http()
+        .get(`/notification-preferences/${PREF_ID}`)
+        .set('Authorization', bearer('alice'))
+        .expect(403);
+      bodies.push(res.body);
+    };
+    notifications.getPreferenceOwner.mockRejectedValueOnce(
+      new NotFoundException(),
+    );
+    await denied();
+    notifications.getPreferenceOwner.mockResolvedValueOnce({ userId: BOB });
+    await denied();
+    notifications.getPreferenceOwner.mockResolvedValueOnce({
+      userId: null,
+      kidId: BOB_KID,
+    });
+    await denied();
+    notifications.getPreferenceOwner.mockResolvedValueOnce({
+      userId: ALICE,
+      kidId: BOB_KID,
+    });
+    await denied();
+    notifications.getPreferenceOwner.mockResolvedValueOnce({
+      userId: BOB,
+      kidId: ALICE_KID,
+    });
+    await denied();
+    expect(new Set(bodies.map((b) => JSON.stringify(b))).size).toBe(1);
+  });
+
   describe('a preference carrying both userId and kidId needs both owners', () => {
     const send = (
       method: 'patch' | 'delete',
@@ -377,10 +410,17 @@ describe('NotificationController (preferences) authorization', () => {
     });
 
     it('answers a missing preference id the same way as a foreign one', async () => {
-      notifications.getPreferenceOwner.mockRejectedValue(
+      notifications.getPreferenceOwner.mockResolvedValueOnce({ userId: BOB });
+      const foreign = await patch([{ id: PREF_ID, enabled: false }]).expect(
+        403,
+      );
+      notifications.getPreferenceOwner.mockRejectedValueOnce(
         new NotFoundException(),
       );
-      await patch([{ id: PREF_ID, enabled: false }]).expect(403);
+      const missing = await patch([{ id: PREF_ID, enabled: false }]).expect(
+        403,
+      );
+      expect(missing.body).toEqual(foreign.body);
       expect(notifications.bulkUpdate).not.toHaveBeenCalled();
     });
 
