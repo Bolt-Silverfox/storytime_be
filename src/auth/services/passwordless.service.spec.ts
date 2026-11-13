@@ -409,6 +409,22 @@ describe('PasswordlessService', () => {
       await expect(outcome).resolves.toMatchObject({ isNewUser: false });
     });
 
+    it('returns the login once the guest carry-over has waited a call timeout', async () => {
+      const ctx = build();
+      const code = await existingOwner(ctx);
+      ctx.guestMerge.carryOver.mockReturnValue(new Promise(() => undefined));
+      const outcome = ctx.service.verify(
+        'owner@example.com',
+        code,
+        '203.0.113.9',
+        '3f2b8c1e-5a4d-4c6b-9e7a-1d2c3b4a5f60',
+      );
+
+      await jest.advanceTimersByTimeAsync(T);
+
+      await expect(outcome).resolves.toMatchObject({ isNewUser: false });
+    });
+
     it('does not make the login wait for the known-network marker', async () => {
       const ctx = build();
       const code = await existingOwner(ctx);

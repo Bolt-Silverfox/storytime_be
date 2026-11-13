@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { RedisService } from '@/redis/redis.service';
-import { PASSWORDLESS_REDIS_TIMEOUT_MS } from './passwordless.constants';
+import { withRedisTimeout as withTimeout } from './redis-timeout';
 
 export const INCR_WITH_EXPIRY = `
 local n = redis.call('INCR', KEYS[1])
@@ -16,17 +16,6 @@ if n < 0 then
 end
 return n
 `;
-
-const withTimeout = <T>(command: Promise<T>): Promise<T> => {
-  let timer: NodeJS.Timeout;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error('Passwordless throttle call timed out')),
-      PASSWORDLESS_REDIS_TIMEOUT_MS,
-    );
-  });
-  return Promise.race([command, timeout]).finally(() => clearTimeout(timer));
-};
 
 @Injectable()
 export class PasswordlessThrottleService {

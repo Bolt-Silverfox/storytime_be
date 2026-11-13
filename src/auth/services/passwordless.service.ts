@@ -27,6 +27,7 @@ import {
 } from './passwordless.constants';
 import { PasswordlessGuestMergeService } from './passwordless-guest-merge.service';
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
+import { withRedisTimeout } from './redis-timeout';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { canonicalIp, ipBlock } from './ip-block';
@@ -321,7 +322,9 @@ export class PasswordlessService {
 
     if (guestSessionId) {
       try {
-        await this.guestMerge.carryOver(user.id, guestSessionId, isNewUser);
+        await withRedisTimeout(
+          this.guestMerge.carryOver(user.id, guestSessionId, isNewUser),
+        );
       } catch (error) {
         this.logger.warn(
           `Guest carry-over skipped: ${error instanceof Error ? error.message : 'unknown error'}`,
