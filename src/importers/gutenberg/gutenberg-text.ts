@@ -282,10 +282,12 @@ const TITLE_PAGE_AMBIGUOUS = {
   reason: 'title-page-ambiguous',
 } as const;
 
-const BYLINE = /^by\s+(.+?)[\s.]*$/i;
+const BYLINE = /^[Bb][Yy]\s+(.+?)[\s.]*$/;
 const BYLINE_SHAPE =
-  /^by\s+\p{Lu}\S*(?:\s+(?:\p{Lu}\S*|and|&|with|de|la|van|von|der|du|le|di|da)){0,7}[\s.]*$/iu;
-const MAX_TAGLINE_WORDS = 12;
+  /^[Bb][Yy]\s+\p{Lu}\S*(?:\s+(?:\p{Lu}\S*|and|&|with)){0,7}[\s.]*$/u;
+const CREDIT_START =
+  /^(?:illustrated\s+by|with\s+illustrations|translated\s+by|edited\s+by|retold\s+by|adapted\s+by|being|or|(?:a|an)\s+(?:\p{L}+\s+){0,2}(?:story|tale|fable|poem)\s+for)\b/iu;
+const MAX_CREDIT_WORDS = 12;
 const LETTER_FOLD: Record<string, string> = {
   Æ: 'AE',
   æ: 'ae',
@@ -313,22 +315,23 @@ function isBylineFor(text: string, author: string | null): boolean {
   if (!m || !author) return false;
   const named = nameTokens(m[1]);
   const known = new Set(nameTokens(author));
-  return named.length > 0 && named.every((t) => known.has(t));
+  const required = nameTokens(author.replace(/\([^)]*\)/g, ' ')).filter(
+    (t) => t.length > 1,
+  );
+  return (
+    named.length > 0 &&
+    named.every((t) => known.has(t)) &&
+    required.every((t) => named.includes(t))
+  );
 }
 
-const OPENING_STRUCTURE =
-  /^(?:(?:chapter|book|part|stave|section|canto|act|scene|volume|vol\.?)\s+\S|(?:preface|introduction|prologue|epilogue|foreword|contents)\b|[ivxlcdm\d]+[.:]?$)/i;
-const SUBTITLE_FOR =
-  /^(?:a|an)\s+(?:\p{L}+\s+){0,2}(?:story|tale|stories|tales|fable|fables|poem)\s+for\s+\p{L}+(?:\s+\p{L}+){0,2}\.?$/iu;
+const wordsIn = (s: string): number => s.split(/\s+/).length;
 
-function looksLikeTagline(lines: string[]): boolean {
-  if (lines.length !== 1) return false;
-  const line = lines[0];
-  if (line.split(/\s+/).length > MAX_TAGLINE_WORDS) return false;
-  if (OPENING_STRUCTURE.test(line)) return false;
-  return (
-    !/\p{Ll}/u.test(line) || /^or,\s/i.test(line) || SUBTITLE_FOR.test(line)
-  );
+function isTitlePageResidue(lines: string[]): boolean {
+  const text = lines.join(' ');
+  if (/\p{L}/u.test(text) && !/\p{Ll}/u.test(text)) return true;
+  if (wordsIn(text) <= MAX_CREDIT_WORDS && CREDIT_START.test(text)) return true;
+  return lines.some((l) => BYLINE_SHAPE.test(l));
 }
 
 /** Linear removal of [Illustration ...]; an unclosed one is reported, not dropped. */
@@ -484,7 +487,6 @@ export function processGutenbergText(
   const titleLc = hTitle === null ? null : hTitle.toLowerCase();
 
   let titleDropped = false;
-  let afterTitle = false;
   let next = 0;
   let carry: string[] | null = null;
   while (carry || next < paras.length) {
@@ -540,40 +542,25 @@ export function processGutenbergText(
     // An ebook number inside a story sentence is NOT deleted (that would drop
     // story words); it stays and the final residual check fails the work.
     const leading = out.length === 0;
-    const isByline = (l: string) => BYLINE_SHAPE.test(matchForm(l));
     const isTitle = (t: string) => matchForm(t).toLowerCase() === titleLc;
     if (!titleDropped && leading && isTitle(p)) {
       titleDropped = true;
-      afterTitle = true;
       continue;
     }
-    if (leading && !titleDropped && pLines.length > 1 && isTitle(pLines[0])) {
-      if (!isBylineFor(matchForm(unwrap(pLines.slice(1))), hAuthor))
-        return TITLE_PAGE_AMBIGUOUS;
-      titleDropped = true;
-      afterTitle = true;
+    if (leading && pLines.length === 1 && isBylineFor(matchForm(p), hAuthor)) {
       notes.add('title page byline removed');
       continue;
-    }
-    if (leading && pLines.length > 1 && pLines.slice(1).some(isByline)) {
-      return TITLE_PAGE_AMBIGUOUS;
-    }
-    if (leading && isBylineFor(matchForm(p), hAuthor)) {
-      notes.add('title page byline removed');
-      continue;
-    }
-    if (leading && pLines.length === 1 && isByline(pLines[0])) {
-      return TITLE_PAGE_AMBIGUOUS;
     }
     if (
       leading &&
-      afterTitle &&
       !isTitle(p) &&
-      looksLikeTagline(pLines.map(matchForm))
+      !HEADING.test(pLines[0]) &&
+      (isTitle(pLines[0]) && pLines.length > 1
+        ? true
+        : isTitlePageResidue(pLines.map(matchForm)))
     ) {
       return TITLE_PAGE_AMBIGUOUS;
     }
-    afterTitle = false;
 
     let headings = 0;
     while (headings < pLines.length) {

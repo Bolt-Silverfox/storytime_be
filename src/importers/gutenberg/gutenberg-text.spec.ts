@@ -590,10 +590,17 @@ describe('processGutenbergText hardening', () => {
       ).toEqual(AMBIGUOUS);
     });
 
+    it.each(['THE INDEX FINGER POINTED', 'THE CONTENTS OF THE BOX'])(
+      'routes an all-capitals leading line that only resembles a heading to review: %s',
+      (line) => {
+        expect(
+          processGutenbergText(wrap(`${line}\n\n${STORY}`), plain()),
+        ).toEqual({ ok: false, reason: 'title-page-ambiguous' });
+      },
+    );
+
     it.each([
-      'THE INDEX FINGER POINTED',
       'CHAPTER III. THE INDEX',
-      'THE CONTENTS OF THE BOX',
       'Index fingers pointed at the moon.',
       'INDEX OF ' + 'a very long line of ordinary story words '.repeat(3),
     ])('keeps a story line that only resembles a heading: %s', (line) => {
@@ -638,10 +645,16 @@ describe('processGutenbergText hardening', () => {
       expect(r.notes.join(' ')).not.toMatch(/contents/);
     });
 
-    it('keeps numbered stanza paragraphs when there is no contents heading', () => {
-      const body = `I.\n\nII.\n\n${STORY}`;
-      expect(contentOf(body)).toContain(STORY);
+    it('keeps numbered stanza paragraphs after story text when there is no contents heading', () => {
+      const body = `${STORY}\n\nI.\n\nII.\n\n${STORY}`;
       expect(contentOf(body)).toContain('II.');
+    });
+
+    it('routes a leading numeral paragraph to review', () => {
+      expect(contentOf(`I.\n\nII.\n\n${STORY}`)).toEqual({
+        ok: false,
+        reason: 'title-page-ambiguous',
+      });
     });
 
     it('a work with a contents block goes to needs-review (fixture 90001 with its original block)', () => {
@@ -1159,6 +1172,7 @@ describe('processGutenbergText title page line', () => {
 describe('processGutenbergText title page residue', () => {
   const run = (body: string) => processGutenbergText(wrap(body), plain());
   const STORY_WORDS = STORY.split(' ').length;
+  const AMBIGUOUS = { ok: false, reason: 'title-page-ambiguous' };
 
   it.each([
     [
@@ -1171,10 +1185,6 @@ describe('processGutenbergText title page residue', () => {
     ],
     ['a byline with no title paragraph', `BY ADA EXAMPLE\n\n${STORY}`],
     [
-      'a byline in the title paragraph',
-      `LANTERN FOX\nBy Ada Example\n\n${STORY}`,
-    ],
-    [
       'a byline around an illustration',
       `Lantern Fox\n\n[Illustration]\n\nBy Ada Example\n\n${STORY}`,
     ],
@@ -1183,46 +1193,6 @@ describe('processGutenbergText title page residue', () => {
     if (!r.ok) throw new Error(`expected ok, got ${r.reason}`);
     expect(r.content).toBe(STORY);
     expect(r.wordCount).toBe(STORY_WORDS);
-  });
-
-  it.each([
-    [
-      'a subtitle paragraph after the title',
-      "Lantern Fox\n\nOr, The Fox's Lantern\n\n" + STORY,
-    ],
-    [
-      'an all-capitals tagline after the title',
-      `Lantern Fox\n\nA TALE FOR CHILDREN.\n\n${STORY}`,
-    ],
-    [
-      'a subtitle line in the title paragraph',
-      `LANTERN FOX\nA tale for children\n\n${STORY}`,
-    ],
-    [
-      'a byline naming someone else',
-      `Lantern Fox\n\nBy Someone Else\n\n${STORY}`,
-    ],
-    [
-      'a title paragraph followed by a non-byline line',
-      `Lantern Fox\nBy the light of the moon, a fox walked home.\n\n${STORY}`,
-    ],
-  ])('routes %s to review', (_n, body) => {
-    expect(run(body)).toEqual({ ok: false, reason: 'title-page-ambiguous' });
-  });
-
-  it.each([
-    ['CHAPTER ONE'],
-    ['Chapter One'],
-    ['CHAPTER THE FIRST'],
-    ['STAVE ONE'],
-    ['PREFACE'],
-    ['I.'],
-    ['Twinkle, twinkle, little star'],
-    ['The fox walked home'],
-  ])('keeps %s as the opening after the title', (opening) => {
-    const r = run(`Lantern Fox\n\n${opening}\n\n${STORY}`);
-    if (!r.ok) throw new Error(`expected ok, got ${r.reason}`);
-    expect(r.content).toContain(opening);
   });
 
   it.each([
@@ -1240,40 +1210,85 @@ describe('processGutenbergText title page residue', () => {
     expect(r).toMatchObject({ ok: true, content: STORY });
   });
 
-  it.each([['By Dot Drawn'], ['By Ada Example and Dot Drawn']])(
-    'routes a first paragraph "%s" naming someone else to review',
-    (line) => {
-      expect(run(`${line}\n\n${STORY}`)).toEqual({
-        ok: false,
-        reason: 'title-page-ambiguous',
-      });
-    },
-  );
-
-  it('keeps a first sentence that merely starts with "By"', () => {
-    const line = 'By the light of the moon the fox walked home.';
-    expect(run(`${line}\n\n${STORY}`)).toMatchObject({ ok: true });
+  it('does not drop a byline that names only part of the header author', () => {
+    expect(run(`Lantern Fox\n\nBy Ada!\n\n${STORY}`)).toEqual(AMBIGUOUS);
   });
 
-  it('routes a wrapped title with a byline in one paragraph to review', () => {
-    expect(run(`THE TALE OF\nLANTERN FOX\nBY ADA EXAMPLE\n\n${STORY}`)).toEqual(
-      { ok: false, reason: 'title-page-ambiguous' },
-    );
+  it.each([
+    ['Illustrated by Dot Drawn'],
+    ['With Illustrations'],
+    ['Being the Adventures of a Fox'],
+    ['Translated by Bram Sample'],
+    ['Edited by Dot Drawn'],
+    ['Retold by Dot Drawn'],
+    ['Adapted by Dot Drawn'],
+    ["Or, The Fox's Lantern"],
+    ['A Story for Children.'],
+    ['A tale for the little ones.'],
+    ['INTRODUCTION BY DOT DRAWN'],
+    ['BOOK OF THE FOX AND THE LANTERN'],
+    ['PART OF THE LANTERN SERIES'],
+    ['ACT OF KINDNESS'],
+    ['SCENE FROM THE WOODS'],
+    ['MDCCC'],
+    ['A TALE FOR CHILDREN.'],
+    ['CHAPTER ONE'],
+    ['PREFACE'],
+    ['I.'],
+    ['By Dot Drawn'],
+    ['By Ada Example and Dot Drawn'],
+  ])('routes the leading line "%s" to review', (line) => {
+    expect(run(`Lantern Fox\n\n${line}\n\n${STORY}`)).toEqual(AMBIGUOUS);
+    expect(run(`${line}\n\n${STORY}`)).toEqual(AMBIGUOUS);
   });
 
-  it.each([['A Story for Children.'], ['A tale for the little ones.']])(
-    'routes the punctuated subtitle "%s" after the title to review',
-    (line) => {
-      expect(run(`Lantern Fox\n\n${line}\n\n${STORY}`)).toEqual({
-        ok: false,
-        reason: 'title-page-ambiguous',
-      });
-    },
-  );
+  it.each([
+    ['a byline in the title paragraph', 'LANTERN FOX\nBy Ada Example'],
+    ['a subtitle in the title paragraph', 'LANTERN FOX\nA tale for children'],
+    ['a wrapped title and byline', 'THE TALE OF\nLANTERN FOX\nBY ADA EXAMPLE'],
+    [
+      'a byline line after prose-looking text',
+      'Once there was a fox\nBy Dot Drawn',
+    ],
+  ])('routes %s in one paragraph to review', (_n, para) => {
+    expect(run(`${para}\n\n${STORY}`)).toEqual(AMBIGUOUS);
+  });
 
-  it('keeps a full first sentence that follows the title', () => {
-    const r = run(`Lantern Fox\n\n${STORY}`);
-    expect(r).toMatchObject({ ok: true, content: STORY });
+  it.each([
+    ['a full sentence', STORY],
+    ['a mixed-case chapter heading', 'Chapter One'],
+    ['a poem line', 'Twinkle, twinkle, little star'],
+    ['a sentence without a full stop', 'The fox walked home'],
+    [
+      'a sentence starting "By the"',
+      'By the light of the moon the fox walked home.',
+    ],
+    [
+      'a long sentence starting "By the"',
+      'By the river there lived an old miller and his wife and their three sons.',
+    ],
+    ['a sentence starting "By and by"', 'By and by the wolf came.'],
+    ['a sentence starting "By night"', 'By night the fox hunted.'],
+    [
+      'a sentence starting "By Moonlight,"',
+      'By Moonlight, the fox walked home.',
+    ],
+    [
+      'a wrapped sentence starting "By the"',
+      'By the river there lived\nan old miller.',
+    ],
+    [
+      'a wrapped line starting "by"',
+      'The old miller lived\nby the river with his wife.',
+    ],
+    ['a wrapped line starting "being"', 'The fox was\nbeing chased by hounds.'],
+    ['a subtitle outside the credit patterns', 'A Fairy Story'],
+    ['a subtitle outside the credit patterns', 'A Christmas Story'],
+    ['a subtitle outside the credit patterns', 'The Story of a Doll'],
+  ])('keeps %s after the title', (_n, opening) => {
+    const r = run(`Lantern Fox\n\n${opening}\n\n${STORY}`);
+    if (!r.ok) throw new Error(`expected ok, got ${r.reason}`);
+    expect(r.content).toBe(`${opening.replace(/\n/g, ' ')}\n\n${STORY}`);
   });
 
   it('does not treat a byline after story text as title page residue', () => {
