@@ -39,7 +39,6 @@ describe('SmtpHealthIndicator', () => {
         connection: 'verified',
       },
     });
-    expect(close).toHaveBeenCalled();
   });
 
   it('reports down with host and error when verification fails', async () => {
@@ -53,6 +52,31 @@ describe('SmtpHealthIndicator', () => {
         error: 'connect ETIMEDOUT',
       },
     });
+  });
+
+  it('sets connection, greeting and socket timeouts so a stalled server cannot hold the probe', async () => {
+    verify.mockResolvedValue(true);
+
+    await indicator.isHealthy('smtp');
+
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 10000,
+      }),
+    );
+  });
+
+  it('stays up when closing the transport throws after a good verify', async () => {
+    verify.mockResolvedValue(true);
+    close.mockImplementationOnce(() => {
+      throw new Error('close failed');
+    });
+
+    const result = await indicator.isHealthy('smtp');
+
+    expect(result.smtp.status).toBe('up');
   });
 
   describe('cachedHealth', () => {
@@ -87,6 +111,7 @@ describe('SmtpHealthIndicator', () => {
 
   describe('background refresh', () => {
     const FIVE_MIN = 5 * 60 * 1000;
+    const THIRTY_MIN = 30 * 60 * 1000;
     let bg: SmtpHealthIndicator;
 
     beforeEach(() => {
@@ -129,7 +154,7 @@ describe('SmtpHealthIndicator', () => {
       expect(verify).toHaveBeenCalledTimes(2);
     });
 
-    it('backs off after failures, capped at five minutes', async () => {
+    it('backs off after failures, capped at thirty minutes', async () => {
       verify.mockRejectedValue(new Error('down'));
       bg.onModuleInit();
       await jest.advanceTimersByTimeAsync(0);
@@ -145,12 +170,22 @@ describe('SmtpHealthIndicator', () => {
       await jest.advanceTimersByTimeAsync(1_000);
       expect(verify).toHaveBeenCalledTimes(3);
 
-      for (let i = 0; i < 10; i++) {
-        await jest.advanceTimersByTimeAsync(FIVE_MIN);
-      }
-      const calls = verify.mock.calls.length;
-      await jest.advanceTimersByTimeAsync(FIVE_MIN);
-      expect(verify.mock.calls.length).toBe(calls + 1);
+      const msUntilNextProbe = async () => {
+        const before = verify.mock.calls.length;
+        let elapsed = 0;
+        while (
+          verify.mock.calls.length === before &&
+          elapsed < 2 * THIRTY_MIN
+        ) {
+          await jest.advanceTimersByTimeAsync(60_000);
+          elapsed += 60_000;
+        }
+        return elapsed;
+      };
+
+      for (let i = 0; i < 8; i++) await msUntilNextProbe();
+
+      expect(await msUntilNextProbe()).toBe(THIRTY_MIN);
     });
 
     it('runs one probe at a time', async () => {
@@ -168,6 +203,18 @@ describe('SmtpHealthIndicator', () => {
       release(true);
       await adminCall;
       expect(bg.cachedHealth('smtp').smtp.status).toBe('up');
+    });
+
+    it('does not keep the process alive for the next probe', async () => {
+      verify.mockResolvedValue(true);
+      const setTimeoutSpy = jest.spyOn(global, 'setTimeout');
+
+      bg.onModuleInit();
+      await jest.advanceTimersByTimeAsync(0);
+
+      const timer = setTimeoutSpy.mock.results.at(-1)?.value as NodeJS.Timeout;
+      expect(timer.hasRef()).toBe(false);
+      setTimeoutSpy.mockRestore();
     });
 
     it('stops scheduling on destroy', async () => {

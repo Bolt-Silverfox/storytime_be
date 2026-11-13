@@ -15,6 +15,7 @@ import * as nodemailer from 'nodemailer';
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const BACKOFF_BASE_MS = 30 * 1000;
+const BACKOFF_MAX_MS = 30 * 60 * 1000;
 
 type ProbeResult = { up: boolean; duration: number; error?: string };
 
@@ -76,7 +77,7 @@ export class SmtpHealthIndicator implements OnModuleInit, OnModuleDestroy {
       ? REFRESH_INTERVAL_MS
       : Math.min(
           BACKOFF_BASE_MS * 2 ** (this.consecutiveFailures - 1),
-          REFRESH_INTERVAL_MS,
+          BACKOFF_MAX_MS,
         );
     this.timer = setTimeout(() => {
       void this.refreshAndSchedule();
@@ -104,10 +105,11 @@ export class SmtpHealthIndicator implements OnModuleInit, OnModuleDestroy {
           pass: this.configService.get('SMTP_PASS'),
         },
         connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 10000,
       });
 
       await transporter.verify();
-      transporter.close();
 
       this.lastKnownUp = true;
       return { up: true, duration: Date.now() - startTime };

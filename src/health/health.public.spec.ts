@@ -134,6 +134,12 @@ describe('public health endpoints', () => {
     }
   });
 
+  it('GET /health/full includes the smtp check', async () => {
+    const res = await request(server()).get('/health/full');
+
+    expect(res.body.checks.smtp).toEqual({ status: 'up' });
+  });
+
   it('GET /health stays an empty liveness check', async () => {
     const res = await request(server()).get('/health').expect(200);
 
