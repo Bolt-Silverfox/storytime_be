@@ -1,6 +1,7 @@
 import { NodeSDK, tracing } from '@opentelemetry/sdk-node';
 import type { NodeSDKConfiguration } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
+import { getPrometheusHost } from './otel-prometheus-host';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-http';
@@ -156,11 +157,12 @@ function createMetricReader(): NonNullable<
   // Prometheus exporter is pull-based and starts its own HTTP server.
   return new PrometheusExporter(
     {
+      host: getPrometheusHost(process.env),
       port: prometheusPort,
     },
     () => {
       console.log(
-        `[OpenTelemetry] Prometheus metrics available at http://localhost:${prometheusPort}/metrics`,
+        `[OpenTelemetry] Prometheus metrics available at http://${getPrometheusHost(process.env)}:${prometheusPort}/metrics`,
       );
     },
   );

@@ -92,6 +92,8 @@ export const envSchema = z
     OTEL_EXPORTER_LOGS_ENDPOINT: z.string().url().optional(),
     OTEL_EXPORTER_METRICS_ENDPOINT: z.string().url().optional(),
     OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+    OTEL_EXPORTER_PROMETHEUS_HOST: z.string().optional(),
+    SWAGGER_ENABLED: z.enum(['true', 'false']).optional(),
     OTEL_METRICS_EXPORTER: z.enum(['prometheus', 'otlp']).optional(),
     OTEL_METRIC_EXPORT_INTERVAL: z.coerce.number().optional(),
     PROMETHEUS_PORT: z.coerce.number().optional(),

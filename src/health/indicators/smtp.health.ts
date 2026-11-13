@@ -11,11 +11,17 @@ import * as nodemailer from 'nodemailer';
 @Injectable()
 export class SmtpHealthIndicator {
   private readonly logger = new Logger(SmtpHealthIndicator.name);
+  private lastKnownUp: boolean | null = null;
 
   constructor(
     private readonly healthIndicatorService: HealthIndicatorService,
     private readonly configService: ConfigService<EnvConfig, true>,
   ) {}
+
+  cachedHealth(key: string): HealthIndicatorResult {
+    const session = this.healthIndicatorService.check(key);
+    return this.lastKnownUp === false ? session.down() : session.up();
+  }
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
     const startTime = Date.now();
@@ -39,6 +45,7 @@ export class SmtpHealthIndicator {
       transporter.close();
 
       const duration = Date.now() - startTime;
+      this.lastKnownUp = true;
 
       return this.healthIndicatorService.check(key).up({
         duration: `${duration}ms`,
@@ -48,6 +55,7 @@ export class SmtpHealthIndicator {
       });
     } catch (error) {
       const duration = Date.now() - startTime;
+      this.lastKnownUp = false;
       const errorMessage = ErrorHandler.extractMessage(error);
 
       this.logger.warn(`SMTP health check failed: ${errorMessage}`);

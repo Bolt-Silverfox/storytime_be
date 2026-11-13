@@ -54,4 +54,33 @@ describe('SmtpHealthIndicator', () => {
       },
     });
   });
+
+  describe('cachedHealth', () => {
+    it('reports up before any live check has run, without opening a connection', () => {
+      const fresh = new SmtpHealthIndicator(new HealthIndicatorService(), {
+        get: (k: string) => config[k],
+      } as unknown as ConfigService<never, true>);
+
+      expect(fresh.cachedHealth('smtp')).toEqual({ smtp: { status: 'up' } });
+      expect(nodemailer.createTransport).not.toHaveBeenCalled();
+    });
+
+    it('serves the last live result with no host, port or error text', async () => {
+      verify.mockRejectedValue(new Error('connect ETIMEDOUT'));
+      await indicator.isHealthy('smtp');
+      jest.clearAllMocks();
+
+      expect(indicator.cachedHealth('smtp')).toEqual({
+        smtp: { status: 'down' },
+      });
+      expect(nodemailer.createTransport).not.toHaveBeenCalled();
+
+      verify.mockResolvedValue(true);
+      await indicator.isHealthy('smtp');
+
+      expect(indicator.cachedHealth('smtp')).toEqual({
+        smtp: { status: 'up' },
+      });
+    });
+  });
 });
