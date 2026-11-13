@@ -284,9 +284,11 @@ const TITLE_PAGE_AMBIGUOUS = {
 
 const BYLINE = /^[Bb][Yy]\s+(.+?)[\s.]*$/;
 const BYLINE_SHAPE =
-  /^[Bb][Yy]\s+\p{Lu}\S*(?:\s+(?:\p{Lu}\S*|and|&|with)){0,7}[\s.]*$/u;
+  /^[Bb][Yy]\s+\p{Lu}\S*(?:\s+(?:\p{Lu}\S*|and|&|with|(?:de|la|van|von|der|du|le|di|da)\s+\p{Lu}\S*|d['’]\p{Lu}\S*)){0,7}[\s.]*$/u;
+const STRUCTURAL_HEADING =
+  /^(?:(?:chapter|stave|book|part|section|canto)\s+(?:[ivxlcdm]+|\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|the\s+(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth))|preface|prologue|foreword)[.:]?$/i;
 const CREDIT_START =
-  /^(?:illustrated\s+by|with\s+illustrations|translated\s+by|edited\s+by|retold\s+by|adapted\s+by|being|or|(?:a|an)\s+(?:\p{L}+\s+){0,2}(?:story|tale|fable|poem)\s+for)\b/iu;
+  /^(?:illustrated\s+by|written\s+and\s+illustrated\s+by|illustrations\s+by|(?:with\s+)?pictures\s+by|told\s+by|translated\s+from\s+(?:\S+\s+){1,4}by|with\s+illustrations|translated\s+by|edited\s+by|retold\s+by|adapted\s+by|being|or|(?:a|an)\s+(?:\p{L}+\s+){0,2}(?:story|tale|fable|poem)\s+for)\b/iu;
 const MAX_CREDIT_WORDS = 12;
 const LETTER_FOLD: Record<string, string> = {
   Æ: 'AE',
@@ -329,7 +331,13 @@ const wordsIn = (s: string): number => s.split(/\s+/).length;
 
 function isTitlePageResidue(lines: string[]): boolean {
   const text = lines.join(' ');
-  if (/\p{L}/u.test(text) && !/\p{Ll}/u.test(text)) return true;
+  if (
+    /\p{L}/u.test(text) &&
+    !/\p{Ll}/u.test(text) &&
+    !STRUCTURAL_HEADING.test(text)
+  ) {
+    return true;
+  }
   if (wordsIn(text) <= MAX_CREDIT_WORDS && CREDIT_START.test(text)) return true;
   return lines.some((l) => BYLINE_SHAPE.test(l));
 }
@@ -516,6 +524,7 @@ export function processGutenbergText(
   let titleDropped = false;
   let next = 0;
   let carry: string[] | null = null;
+  let carryLeading: boolean = false;
   while (carry || next < paras.length) {
     const lines: string[] = carry ?? paras[next++];
     carry = null;
@@ -568,7 +577,8 @@ export function processGutenbergText(
     }
     // An ebook number inside a story sentence is NOT deleted (that would drop
     // story words); it stays and the final residual check fails the work.
-    const leading = out.length === 0;
+    const leading: boolean = out.length === 0 || carryLeading;
+    carryLeading = false;
     const isTitle = (t: string) => matchForm(t).toLowerCase() === titleLc;
     if (!titleDropped && leading && isTitle(p)) {
       titleDropped = true;
@@ -606,7 +616,10 @@ export function processGutenbergText(
       notes.add(
         'chapter headings kept as separate paragraphs, capitals normalised',
       );
-      if (headings < pLines.length) carry = pLines.slice(headings);
+      if (headings < pLines.length) {
+        carry = pLines.slice(headings);
+        carryLeading = leading;
+      }
       continue;
     }
     const unItalic = p.replace(

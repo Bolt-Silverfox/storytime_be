@@ -1232,11 +1232,18 @@ describe('processGutenbergText title page residue', () => {
     ['SCENE FROM THE WOODS'],
     ['MDCCC'],
     ['A TALE FOR CHILDREN.'],
-    ['CHAPTER ONE'],
-    ['PREFACE'],
-    ['I.'],
     ['By Dot Drawn'],
     ['By Ada Example and Dot Drawn'],
+    ['Written and illustrated by Dot Drawn'],
+    ['Illustrations by Dot Drawn'],
+    ['Pictures by Dot Drawn'],
+    ['With Pictures by Dot Drawn'],
+    ['Translated from the French by Bram Sample'],
+    ['Told by Dot Drawn'],
+    ['By Charles de Coster'],
+    ['By Hans van Dijk'],
+    ["By Madame d'Aulnoy"],
+    ['INTRODUCTION'],
   ])('routes the leading line "%s" to review', (line) => {
     expect(run(`Lantern Fox\n\n${line}\n\n${STORY}`)).toEqual(AMBIGUOUS);
     expect(run(`${line}\n\n${STORY}`)).toEqual(AMBIGUOUS);
@@ -1282,6 +1289,9 @@ describe('processGutenbergText title page residue', () => {
       'The old miller lived\nby the river with his wife.',
     ],
     ['a wrapped line starting "being"', 'The fox was\nbeing chased by hounds.'],
+    ['a structural heading in capitals', 'CHAPTER ONE'],
+    ['a structural heading in capitals', 'STAVE THE FIRST'],
+    ['a preface heading', 'PREFACE'],
     ['a subtitle outside the credit patterns', 'A Fairy Story'],
     ['a subtitle outside the credit patterns', 'A Christmas Story'],
     ['a subtitle outside the credit patterns', 'The Story of a Doll'],
@@ -1387,5 +1397,54 @@ describe('processGutenbergText word cap', () => {
     expect(
       processGutenbergText(wrap(body), plain(), { maxWords: 1_000_000 }),
     ).toEqual({ ok: false, reason: 'oversized' });
+  });
+});
+
+describe('processGutenbergText title page round 3', () => {
+  const run = (body: string) => processGutenbergText(wrap(body), plain());
+  const AMBIGUOUS = { ok: false, reason: 'title-page-ambiguous' };
+
+  it.each([['By Dot Drawn'], ['Illustrated by Dot Drawn'], ['BY DOT DRAWN']])(
+    'routes "%s" after a leading chapter heading to review',
+    (line) => {
+      expect(run(`CHAPTER I\n${line}\n\n${STORY}`)).toEqual(AMBIGUOUS);
+    },
+  );
+
+  it('drops the header author byline after a leading chapter heading', () => {
+    expect(run(`CHAPTER I\nBy Ada Example\n\n${STORY}`)).toMatchObject({
+      ok: true,
+      content: `Chapter I.\n\n${STORY}`,
+    });
+  });
+
+  it('keeps "by the Sea" after a leading chapter heading as prose', () => {
+    expect(run(`CHAPTER I\nby the Sea\n\n${STORY}`)).toMatchObject({
+      ok: true,
+      content: `Chapter I.\n\nby the Sea\n\n${STORY}`,
+    });
+  });
+
+  it('does not review prose that follows a chapter heading after story text', () => {
+    expect(
+      run(`${STORY}\n\nCHAPTER II\nBy Dot Drawn\n\n${STORY}`),
+    ).toMatchObject({ ok: true });
+  });
+
+  it('drops "By Charles de Coster" for that header author', () => {
+    const r = processGutenbergText(
+      wrap(
+        `Lantern Fox\n\nBy Charles de Coster\n\n${STORY}`,
+        'Title: Lantern Fox\nAuthor: Charles de Coster',
+      ),
+      plain({ expect: { title: 'Lantern Fox', author: 'Coster' } }),
+    );
+    expect(r).toMatchObject({ ok: true, content: STORY });
+  });
+
+  it('does not let a particle start or end a byline name', () => {
+    expect(run(`Lantern Fox\n\nBy the river de la\n\n${STORY}`)).toMatchObject({
+      ok: true,
+    });
   });
 });

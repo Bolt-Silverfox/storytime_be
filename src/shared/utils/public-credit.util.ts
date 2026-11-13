@@ -1,8 +1,10 @@
 /**
  * Public Domain works keep `sourceName` / `sourceUrl` internally (provenance),
- * but those values name the upstream site, so they are never returned to
- * clients: public credit comes from attributionText, authorName, licenseCode
- * and licenseUrl. See docs/story-provenance.md.
+ * but those values name the upstream site, so they are masked on the
+ * responses this helper is applied to (the public-credit interceptor and the
+ * guest story controller). Other endpoints are not covered.
+ * Public credit comes from attributionText, authorName, licenseCode and
+ * licenseUrl. See docs/story-provenance.md.
  */
 const MASKED_KEYS = ['sourceName', 'sourceUrl'] as const;
 
