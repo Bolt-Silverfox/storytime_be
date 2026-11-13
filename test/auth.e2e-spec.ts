@@ -299,6 +299,24 @@ describe('Authentication (e2e)', () => {
       expect(res.body.success).toBe(false);
     });
 
+    it('answers a case-variant duplicate with the resource-exists conflict, not the generic Prisma one', async () => {
+      const prisma = app.get<PrismaService, { $queryRaw: jest.Mock }>(
+        PrismaService,
+      );
+      prisma.$queryRaw.mockResolvedValueOnce([{ id: 'legacy-mixed-case-row' }]);
+
+      const res = await request(server).post('/api/v1/auth/register').send({
+        email: 'twin-of-legacy-row@example.com',
+        password: testUser.password,
+        fullName: testUser.fullName,
+      });
+
+      expect(res.status).toBe(409);
+      expect(res.body.message).toContain(
+        'User with email "twin-of-legacy-row@example.com" already exists',
+      );
+    });
+
     it('should sanitize email to lowercase', async () => {
       const res = await request(server).post('/api/v1/auth/register').send({
         email: 'UPPERCASE@EXAMPLE.COM',
@@ -750,8 +768,19 @@ describe('Authentication (e2e)', () => {
 function createMockPrismaService() {
   const { users, sessions, tokens } = mockState;
 
-  return {
+  const prisma: Record<string, unknown> = {
+    $queryRaw: jest.fn(() => Promise.resolve([])),
     user: {
+      count: jest.fn(
+        ({ where }: { where: { id: string; isEmailVerified: boolean } }) =>
+          Promise.resolve(
+            [...users.values()].filter(
+              (u) =>
+                u.id === where.id &&
+                u.isEmailVerified === where.isEmailVerified,
+            ).length,
+          ),
+      ),
       findUnique: jest.fn(
         ({ where }: { where: { email?: string; id?: string } }) => {
           if (where.email) {
@@ -950,14 +979,15 @@ function createMockPrismaService() {
         ]),
       ),
     },
+    $executeRaw: jest.fn(() => Promise.resolve(1)),
     $transaction: jest.fn(
       (operations: unknown[] | ((prisma: unknown) => Promise<unknown>)) => {
         if (typeof operations === 'function') {
-          // Interactive transaction - we don't support this in the mock, just resolve
-          return Promise.resolve(undefined);
+          return operations(prisma);
         }
         return Promise.all(operations as Promise<unknown>[]);
       },
     ),
   };
+  return prisma;
 }

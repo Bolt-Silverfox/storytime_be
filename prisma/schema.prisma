@@ -221,6 +221,29 @@ model Kid {
 // Note: keep this near other relation fields
 // (Prisma requires the opposite relation field)
 
+enum LoginChallengePurpose {
+  login
+}
+
+model LoginChallenge {
+  id              String                  @id @default(uuid())
+  emailNormalized String
+  purpose         LoginChallengePurpose   @default(login)
+  codeHash        String
+  linkTokenHash   String                  @unique
+  attempts        Int                     @default(0)
+  maxAttempts     Int                     @default(5)
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  invalidatedAt   DateTime?
+  requestIpHash   String?
+  createdAt       DateTime                @default(now())
+
+  @@index([emailNormalized, createdAt(sort: Desc)])
+  @@index([expiresAt])
+  @@map("login_challenges")
+}
+
 // -------------------------
 // SESSION / TOKEN / PROFILE
 // -------------------------

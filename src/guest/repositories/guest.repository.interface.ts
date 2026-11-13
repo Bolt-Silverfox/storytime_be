@@ -56,6 +56,11 @@ export interface IGuestRepository {
     markCompleted: boolean,
   ): Promise<void>;
 
+  createUserStoryProgressIfAbsent(
+    userId: string,
+    storyId: string,
+  ): Promise<void>;
+
   // Find an authenticated user's active (non-deleted) progress for a story.
   findUserStoryProgress(
     userId: string,

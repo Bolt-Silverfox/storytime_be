@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 import {
   PrismaFetchLease,
   SourceCacheService,
@@ -9,7 +10,9 @@ import {
  * Real-Postgres tests for the source cache. Skipped when no DATABASE_URL.
  * No network: fetchers are in-process fakes.
  */
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeDb = isThrowawayDatabaseUrl(process.env.DATABASE_URL)
+  ? describe
+  : describe.skip;
 
 describeDb('SourceCacheService (real Postgres)', () => {
   const prisma = new PrismaClient();

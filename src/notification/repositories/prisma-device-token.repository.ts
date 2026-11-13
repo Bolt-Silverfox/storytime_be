@@ -7,8 +7,11 @@ import type { DeviceToken, DevicePlatform, Prisma } from '@prisma/client';
 export class PrismaDeviceTokenRepository implements IDeviceTokenRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findUniqueByToken(token: string): Promise<DeviceToken | null> {
-    return this.prisma.deviceToken.findUnique({
+  async findUniqueByToken(
+    token: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<DeviceToken | null> {
+    return (tx ?? this.prisma).deviceToken.findUnique({
       where: { token },
     });
   }
@@ -133,11 +136,25 @@ export class PrismaDeviceTokenRepository implements IDeviceTokenRepository {
   async updateByToken(
     token: string,
     data: Prisma.DeviceTokenUncheckedUpdateInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<DeviceToken> {
-    return this.prisma.deviceToken.update({
+    return (tx ?? this.prisma).deviceToken.update({
       where: { token },
       data,
     });
+  }
+
+  async lockLiveSession(
+    sessionId: string,
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id" FROM "sessions"
+      WHERE "id" = ${sessionId} AND "userId" = ${userId}
+        AND "isDeleted" = false AND "deletedAt" IS NULL
+      FOR SHARE`;
+    return rows.length === 1;
   }
 
   async updateById(

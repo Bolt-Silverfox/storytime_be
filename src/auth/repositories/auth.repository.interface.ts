@@ -54,6 +54,7 @@ export type LinkableProviderField = 'googleId' | 'appleId';
 export interface IAuthRepository {
   // User operations
   findUserByEmail(email: string): Promise<User | null>;
+  findUserByEmailInsensitive(email: string): Promise<User | null>;
   findUserByEmailWithRelations(
     email: string,
   ): Promise<UserWithProfileAvatarAndKidCount | null>;
@@ -81,6 +82,7 @@ export interface IAuthRepository {
     id: string,
     data: Partial<{
       passwordHash: string;
+      hasLocalPassword: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;
@@ -92,6 +94,9 @@ export interface IAuthRepository {
     id: string,
     data: Partial<{
       passwordHash: string;
+      hasLocalPassword: boolean;
+      pinHash: string | null;
+      biometricsEnabled: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;
@@ -111,14 +116,21 @@ export interface IAuthRepository {
   linkGoogleAccountIfUnset(
     userId: string,
     googleId: string,
+    sessionId?: string,
   ): Promise<{ count: number }>;
   linkAppleAccountIfUnset(
     userId: string,
     appleId: string,
+    sessionId?: string,
   ): Promise<{ count: number }>;
 
   // Session operations
   createSession(data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<Session>;
+  createSessionForUnverifiedUser(data: {
     userId: string;
     token: string;
     expiresAt: Date;
@@ -132,6 +144,20 @@ export interface IAuthRepository {
   findSessionById(id: string): Promise<Session | null>;
   deleteSession(id: string): Promise<void>;
   deleteAllUserSessions(userId: string): Promise<void>;
+  deleteAllUserDeviceTokens(userId: string): Promise<void>;
+  takeOverUnverifiedAccount(
+    id: string,
+    data: Partial<{
+      passwordHash: string;
+      hasLocalPassword: boolean;
+      pinHash: string | null;
+      biometricsEnabled: boolean;
+      isEmailVerified: boolean;
+      onboardingStatus: string;
+      googleId: string | null;
+      appleId: string | null;
+    }>,
+  ): Promise<UserWithProfileAndAvatar>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
 
   // Security / IP tracking operations
@@ -203,6 +229,12 @@ export interface IAuthRepository {
 
 export interface IAuthRepositoryTransaction {
   updateUser(id: string, data: { passwordHash: string }): Promise<User>;
+  changePasswordIfUnchanged(
+    userId: string,
+    expectedHash: string,
+    newHash: string,
+    sessionId: string,
+  ): Promise<boolean>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
   findActiveUserLinkedProviderFields(
     userId: string,

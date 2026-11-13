@@ -360,6 +360,7 @@ describe('PasswordService', () => {
       });
       expect(authRepository.updateUser).toHaveBeenCalledWith('user-1', {
         passwordHash: expect.any(String),
+        hasLocalPassword: true,
       });
       expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
       expect(authRepository.deleteAllUserSessions).toHaveBeenCalledWith(
@@ -542,6 +543,7 @@ describe('PasswordService', () => {
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
           updateUser: jest.fn().mockResolvedValue(makeUser()),
+          changePasswordIfUnchanged: jest.fn().mockResolvedValue(true),
           deleteOtherSessions: jest.fn().mockResolvedValue(undefined),
           findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
           unlinkProviderField: jest.fn().mockResolvedValue(undefined),
@@ -567,6 +569,7 @@ describe('PasswordService', () => {
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
           updateUser: jest.fn().mockResolvedValue(makeUser()),
+          changePasswordIfUnchanged: jest.fn().mockResolvedValue(true),
           deleteOtherSessions: jest.fn().mockResolvedValue(undefined),
           findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
           unlinkProviderField: jest.fn().mockResolvedValue(undefined),
@@ -648,11 +651,12 @@ describe('PasswordService', () => {
     it('should use transaction to update password and delete other sessions', async () => {
       // Arrange
       authRepository.findUserById.mockResolvedValue(mockUser);
-      const mockTxUpdateUser = jest.fn().mockResolvedValue(makeUser());
+      const mockTxUpdateUser = jest.fn().mockResolvedValue(true);
       const mockTxDeleteOtherSessions = jest.fn().mockResolvedValue(undefined);
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
-          updateUser: mockTxUpdateUser,
+          updateUser: jest.fn(),
+          changePasswordIfUnchanged: mockTxUpdateUser,
           deleteOtherSessions: mockTxDeleteOtherSessions,
           findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
           unlinkProviderField: jest.fn().mockResolvedValue(undefined),
@@ -669,13 +673,44 @@ describe('PasswordService', () => {
 
       // Assert
       expect(authRepository.transaction).toHaveBeenCalled();
-      expect(mockTxUpdateUser).toHaveBeenCalledWith('user-1', {
-        passwordHash: 'new-hashed-password',
-      });
+      expect(mockTxUpdateUser).toHaveBeenCalledWith(
+        'user-1',
+        mockUser.passwordHash,
+        'new-hashed-password',
+        'current-session-1',
+      );
       expect(mockTxDeleteOtherSessions).toHaveBeenCalledWith(
         'user-1',
         'current-session-1',
       );
+    });
+  });
+
+  describe('changePassword when the account changed underneath', () => {
+    it('rejects and deletes no other sessions when the conditional update matches nothing', async () => {
+      (bcrypt.compare as jest.Mock).mockImplementation((plain: string) =>
+        Promise.resolve(plain === 'OldPassword1#'),
+      );
+      authRepository.findUserById.mockResolvedValue(mockUser);
+      const deleteOthers = jest.fn();
+      authRepository.transaction.mockImplementation(async (fn) =>
+        fn({
+          updateUser: jest.fn(),
+          changePasswordIfUnchanged: jest.fn().mockResolvedValue(false),
+          deleteOtherSessions: deleteOthers,
+          findActiveUserLinkedProviderFields: jest.fn(),
+          unlinkProviderField: jest.fn(),
+        }),
+      );
+
+      await expect(
+        service.changePassword(
+          'user-1',
+          { oldPassword: 'OldPassword1#', newPassword: 'NewPassword1#' },
+          'current-session-1',
+        ),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(deleteOthers).not.toHaveBeenCalled();
     });
   });
 

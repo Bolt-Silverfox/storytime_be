@@ -1,9 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PrismaAdminUserHistoryRepository } from './prisma-admin-user-history.repository';
+import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 
 // DB-backed: needs DATABASE_URL pointing at a migrated database.
-describe('PrismaAdminUserHistoryRepository', () => {
+const d = isThrowawayDatabaseUrl(process.env.DATABASE_URL)
+  ? describe
+  : describe.skip;
+
+d('PrismaAdminUserHistoryRepository', () => {
   let prisma: PrismaService;
   let repo: PrismaAdminUserHistoryRepository;
 

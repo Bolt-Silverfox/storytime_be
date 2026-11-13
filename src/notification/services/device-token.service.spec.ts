@@ -1,6 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DeviceTokenService, RegisterDeviceDto } from './device-token.service';
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import {
   DEVICE_TOKEN_REPOSITORY,
   IDeviceTokenRepository,
@@ -10,6 +14,7 @@ import { DevicePlatform } from '@prisma/client';
 describe('DeviceTokenService', () => {
   let service: DeviceTokenService;
   let repository: jest.Mocked<IDeviceTokenRepository>;
+  const tx = { sentinel: 'tx' };
 
   const mockDeviceToken = {
     id: 'token-1',
@@ -41,9 +46,10 @@ describe('DeviceTokenService', () => {
       updateByToken: jest.fn(),
       updateById: jest.fn(),
       updateManyTokens: jest.fn(),
+      lockLiveSession: jest.fn().mockResolvedValue(true),
       deleteStaleTokens: jest.fn(),
       // Execute the transaction callback immediately with a dummy tx client
-      executeTransaction: jest.fn((fn) => fn({})),
+      executeTransaction: jest.fn((fn) => fn(tx)),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -71,13 +77,18 @@ describe('DeviceTokenService', () => {
       repository.findUniqueByToken.mockResolvedValue(existingToken);
       repository.updateByToken.mockResolvedValue(updatedToken);
 
-      const result = await service.registerDeviceToken('user-1', dto);
+      const result = await service.registerDeviceToken(
+        'user-1',
+        dto,
+        'session-1',
+      );
 
       expect(result.id).toBe('token-1');
       expect(result.isActive).toBe(true);
       expect(result.platform).toBe('ios');
       expect(repository.findUniqueByToken).toHaveBeenCalledWith(
         'device-token-abc',
+        expect.anything(),
       );
       expect(repository.updateByToken).toHaveBeenCalledWith(
         'device-token-abc',
@@ -86,6 +97,7 @@ describe('DeviceTokenService', () => {
           platform: 'ios',
           deviceName: 'iPhone 15',
         }),
+        tx,
       );
     });
 
@@ -96,7 +108,11 @@ describe('DeviceTokenService', () => {
       repository.findUniqueByToken.mockResolvedValue(existingToken);
       repository.updateByToken.mockResolvedValue(reassignedToken);
 
-      const result = await service.registerDeviceToken('user-1', dto);
+      const result = await service.registerDeviceToken(
+        'user-1',
+        dto,
+        'session-1',
+      );
 
       expect(result.id).toBe('token-1');
       expect(repository.updateByToken).toHaveBeenCalledWith(
@@ -106,6 +122,7 @@ describe('DeviceTokenService', () => {
           platform: 'ios',
           isActive: true,
         }),
+        expect.anything(),
       );
     });
 
@@ -122,10 +139,22 @@ describe('DeviceTokenService', () => {
         deviceName: 'iPhone 15',
       };
 
-      const result = await service.registerDeviceToken('user-1', newDto);
+      const result = await service.registerDeviceToken(
+        'user-1',
+        newDto,
+        'session-1',
+      );
 
       expect(result.id).toBe('token-1');
       expect(repository.executeTransaction).toHaveBeenCalled();
+      expect(repository.lockLiveSession).toHaveBeenCalledWith(
+        'session-1',
+        'user-1',
+        tx,
+      );
+      expect(repository.findUniqueByToken.mock.calls[0][1]).toBe(tx);
+      expect(repository.updateManyTokens.mock.calls[0][2]).toBe(tx);
+      expect(repository.createToken.mock.calls[0][1]).toBe(tx);
       expect(repository.updateManyTokens).toHaveBeenCalledWith(
         {
           userId: 'user-1',
@@ -167,7 +196,7 @@ describe('DeviceTokenService', () => {
         platform: 'ios',
       };
 
-      await service.registerDeviceToken('user-1', noNameDto);
+      await service.registerDeviceToken('user-1', noNameDto, 'session-1');
 
       expect(repository.updateManyTokens).not.toHaveBeenCalled();
       expect(repository.createToken).toHaveBeenCalledWith(
@@ -194,12 +223,33 @@ describe('DeviceTokenService', () => {
         platform: 'ios',
       };
 
-      await service.registerDeviceToken('user-1', noNameDto);
+      await service.registerDeviceToken('user-1', noNameDto, 'session-1');
 
       expect(repository.updateByToken).toHaveBeenCalledWith(
         'device-token-abc',
         expect.not.objectContaining({ deviceName: expect.anything() }),
+        expect.anything(),
       );
+    });
+
+    it('rejects without writing when the session is gone', async () => {
+      repository.lockLiveSession.mockResolvedValue(false);
+
+      await expect(
+        service.registerDeviceToken('user-1', dto, 'session-1'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      expect(repository.findUniqueByToken).not.toHaveBeenCalled();
+      expect(repository.createToken).not.toHaveBeenCalled();
+      expect(repository.updateByToken).not.toHaveBeenCalled();
+    });
+
+    it('rejects a request that carries no session id', async () => {
+      await expect(
+        service.registerDeviceToken('user-1', dto, undefined),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+
+      expect(repository.executeTransaction).not.toHaveBeenCalled();
     });
   });
 

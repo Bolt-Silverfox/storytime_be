@@ -3,7 +3,10 @@ import type { DeviceToken, DevicePlatform, Prisma } from '@prisma/client';
 // ==================== Repository Interface ====================
 export interface IDeviceTokenRepository {
   // Find a device token by its unique token string
-  findUniqueByToken(token: string): Promise<DeviceToken | null>;
+  findUniqueByToken(
+    token: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<DeviceToken | null>;
 
   // Find the first non-deleted device token owned by a user with a given token
   findFirstByUserAndTokenNotDeleted(
@@ -55,7 +58,15 @@ export interface IDeviceTokenRepository {
   updateByToken(
     token: string,
     data: Prisma.DeviceTokenUncheckedUpdateInput,
+    tx?: Prisma.TransactionClient,
   ): Promise<DeviceToken>;
+
+  // Lock the caller's session row so a concurrent revocation waits for this transaction; false when the session no longer exists
+  lockLiveSession(
+    sessionId: string,
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<boolean>;
 
   // Update a device token by id
   updateById(
