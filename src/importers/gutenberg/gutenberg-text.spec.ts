@@ -1244,6 +1244,12 @@ describe('processGutenbergText title page residue', () => {
     ['By Hans van Dijk'],
     ["By Madame d'Aulnoy"],
     ['INTRODUCTION'],
+    ['CHAPTER ONE'],
+    ['STAVE THE FIRST'],
+    ['PREFACE'],
+    ['PROLOGUE'],
+    ['FOREWORD'],
+    ['I.'],
   ])('routes the leading line "%s" to review', (line) => {
     expect(run(`Lantern Fox\n\n${line}\n\n${STORY}`)).toEqual(AMBIGUOUS);
     expect(run(`${line}\n\n${STORY}`)).toEqual(AMBIGUOUS);
@@ -1289,9 +1295,6 @@ describe('processGutenbergText title page residue', () => {
       'The old miller lived\nby the river with his wife.',
     ],
     ['a wrapped line starting "being"', 'The fox was\nbeing chased by hounds.'],
-    ['a structural heading in capitals', 'CHAPTER ONE'],
-    ['a structural heading in capitals', 'STAVE THE FIRST'],
-    ['a preface heading', 'PREFACE'],
     ['a subtitle outside the credit patterns', 'A Fairy Story'],
     ['a subtitle outside the credit patterns', 'A Christmas Story'],
     ['a subtitle outside the credit patterns', 'The Story of a Doll'],
@@ -1442,9 +1445,22 @@ describe('processGutenbergText title page round 3', () => {
     expect(r).toMatchObject({ ok: true, content: STORY });
   });
 
-  it('does not let a particle start or end a byline name', () => {
-    expect(run(`Lantern Fox\n\nBy the river de la\n\n${STORY}`)).toMatchObject({
-      ok: true,
-    });
+  it.each([['By Charles de la'], ['By Charles de'], ['By Hans van der']])(
+    'keeps "%s": a particle must be followed by a capitalised name part',
+    (line) => {
+      expect(run(`Lantern Fox\n\n${line}\n\n${STORY}`)).toMatchObject({
+        ok: true,
+      });
+    },
+  );
+
+  it.each([
+    ['CHAPTER ONE', 'By Dot Drawn'],
+    ['PREFACE', 'Illustrated by Dot Drawn'],
+    ['STAVE ONE', 'ILLUSTRATED BY DOT DRAWN'],
+    ['PREFACE', 'THE TALE OF THE LANTERN FOX'],
+    ['FOREWORD', 'I wrote this little book for my children.'],
+  ])('routes "%s" followed by "%s" to review', (heading, next) => {
+    expect(run(`${heading}\n\n${next}\n\n${STORY}`)).toEqual(AMBIGUOUS);
   });
 });
