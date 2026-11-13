@@ -1432,8 +1432,9 @@ model UserUpload {
   id        String   @id @default(uuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  publicId  String   @unique
+  publicId  String?  @unique
   bytes     Int
+  pending   Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@index([userId])

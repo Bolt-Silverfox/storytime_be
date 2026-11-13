@@ -4,8 +4,9 @@
 CREATE TABLE "user_uploads" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
-    "publicId" TEXT NOT NULL,
+    "publicId" TEXT,
     "bytes" INTEGER NOT NULL,
+    "pending" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "user_uploads_pkey" PRIMARY KEY ("id")

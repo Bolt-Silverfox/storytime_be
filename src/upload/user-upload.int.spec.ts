@@ -83,6 +83,25 @@ describeDb('user_uploads (real Postgres)', () => {
     expect(await raw.userUpload.count({ where: { userId } })).toBe(1);
   });
 
+  it('sweeps a stale pending reservation but honours a fresh one', async () => {
+    const owner = { userId };
+    await raw.userUpload.create({
+      data: { userId, bytes: 150 * MB, pending: true },
+    });
+    await expect(
+      service.uploadImage(file(120 * MB), 'avatars', owner),
+    ).rejects.toBeInstanceOf(PayloadTooLargeException);
+    await raw.userUpload.updateMany({
+      where: { userId },
+      data: { createdAt: new Date(Date.now() - 16 * 60_000) },
+    });
+    await service.uploadImage(file(120 * MB), 'avatars', owner);
+    expect(await raw.userUpload.count({ where: { userId } })).toBe(1);
+    expect(
+      await raw.userUpload.count({ where: { userId, pending: true } }),
+    ).toBe(0);
+  });
+
   it('keeps publicId unique and cascades on user delete', async () => {
     await raw.userUpload.create({
       data: { userId, publicId: `${tag}_dup`, bytes: 1 },

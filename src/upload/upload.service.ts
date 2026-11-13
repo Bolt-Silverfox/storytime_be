@@ -14,6 +14,9 @@ import {
 } from 'cloudinary';
 import toStream from 'buffer-to-stream';
 
+const STALE_RESERVATION_MS = 15 * 60_000;
+export const UPLOAD_QUOTA_EXCEEDED = 'UPLOAD_QUOTA_EXCEEDED';
+
 export interface UploadOwner {
   userId: string;
   exempt?: boolean;
@@ -53,32 +56,80 @@ export class UploadService {
     upload: () => Promise<UploadApiResponse>,
   ): Promise<UploadApiResponse> {
     if (!owner || owner.exempt) return upload();
-    return this.prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user_upload:${owner.userId}`}))`;
-        const { _sum } = await tx.userUpload.aggregate({
-          where: { userId: owner.userId },
-          _sum: { bytes: true },
-        });
-        if ((_sum.bytes ?? 0) + incomingBytes > MAX_USER_UPLOAD_BYTES) {
-          throw new PayloadTooLargeException(
-            'Upload storage limit reached. Delete some uploads and try again.',
-          );
-        }
-        const result = await upload();
-        await tx.userUpload.upsert({
-          where: { publicId: result.public_id },
-          create: {
-            userId: owner.userId,
+    const reservationId = await this.reserve(owner.userId, incomingBytes);
+    let result: UploadApiResponse;
+    try {
+      result = await upload();
+    } catch (error) {
+      await this.releaseReservation(reservationId);
+      throw error;
+    }
+    try {
+      await this.prisma.$transaction([
+        this.prisma.userUpload.deleteMany({
+          where: { publicId: result.public_id, NOT: { id: reservationId } },
+        }),
+        this.prisma.userUpload.update({
+          where: { id: reservationId },
+          data: {
             publicId: result.public_id,
             bytes: result.bytes,
+            pending: false,
           },
-          update: { userId: owner.userId, bytes: result.bytes },
+        }),
+      ]);
+    } catch (error) {
+      await this.releaseReservation(reservationId);
+      await cloudinary.uploader
+        .destroy(result.public_id)
+        .catch(() => undefined);
+      throw error;
+    }
+    return result;
+  }
+
+  private async reserve(
+    userId: string,
+    incomingBytes: number,
+  ): Promise<string> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user_upload:${userId}`}))`;
+      await tx.userUpload.deleteMany({
+        where: {
+          userId,
+          pending: true,
+          createdAt: { lt: new Date(Date.now() - STALE_RESERVATION_MS) },
+        },
+      });
+      const { _sum } = await tx.userUpload.aggregate({
+        where: { userId },
+        _sum: { bytes: true },
+      });
+      if ((_sum.bytes ?? 0) + incomingBytes > MAX_USER_UPLOAD_BYTES) {
+        throw new PayloadTooLargeException({
+          statusCode: 413,
+          error: UPLOAD_QUOTA_EXCEEDED,
+          code: UPLOAD_QUOTA_EXCEEDED,
+          message:
+            'Upload storage limit reached. Delete some uploads and try again.',
         });
-        return result;
-      },
-      { timeout: 60_000, maxWait: 10_000 },
-    );
+      }
+      const row = await tx.userUpload.create({
+        data: { userId, bytes: incomingBytes, pending: true },
+        select: { id: true },
+      });
+      return row.id;
+    });
+  }
+
+  private async releaseReservation(id: string): Promise<void> {
+    await this.prisma.userUpload
+      .deleteMany({ where: { id } })
+      .catch((error: unknown) =>
+        this.logger.warn(
+          `Failed to release upload reservation: ${String(error)}`,
+        ),
+      );
   }
 
   private putFile(file: Express.Multer.File): Promise<UploadApiResponse> {
