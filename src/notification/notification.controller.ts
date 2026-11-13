@@ -1,6 +1,8 @@
 import {
+  ArgumentMetadata,
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
   Controller,
   Post,
   Patch,
@@ -37,8 +39,19 @@ import {
 
 const MAX_PREFERENCES_PER_REQUEST = 50;
 
+class BoundedArrayPipe extends ParseArrayPipe {
+  async transform(value: unknown, metadata: ArgumentMetadata) {
+    if (Array.isArray(value) && value.length > MAX_PREFERENCES_PER_REQUEST) {
+      throw new BadRequestException(
+        `At most ${MAX_PREFERENCES_PER_REQUEST} preferences per request`,
+      );
+    }
+    return super.transform(value, metadata);
+  }
+}
+
 const arrayBody = (items: new () => object) =>
-  new ParseArrayPipe({
+  new BoundedArrayPipe({
     items,
     whitelist: true,
     forbidNonWhitelisted: true,
@@ -63,7 +76,6 @@ export class NotificationController {
     @Body(arrayBody(CreateNotificationPreferenceDto))
     dtos: CreateNotificationPreferenceDto[],
   ) {
-    this.assertBatchSize(dtos);
     const scoped: CreateNotificationPreferenceDto[] = [];
     for (const dto of dtos) {
       if (dto.kidId) {
@@ -94,11 +106,10 @@ export class NotificationController {
     @Body(arrayBody(BulkUpdateNotificationPreferenceDto))
     dtos: BulkUpdateNotificationPreferenceDto[],
   ) {
-    this.assertBatchSize(dtos);
     for (const dto of dtos) {
       await this.assertPreferenceAccess(req, dto.id);
     }
-    return this.notificationService.bulkUpdate(req.authUserData.userId, dtos);
+    return this.notificationService.bulkUpdate(dtos);
   }
 
   @Patch(':id')
@@ -203,16 +214,17 @@ export class NotificationController {
     return this.notificationService.getById(id);
   }
 
-  private assertBatchSize(dtos: unknown[]) {
-    if (dtos.length > MAX_PREFERENCES_PER_REQUEST) {
-      throw new BadRequestException(
-        `At most ${MAX_PREFERENCES_PER_REQUEST} preferences per request`,
-      );
-    }
-  }
-
   private async assertPreferenceAccess(req: AuthenticatedRequest, id: string) {
-    const owner = await this.notificationService.getPreferenceOwner(id);
+    const owner = await this.notificationService
+      .getPreferenceOwner(id)
+      .catch((e: unknown) => {
+        if (e instanceof NotFoundException) {
+          throw new ForbiddenException(
+            'You do not have access to this resource',
+          );
+        }
+        throw e;
+      });
     if (owner.kidId && owner.userId) {
       await this.accessControl.assertKidAccess(req.authUserData, owner.kidId);
       this.accessControl.assertSelfOrAdmin(req.authUserData, owner.userId);

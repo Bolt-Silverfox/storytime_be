@@ -115,16 +115,13 @@ export class NotificationSettingsService {
   }
 
   async bulkUpdate(
-    userId: string,
     dtos: BulkUpdateNotificationPreferenceDto[],
   ): Promise<NotificationPreferenceDto[]> {
     const ids = dtos.map((dto) => dto.id);
 
-    // Verify all preferences belong to the requesting user
     const owned =
       await this.notificationPreferenceRepository.findManyNotificationPreferencesByIds(
         ids,
-        userId,
       );
 
     const ownedIds = new Set(owned.map((p) => p.id));

@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, NotFoundException } from '@nestjs/common';
 import request from 'supertest';
 import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
@@ -303,12 +303,63 @@ describe('NotificationController (preferences) authorization', () => {
       expect(notifications.bulkUpdate).not.toHaveBeenCalled();
     });
 
-    it('accepts a valid array and passes the session user id', async () => {
+    it('accepts a valid array', async () => {
       notifications.bulkUpdate.mockResolvedValue([]);
       await patch([{ id: PREF_ID, enabled: false }]).expect(200);
-      expect(notifications.bulkUpdate).toHaveBeenCalledWith(ALICE, [
+      expect(notifications.bulkUpdate).toHaveBeenCalledWith([
         expect.objectContaining({ id: PREF_ID, enabled: false }),
       ]);
+    });
+
+    it('lets a parent bulk-update a kid-only preference for their own kid', async () => {
+      notifications.getPreferenceOwner.mockResolvedValue({
+        userId: null,
+        kidId: ALICE_KID,
+      });
+      notifications.bulkUpdate.mockResolvedValue([]);
+      await patch([{ id: PREF_ID, enabled: false }]).expect(200);
+      expect(notifications.bulkUpdate).toHaveBeenCalledWith([
+        expect.objectContaining({ id: PREF_ID }),
+      ]);
+    });
+
+    it("lets an admin bulk-update another user's preferences", async () => {
+      notifications.getPreferenceOwner.mockResolvedValue({ userId: BOB });
+      notifications.bulkUpdate.mockResolvedValue([]);
+      await http()
+        .patch('/notification-preferences')
+        .set('Authorization', bearer('admin'))
+        .send([{ id: PREF_ID, enabled: false }])
+        .expect(200);
+      expect(notifications.bulkUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it("refuses another user's kid-only preference and updates nothing", async () => {
+      notifications.getPreferenceOwner.mockResolvedValue({
+        userId: null,
+        kidId: BOB_KID,
+      });
+      await patch([{ id: PREF_ID, enabled: false }]).expect(403);
+      expect(notifications.bulkUpdate).not.toHaveBeenCalled();
+    });
+
+    it('answers a missing preference id the same way as a foreign one', async () => {
+      notifications.getPreferenceOwner.mockRejectedValue(
+        new NotFoundException(),
+      );
+      await patch([{ id: PREF_ID, enabled: false }]).expect(403);
+      expect(notifications.bulkUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects an oversized batch on the size cap before validating items', async () => {
+      const oversized = Array.from({ length: 51 }, () => ({
+        id: 'not-a-uuid',
+        enabled: 'nope',
+        extra: true,
+      }));
+      const res = await patch(oversized).expect(400);
+      expect(JSON.stringify(res.body)).toContain('At most 50 preferences');
+      expect(notifications.getPreferenceOwner).not.toHaveBeenCalled();
     });
 
     it.each([

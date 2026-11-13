@@ -156,12 +156,12 @@ export class PrismaNotificationPreferenceRepository implements INotificationPref
 
   async findManyNotificationPreferencesByIds(
     ids: string[],
-    userId: string,
+    userId?: string,
   ): Promise<NotificationPreference[]> {
     return this.prisma.notificationPreference.findMany({
       where: {
         id: { in: ids },
-        userId,
+        ...(userId !== undefined && { userId }),
         isDeleted: false,
       },
     });

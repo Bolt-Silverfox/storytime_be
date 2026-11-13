@@ -170,10 +170,9 @@ export class NotificationService {
   }
 
   async bulkUpdate(
-    userId: string,
     dtos: BulkUpdateNotificationPreferenceDto[],
   ): Promise<NotificationPreferenceDto[]> {
-    return this.settingsService.bulkUpdate(userId, dtos);
+    return this.settingsService.bulkUpdate(dtos);
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
