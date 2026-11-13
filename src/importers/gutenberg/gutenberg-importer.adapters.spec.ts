@@ -57,6 +57,27 @@ describe('FsPayloadStore', () => {
     });
   });
 
+  describe('a symlinked payload file', () => {
+    let secret: string;
+    let store: FsPayloadStore;
+    beforeEach(() => {
+      secret = path.join(dir, 'secret.txt');
+      fs.writeFileSync(secret, 'outside');
+      fs.mkdirSync(path.join(dir, 'cache', 'gutenberg'), { recursive: true });
+      fs.symlinkSync(secret, path.join(dir, 'cache', 'gutenberg', '1-abc.txt'));
+      store = new FsPayloadStore(path.join(dir, 'cache'));
+    });
+
+    it('is not read through', async () => {
+      await expect(store.read('gutenberg/1-abc.txt')).rejects.toThrow();
+    });
+
+    it('is not written through', async () => {
+      await store.write('gutenberg/1-abc.txt', 'raw');
+      expect(fs.readFileSync(secret, 'utf8')).toBe('outside');
+    });
+  });
+
   it('rejects unsafe keys', async () => {
     const store = new FsPayloadStore(dir);
     await expect(store.write('../x.txt', 'a')).rejects.toThrow(/unsafe/i);

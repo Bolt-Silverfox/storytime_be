@@ -81,6 +81,15 @@ describe('allow-list rules', () => {
     ).toThrow(/pre-1931|published/i);
   });
 
+  it.each([NaN, -Infinity, Infinity, 1900.5])(
+    'rejects an approved entry whose firstPublished is %s',
+    (firstPublished) => {
+      expect(() =>
+        validateAllowList([base({ firstPublished, status: 'approved' })]),
+      ).toThrow(/first publication/i);
+    },
+  );
+
   it.each([NaN, Infinity, 1900.5])(
     'a translator death year of %s is needs-review, never approved',
     (deathYear) => {

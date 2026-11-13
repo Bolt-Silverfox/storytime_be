@@ -167,6 +167,37 @@ describe('maskSourceFieldsForPublic', () => {
       expect(JSON.stringify(out)).not.toMatch(/gutenberg|example\.org\/ebooks/);
     });
 
+    it('masks a serialisation that omits licenseCode when the original row is PD-US', () => {
+      const row = {
+        licenseCode: 'PD-US',
+        sourceName: 'archive',
+        toJSON: () => ({
+          title: 'T',
+          sourceName: 'archive',
+          sourceUrl: 'https://archive.example/work',
+        }),
+      };
+      const json = JSON.parse(JSON.stringify(maskSourceFieldsForPublic(row)));
+      expect(json).toEqual({ title: 'T', sourceName: null, sourceUrl: null });
+    });
+
+    it('calls toJSON with the real property key', () => {
+      const keyed = {
+        toJSON: (key: string) => (key === 'story' ? pd() : {}),
+      };
+      const out = maskSourceFieldsForPublic({ story: keyed });
+      expect(JSON.stringify(out)).not.toMatch(/gutenberg|example\.org\/ebooks/);
+      expect(JSON.parse(JSON.stringify(out)).story.authorName).toBe('A');
+    });
+
+    it('calls toJSON with the array index as key', () => {
+      const keyed = {
+        toJSON: (key: string) => (key === '1' ? pd() : {}),
+      };
+      const out = maskSourceFieldsForPublic([{}, keyed]);
+      expect(JSON.stringify(out)).not.toMatch(/gutenberg|example\.org\/ebooks/);
+    });
+
     it('drops an object whose toJSON throws', () => {
       const bad = {
         sourceUrl: 'https://www.gutenberg.org/1',

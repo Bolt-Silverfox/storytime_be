@@ -1300,6 +1300,87 @@ describe('processGutenbergText title page residue', () => {
   });
 });
 
+describe('processGutenbergText review findings', () => {
+  const translated = () =>
+    plain({
+      translator: { name: 'Bram Sample', deathYear: 1900 },
+      expect: {
+        title: 'Lantern Fox',
+        author: 'Example',
+        translator: 'Bram Sample',
+      },
+    });
+  const withHead = (extra: string) =>
+    wrap(STORY, `Title: Lantern Fox\nAuthor: Ada Example\n${extra}`);
+
+  it('does not delete story prose that only mentions an e-book after a credit opener', () => {
+    const line = 'Prepared by the cook, who read an e-book aloud.';
+    expect(processGutenbergText(wrap(`${line}\n\n${STORY}`), plain())).toEqual({
+      ok: false,
+      reason: 'boilerplate-ambiguous',
+    });
+    expect(processGutenbergText(wrap(`${STORY}\n\n${line}`), plain())).toEqual({
+      ok: false,
+      reason: 'boilerplate-mid-body',
+    });
+  });
+
+  it('still drops a producer credit that names the proofreading team', () => {
+    const r = processGutenbergText(
+      wrap(
+        `Produced by Jane Doe and the Online Distributed Proofreading Team\n\n${STORY}`,
+      ),
+      plain(),
+    );
+    expect(r).toMatchObject({ ok: true, content: STORY });
+  });
+
+  it('removes an illustration caption that contains nested brackets completely', () => {
+    const r = processGutenbergText(
+      wrap(`[Illustration: A fox [left] beside an owl.]\n\n${STORY}`),
+      plain(),
+    );
+    expect(r).toMatchObject({ ok: true, content: STORY });
+  });
+
+  it('routes a translation credit continued after a comma and newline to review', () => {
+    const r = processGutenbergText(
+      withHead(
+        'Translator: Bram Sample\nTranslated by Bram Sample,\nJohn Modern',
+      ),
+      translated(),
+    );
+    expect(r).toEqual({ ok: false, reason: 'copyright-signal' });
+  });
+
+  it('routes extra names in the structured Translator field to review', () => {
+    const r = processGutenbergText(
+      withHead('Translator: Bram Sample and John Modern'),
+      translated(),
+    );
+    expect(r).toEqual({ ok: false, reason: 'unlisted-translator' });
+  });
+
+  it('accepts the exact structured Translator field', () => {
+    const r = processGutenbergText(
+      withHead('Translator: Bram Sample'),
+      translated(),
+    );
+    expect(r).toMatchObject({ ok: true });
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+    'keeps the hard word cap when maxWords is %s',
+    (maxWords) => {
+      const body = Array.from({ length: 700 }, () => STORY).join('\n\n');
+      expect(processGutenbergText(wrap(body), plain(), { maxWords })).toEqual({
+        ok: false,
+        reason: 'oversized',
+      });
+    },
+  );
+});
+
 describe('processGutenbergText word cap', () => {
   it('never allows more than the hard cap, even when maxWords is raised', () => {
     const body = Array.from({ length: 700 }, () => STORY).join('\n\n');

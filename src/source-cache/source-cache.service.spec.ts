@@ -341,6 +341,31 @@ describe('SourceCacheService', () => {
       expect([ra.fetched, rb.fetched]).toEqual([true, false]);
     });
 
+    it('uses a separate lease owner for each flight and releases with the same owner', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const fetcher = jest.fn(async () => {
+        await gate;
+        return ok();
+      });
+      const plain = svc.getOrFetch('g', '1', fetcher, { now: NOW });
+      const forced = svc.getOrFetch('g', '1', fetcher, {
+        now: NOW,
+        force: true,
+      });
+      await new Promise((r) => setImmediate(r));
+      release();
+      await Promise.all([plain, forced]);
+      const claimed = (lease.claim as jest.Mock).mock.calls.map(
+        (c: unknown[]) => c[1],
+      );
+      const released = (lease.release as jest.Mock).mock.calls.map(
+        (c: unknown[]) => c[1],
+      );
+      expect(new Set(claimed).size).toBe(2);
+      expect([...released].sort()).toEqual([...claimed].sort());
+    });
+
     it('does not share a flight across different keys', async () => {
       const fetcher = jest.fn().mockResolvedValue(ok());
       await Promise.all([

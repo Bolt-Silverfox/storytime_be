@@ -163,7 +163,7 @@ const COPYRIGHT_STATUS = /^copyright\s+status:[ \t]*(.*)$/i;
 const NOT_COPYRIGHTED = /^(?:not\s+copyrighted|public\s+domain)\b/i;
 const TRANSLATION_CREDIT =
   /\b(?:translated|translation|revised|english\s+version)\b[\s\S]{0,100}?\bby\b/gi;
-const CREDIT_END = /^[ \t]*[.,;)\]]*[ \t]*(?:\n|$)/;
+const CREDIT_END = /^[ \t]*[.)\]]*[ \t]*(?:\n|$)/;
 
 function hasCopyrightSignal(head: string[], entry: AllowListEntry): boolean {
   const translator = entry.translator
@@ -354,9 +354,15 @@ function stripIllustrations(p: string): {
     if (p.slice(j, j + 12).toLowerCase() === 'illustration') {
       out += p.slice(i, b);
       changed = true;
-      const close = p.indexOf(']', j);
-      if (close < 0) return { text: '', changed, unclosed: true };
-      i = close + 1;
+      let depth = 1;
+      let close = j;
+      while (close < p.length && depth > 0) {
+        const c = p[close++];
+        if (c === '[') depth++;
+        else if (c === ']') depth--;
+      }
+      if (depth > 0) return { text: '', changed, unclosed: true };
+      i = close;
     } else {
       out += p.slice(i, b + 1);
       i = b + 1;
@@ -378,8 +384,11 @@ function scanNote(m: string, startDepth: number): number | null {
   return depth > 0 && m.trimEnd().endsWith(']') ? null : depth;
 }
 
+const PRODUCER_CREDIT_OPENER =
+  /^(?:e-?text\s+)?(?:produced|prepared|transcribed|scanned|proofread|proofed|digitized|digitised|converted)\s+(?:by|from)\b/i;
+const WEAK_PRODUCER_SHAPE = /\be-?texts?\b|\be-?books?\b/i;
 const PRODUCER_SHAPE =
-  /\be-?texts?\b|\be-?books?\b|\bpgdp\b|\bpglaf\b|\S+@\S+\.\S+|https?:\/\/\S+|www\.\S+|internet archive|page images|proofreading team|this file was produced/i;
+  /\bpgdp\b|\bpglaf\b|\S+@\S+\.\S+|https?:\/\/\S+|www\.\S+|internet archive|page images|proofreading team|this file was produced/i;
 const KNOWN_SHORT_BOILERPLATE =
   /^(?:this\s+(?:e-?book|e-?text|file)\s+was\s+produced\b|(?:e-?text|e-?book)\s*(?:(?:no\.?|number|#)\s*)?\d+|(?:this\s+)?pg\s+(?:edition|version)\b|updated\s+editions\s+will\s+replace\b|distributed\s+proofread)/i;
 const MAX_SHAPE_PARAGRAPH_CHARS = 200;
@@ -391,7 +400,13 @@ function isProducerParagraph(m: string): boolean {
   if (short && KNOWN_SHORT_BOILERPLATE.test(m)) return true;
   const opener = BOILERPLATE_START.exec(m);
   const rest = opener ? m.slice(opener[0].length) : m;
-  if (hasSourceReference(rest) || (short && PRODUCER_SHAPE.test(rest)))
+  const weakCounts = !PRODUCER_CREDIT_OPENER.test(m);
+  if (
+    hasSourceReference(rest) ||
+    (short &&
+      (PRODUCER_SHAPE.test(rest) ||
+        (weakCounts && WEAK_PRODUCER_SHAPE.test(rest))))
+  )
     return true;
   const credit = PRODUCER_CREDIT.exec(m);
   return (
@@ -433,7 +448,9 @@ export function processGutenbergText(
   options: ProcessOptions = {},
 ): ProcessResult {
   const maxWords = Math.min(
-    options.maxWords ?? MAX_IMPORT_WORDS,
+    Number.isFinite(options.maxWords)
+      ? (options.maxWords as number)
+      : MAX_IMPORT_WORDS,
     MAX_IMPORT_WORDS,
   );
   const all = normalise(raw).split('\n');
@@ -459,6 +476,16 @@ export function processGutenbergText(
   }
   if (hTranslator && !entry.translator) {
     return { ok: false, reason: 'unlisted-translator' };
+  }
+  if (hTranslator && entry.translator) {
+    const allowed = new Set([
+      ...nameTokens(entry.translator.name),
+      ...nameTokens(entry.expect.translator ?? ''),
+    ]);
+    const named = nameTokens(hTranslator.replace(/\([^)]*\)/g, ' '));
+    if (!named.every((t) => allowed.has(t))) {
+      return { ok: false, reason: 'unlisted-translator' };
+    }
   }
   if (hasCopyrightSignal(head, entry)) {
     return { ok: false, reason: 'copyright-signal' };

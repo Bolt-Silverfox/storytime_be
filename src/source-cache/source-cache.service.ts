@@ -242,7 +242,6 @@ export class SourceCacheService {
 
   private readonly logger = new Logger(SourceCacheService.name);
   private readonly lease: FetchLease;
-  private readonly owner = randomUUID();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -404,6 +403,7 @@ export class SourceCacheService {
       return { entry: hit, fetched: false };
 
     const key: LeaseKey = `${sourceName}\u0000${sourceId}`;
+    const owner = randomUUID();
     const leaseMs = options.leaseMs ?? DEFAULT_LEASE_MS;
     const deadline =
       Date.now() + (options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS);
@@ -411,7 +411,7 @@ export class SourceCacheService {
 
     // Claim the lease; while someone else holds it, poll the cache (no
     // connection is held between polls) and take their result if it lands.
-    while (!(await this.lease.claim(key, this.owner, leaseMs))) {
+    while (!(await this.lease.claim(key, owner, leaseMs))) {
       if (Date.now() >= deadline) {
         throw new SourceCacheLeaseTimeoutError(sourceName, sourceId);
       }
@@ -438,7 +438,7 @@ export class SourceCacheService {
         if (renewing || lost) return;
         renewing = true;
         this.lease
-          .renew(key, this.owner, leaseMs)
+          .renew(key, owner, leaseMs)
           .then((ok) => {
             if (ok) lastRenewOk = Date.now();
             else markLost('renew reported another holder');
@@ -525,7 +525,7 @@ export class SourceCacheService {
       // lost it must not overwrite a newer fetch with a stale result.
       const written = lost
         ? ({ held: false } as const)
-        : await this.lease.fenced(key, this.owner, (db) =>
+        : await this.lease.fenced(key, owner, (db) =>
             this.put(
               { sourceName, sourceId, result, ...options, now: nowFn() },
               db,
@@ -536,7 +536,7 @@ export class SourceCacheService {
     } finally {
       clearInterval(beat);
       if (timer) clearTimeout(timer);
-      await this.lease.release(key, this.owner).catch((e: unknown) => {
+      await this.lease.release(key, owner).catch((e: unknown) => {
         this.logger.warn(
           `Lease release failed for ${sourceName}/${sourceId}: ${String(e)}`,
         );

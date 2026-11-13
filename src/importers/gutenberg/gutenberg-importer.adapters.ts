@@ -56,7 +56,15 @@ export class FsPayloadStore implements PayloadStore {
   async read(key: string): Promise<string> {
     const p = this.resolve(key);
     const dir = await this.insideRoot(path.dirname(p));
-    return fs.promises.readFile(path.join(dir, path.basename(p)), 'utf8');
+    const handle = await fs.promises.open(
+      path.join(dir, path.basename(p)),
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW,
+    );
+    try {
+      return await handle.readFile('utf8');
+    } finally {
+      await handle.close();
+    }
   }
 }
 

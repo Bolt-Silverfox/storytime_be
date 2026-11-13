@@ -98,7 +98,8 @@ export function validateAllowList(list: AllowListEntry[]): void {
     }
     if (
       e.status === 'approved' &&
-      e.firstPublished > LATEST_PD_US_PUBLICATION_YEAR
+      (!Number.isInteger(e.firstPublished) ||
+        e.firstPublished > LATEST_PD_US_PUBLICATION_YEAR)
     ) {
       throw new Error(
         `${where}: approved needs a pre-1931 first publication (got ${e.firstPublished})`,

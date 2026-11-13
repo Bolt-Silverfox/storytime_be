@@ -46,11 +46,11 @@ const isWalkable = (v: unknown): v is object =>
 
 /**
  * Returns `value` with sourceName/sourceUrl nulled on nested objects that are
- * public-domain credit rows. Not every nested row is masked: a cyclic
- * back-reference is returned as the original object, and a toJSON that depends
- * on its key argument is called without one, so its keyed output is not seen.
- * A toJSON that drops licenseCode also hides the PD-US marker, so the output
- * is masked only if sourceName or sourceUrl still names a gutenberg source.
+ * public-credit rows. A row that serialises itself through toJSON is masked
+ * when either the original row or its serialised output is a credit row, and
+ * toJSON is called with the real property key (array index for elements).
+ * Not every nested row is masked: a cyclic back-reference is returned as the
+ * original object.
  * Copy on write: never mutates the input (it may be a cached object) and
  * returns the same reference when nothing changed.
  */
@@ -62,9 +62,12 @@ function walk(
   value: unknown,
   seen: Map<object, unknown>,
   depth: number,
+  key = '',
+  forceMask = false,
 ): unknown {
   if (!isWalkable(value)) return value;
   if (depth > MAX_MASK_DEPTH) return null;
+  if (forceMask) seen = new Map();
   if (seen.has(value)) return seen.get(value);
   // Cycle guard: provisional answer is the original object.
   seen.set(value, value);
@@ -74,13 +77,14 @@ function walk(
   if (typeof toJSON === 'function') {
     let json: unknown;
     try {
-      json = (toJSON as () => unknown).call(value);
+      json = (toJSON as (k: string) => unknown).call(value, key);
     } catch {
       seen.set(value, null);
       return null;
     }
     if (json !== value) {
-      const masked = walk(json, seen, depth + 1);
+      const originalIsCredit = isMaskable(value as Record<string, unknown>);
+      const masked = walk(json, seen, depth + 1, key, originalIsCredit);
       result = masked === json ? value : masked;
       seen.set(value, result);
       return result;
@@ -89,7 +93,7 @@ function walk(
   if (Array.isArray(value)) {
     let copy: unknown[] | null = null;
     for (let i = 0; i < value.length; i++) {
-      const next = walk(value[i], seen, depth + 1);
+      const next = walk(value[i], seen, depth + 1, String(i));
       if (next !== value[i]) {
         copy ??= value.slice();
         copy[i] = next;
@@ -107,11 +111,11 @@ function walk(
         >,
         rec,
       ));
-    for (const key of Object.keys(rec)) {
-      const next = walk(rec[key], seen, depth + 1);
-      if (next !== rec[key]) ensure()[key] = next;
+    for (const k of Object.keys(rec)) {
+      const next = walk(rec[k], seen, depth + 1, k);
+      if (next !== rec[k]) ensure()[k] = next;
     }
-    if (isMaskable(rec)) {
+    if (forceMask || isMaskable(rec)) {
       for (const k of MASKED_KEYS) {
         if (k in rec && rec[k] !== null) ensure()[k] = null;
       }
