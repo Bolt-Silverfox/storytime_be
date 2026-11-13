@@ -8,6 +8,21 @@ import {
   NotificationResult,
 } from './notification-provider.interface';
 
+const maskAddress = (address: string): string => {
+  const at = address.lastIndexOf('@');
+  return at < 1 ? '***' : `${address.charAt(0)}***${address.slice(at)}`;
+};
+
+const maskRecipient = (to: unknown): string => {
+  if (typeof to === 'string') return maskAddress(to);
+  if (Array.isArray(to)) {
+    return to
+      .map((entry) => (typeof entry === 'string' ? maskAddress(entry) : '***'))
+      .join(', ');
+  }
+  return '***';
+};
+
 /**
  * Email Notification Provider
  * Sends notifications via SMTP/Email
@@ -49,10 +64,10 @@ export class EmailProvider implements INotificationProvider {
         html: payload.body,
       };
 
+      const maskedRecipient = maskRecipient(email);
       const info = await this.transporter.sendMail(mailOptions);
-      const [local, domain] = email.split('@');
       this.logger.log(
-        `Email sent successfully to ${local.charAt(0)}***@${domain}: ${info.messageId}`,
+        `Email sent successfully to ${maskedRecipient}: ${info.messageId}`,
       );
 
       return {

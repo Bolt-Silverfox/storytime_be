@@ -23,18 +23,20 @@ export class PasswordlessGuestMergeService {
     guestSessionId: string,
     isNewUser: boolean,
   ): Promise<void> {
-    if (!isNewUser || !UUID_V4_LIKE.test(guestSessionId)) return;
+    if (!UUID_V4_LIKE.test(guestSessionId)) return;
     const sid = guestSessionId.toLowerCase();
 
     const claimKey = `pwl:guest-claim:${sid}`;
     const pending = `${userId}:pending`;
-    const claimed = await this.redis.client.set(
-      claimKey,
-      pending,
-      'EX',
-      CLAIM_TTL_SECONDS,
-      'NX',
-    );
+    const claimed = isNewUser
+      ? await this.redis.client.set(
+          claimKey,
+          pending,
+          'EX',
+          CLAIM_TTL_SECONDS,
+          'NX',
+        )
+      : null;
     if (
       claimed !== 'OK' &&
       (await this.redis.client.get(claimKey)) !== pending

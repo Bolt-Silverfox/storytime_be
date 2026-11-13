@@ -16,6 +16,7 @@ export interface VerifiedEmailInput {
   onboardingStatus?: string;
   refuseInactive?: boolean;
   matchEmailCaseInsensitively?: boolean;
+  beforeCreate?: () => Promise<void>;
 }
 
 export interface VerifiedEmailDeps {
@@ -109,6 +110,8 @@ async function resolveParent(
     };
     return { user, isNewUser: false, newlyVerified: false };
   }
+
+  await input.beforeCreate?.();
 
   const randomPassword = crypto.randomBytes(16).toString('hex');
   const hashedPassword = await passwordService.hashPassword(randomPassword);

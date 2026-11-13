@@ -18,6 +18,7 @@ export const PASSWORDLESS_LIMITS = {
   verifyPerIp: { windowMs: 15 * MINUTE_MS, max: 20 },
   verifyPerEmail: { windowMs: 15 * MINUTE_MS, max: 100 },
   failedVerifyPerEmailDay: { windowMs: 24 * HOUR_MS, max: 20 },
+  createPerIpHour: { windowMs: HOUR_MS, max: 3 },
 } as const;
 
 export const PASSWORDLESS_GLOBAL_KEY = 'pwl:req:global';

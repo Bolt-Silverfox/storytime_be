@@ -59,7 +59,7 @@ describe('PasswordlessGuestMergeService', () => {
     expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
   });
 
-  it('lets the same user resume after a progress write failed, and still refuses other users', async () => {
+  it('lets the same user resume on a later login after a progress write failed, and still refuses other users', async () => {
     const { service, guestSessions } = build({ s1: {}, s2: {} });
     guestSessions.upsertUserStoryProgress.mockRejectedValueOnce(
       new Error('db down'),
@@ -69,9 +69,10 @@ describe('PasswordlessGuestMergeService', () => {
       'db down',
     );
     await service.carryOver('u2', GUEST, true);
+    await service.carryOver('u2', GUEST, false);
     expect(guestSessions.deleteGuestSession).not.toHaveBeenCalled();
 
-    await service.carryOver('u1', GUEST, true);
+    await service.carryOver('u1', GUEST, false);
 
     expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
     expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledWith(
@@ -87,11 +88,17 @@ describe('PasswordlessGuestMergeService', () => {
     ).toBe(true);
   });
 
-  it('does not repeat a completed carry-over for the same user', async () => {
+  it('does not repeat a completed carry-over on a later login', async () => {
     const { service, guestSessions } = build({ s1: {} });
     await service.carryOver('u1', GUEST, true);
-    await service.carryOver('u1', GUEST, true);
+    await service.carryOver('u1', GUEST, false);
     expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not claim a guest session on an existing account login with no pending claim', async () => {
+    const { service, guestSessions } = build({ s1: {} });
+    await service.carryOver('u1', GUEST, false);
+    expect(guestSessions.getGuestReadingHistory).not.toHaveBeenCalled();
   });
 
   it('ignores a header that is not a UUID without touching redis or the session', async () => {

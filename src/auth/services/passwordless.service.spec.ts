@@ -162,6 +162,79 @@ describe('PasswordlessService', () => {
     });
   });
 
+  describe('account creation budget per address', () => {
+    const signIn = async (
+      ctx: ReturnType<typeof build>,
+      email: string,
+      ip: string,
+    ) => {
+      await ctx.service.request(email, ip);
+      const { code } = ctx.captured[ctx.captured.length - 1];
+      return ctx.service.verify(email, code, ip);
+    };
+
+    it('refuses further sign-ups from one address after the budget, with the generic error and no account', async () => {
+      const ctx = build();
+      for (const n of [1, 2, 3]) {
+        await signIn(ctx, `new${n}@example.com`, '203.0.113.9');
+      }
+      await ctx.service.request('new4@example.com', '203.0.113.9');
+
+      await expectGeneric(
+        ctx.service.verify(
+          'new4@example.com',
+          ctx.captured[ctx.captured.length - 1].code,
+          '203.0.113.9',
+        ),
+      );
+
+      expect(
+        ctx.authRepo.users.find((u) => u.email === 'new4@example.com'),
+      ).toBeUndefined();
+    });
+
+    it('still signs an existing account in from an address that spent its budget', async () => {
+      const ctx = build();
+      await ctx.authRepo.createUser({
+        email: 'owner@example.com',
+        passwordHash: 'h',
+        isEmailVerified: true,
+        role: 'parent',
+      });
+      for (const n of [1, 2, 3]) {
+        await signIn(ctx, `new${n}@example.com`, '203.0.113.9');
+      }
+
+      const result = await signIn(ctx, 'owner@example.com', '203.0.113.9');
+
+      expect(result.isNewUser).toBe(false);
+    });
+
+    it('does not spend the budget of other addresses', async () => {
+      const ctx = build();
+      for (const n of [1, 2, 3]) {
+        await signIn(ctx, `new${n}@example.com`, '203.0.113.9');
+      }
+
+      const result = await signIn(ctx, 'other@example.com', '198.51.100.7');
+
+      expect(result.isNewUser).toBe(true);
+    });
+
+    it('refuses to create an account when the throttle store is down', async () => {
+      const ctx = build();
+      await ctx.service.request('new@example.com', '203.0.113.9');
+      const { code } = ctx.captured[0];
+      ctx.redis.down = true;
+
+      await expect(
+        ctx.service.verify('new@example.com', code, '203.0.113.9'),
+      ).rejects.toBeDefined();
+
+      expect(ctx.authRepo.users).toHaveLength(0);
+    });
+  });
+
   describe('verify and consume', () => {
     it('returns the login response shape plus isNewUser and a hashed session for a new user', async () => {
       const { service, captured, authRepo } = build();

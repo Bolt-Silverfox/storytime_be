@@ -258,6 +258,7 @@ export class PasswordlessService {
   ): Promise<PasswordlessLoginResult> {
     const { user, isNewUser, newlyVerified } = await this.findOrCreateUser(
       emailNormalized,
+      ip,
     ).catch((error: unknown) => {
       if (error instanceof AmbiguousEmailAccountError) {
         this.logger.warn(
@@ -335,7 +336,10 @@ export class PasswordlessService {
     };
   }
 
-  private async findOrCreateUser(email: string): Promise<VerifiedEmailResult> {
+  private async findOrCreateUser(
+    email: string,
+    ip: string | undefined,
+  ): Promise<VerifiedEmailResult> {
     return findOrCreateParentByVerifiedEmail(
       {
         authRepository: this.authRepository,
@@ -347,8 +351,27 @@ export class PasswordlessService {
         onboardingStatus: 'email_verified',
         refuseInactive: true,
         matchEmailCaseInsensitively: true,
+        beforeCreate: () => this.spendCreationBudget(ip),
       },
     );
+  }
+
+  private async spendCreationBudget(ip: string | undefined): Promise<void> {
+    const budget = PASSWORDLESS_LIMITS.createPerIpHour;
+    let count: number;
+    try {
+      count = await this.throttle.hit(
+        `pwl:create:ip:${this.hmac(ip ?? 'unknown')}`,
+        budget.windowMs,
+      );
+    } catch {
+      this.logger.error('Passwordless throttle store unavailable');
+      throw this.invalid();
+    }
+    if (count > budget.max) {
+      this.logger.warn('Passwordless account creation budget spent');
+      throw this.invalid();
+    }
   }
 
   private async enforceVerifyLimits(

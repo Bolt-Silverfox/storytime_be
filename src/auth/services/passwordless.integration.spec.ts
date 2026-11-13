@@ -1709,6 +1709,35 @@ maybe('PasswordlessService against Postgres', () => {
   });
 
   describe('password change and session state', () => {
+    it('changes the password for a live session', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const stamp = `${process.pid}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-pwl-${stamp}@example.com`,
+          passwordHash: 'old',
+          isEmailVerified: true,
+        },
+      });
+      const session = await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-pwl-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+
+      const changed = await authRepo.transaction((tx) =>
+        tx.changePasswordIfUnchanged(user.id, 'old', 'new', session.id),
+      );
+
+      expect(changed).toBe(true);
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: user.id } }))
+          .passwordHash,
+      ).toBe('new');
+    });
+
     it('refuses a password change tied to a soft-revoked session', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
       const stamp = `${process.pid}-${++n}`;
