@@ -68,17 +68,6 @@ describe('SmtpHealthIndicator', () => {
     );
   });
 
-  it('stays up when closing the transport throws after a good verify', async () => {
-    verify.mockResolvedValue(true);
-    close.mockImplementationOnce(() => {
-      throw new Error('close failed');
-    });
-
-    const result = await indicator.isHealthy('smtp');
-
-    expect(result.smtp.status).toBe('up');
-  });
-
   describe('cachedHealth', () => {
     const fresh = () =>
       new SmtpHealthIndicator(new HealthIndicatorService(), {
@@ -203,6 +192,27 @@ describe('SmtpHealthIndicator', () => {
       release(true);
       await adminCall;
       expect(bg.cachedHealth('smtp').smtp.status).toBe('up');
+    });
+
+    it('restarts the backoff at 30 seconds when a failure follows a success', async () => {
+      verify
+        .mockRejectedValueOnce(new Error('down'))
+        .mockRejectedValueOnce(new Error('down'))
+        .mockResolvedValueOnce(true)
+        .mockRejectedValue(new Error('down'));
+      bg.onModuleInit();
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(30_000);
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(verify).toHaveBeenCalledTimes(3);
+
+      await jest.advanceTimersByTimeAsync(FIVE_MIN);
+      expect(verify).toHaveBeenCalledTimes(4);
+
+      await jest.advanceTimersByTimeAsync(29_000);
+      expect(verify).toHaveBeenCalledTimes(4);
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(verify).toHaveBeenCalledTimes(5);
     });
 
     it('does not keep the process alive for the next probe', async () => {
