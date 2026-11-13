@@ -299,6 +299,24 @@ describe('Authentication (e2e)', () => {
       expect(res.body.success).toBe(false);
     });
 
+    it('answers a case-variant duplicate with the resource-exists conflict, not the generic Prisma one', async () => {
+      const prisma = app.get(PrismaService) as unknown as {
+        $queryRaw: jest.Mock;
+      };
+      prisma.$queryRaw.mockResolvedValueOnce([{ id: 'legacy-mixed-case-row' }]);
+
+      const res = await request(server).post('/api/v1/auth/register').send({
+        email: 'twin-of-legacy-row@example.com',
+        password: testUser.password,
+        fullName: testUser.fullName,
+      });
+
+      expect(res.status).toBe(409);
+      expect(res.body.message).toContain(
+        'User with email "twin-of-legacy-row@example.com" already exists',
+      );
+    });
+
     it('should sanitize email to lowercase', async () => {
       const res = await request(server).post('/api/v1/auth/register').send({
         email: 'UPPERCASE@EXAMPLE.COM',

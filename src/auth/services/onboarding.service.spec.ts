@@ -13,7 +13,8 @@ import { TokenService } from './token.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { EmailVerificationService } from './email-verification.service';
-import { Role, OnboardingStatus } from '@prisma/client';
+import { Prisma, Role, OnboardingStatus } from '@prisma/client';
+import { ResourceAlreadyExistsException } from '@/shared/exceptions';
 
 describe('OnboardingService', () => {
   let service: OnboardingService;
@@ -124,6 +125,40 @@ describe('OnboardingService', () => {
       expect(result).toBeDefined();
       expect(authRepository.createUser).toHaveBeenCalled();
       expect(eventEmitter.emit).toHaveBeenCalled();
+    });
+
+    it('answers a case-variant email conflict from createUser like an exact duplicate', async () => {
+      authRepository.findUserByEmail.mockResolvedValue(null);
+      passwordService.hashPassword.mockResolvedValue('hashed_password');
+      authRepository.createUser.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: ['email'] },
+        }),
+      );
+
+      await expect(
+        service.register({
+          fullName: 'Test User',
+          email: 'test@example.com',
+          password: 'password123',
+        }),
+      ).rejects.toBeInstanceOf(ResourceAlreadyExistsException);
+    });
+
+    it('does not turn other createUser failures into a duplicate-email conflict', async () => {
+      authRepository.findUserByEmail.mockResolvedValue(null);
+      passwordService.hashPassword.mockResolvedValue('hashed_password');
+      authRepository.createUser.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.register({
+          fullName: 'Test User',
+          email: 'test@example.com',
+          password: 'password123',
+        }),
+      ).rejects.toThrow('db down');
     });
   });
 
