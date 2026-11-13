@@ -50,6 +50,7 @@ describe('NotificationPreferenceService', () => {
       executeTransaction: jest.fn((fn) => fn({})),
       createManyNotificationPreferences: jest.fn(),
       findManyNotificationPreferencesByIds: jest.fn(),
+      findActiveNotificationPreferencesByIds: jest.fn(),
       findManyByUserCategoryAndTypes: jest.fn(),
       bulkUpdateEnabledInTransaction: jest.fn(),
       upsertManyInTransaction: jest.fn(),

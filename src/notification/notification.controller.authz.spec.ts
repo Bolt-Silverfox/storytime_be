@@ -118,6 +118,27 @@ describe('NotificationController (preferences) authorization', () => {
     },
   );
 
+  it.each([
+    ['get', `/notification-preferences/${PREF_ID}`],
+    ['patch', `/notification-preferences/${PREF_ID}`],
+    ['delete', `/notification-preferences/${PREF_ID}`],
+    ['post', `/notification-preferences/${PREF_ID}/undo-delete`],
+  ])(
+    '%s %s answers a missing preference with 403, like a foreign one',
+    async (method, url) => {
+      notifications.getPreferenceOwner.mockRejectedValue(
+        new NotFoundException(),
+      );
+      await (http() as never as Record<string, (u: string) => request.Test>)
+        [method](url)
+        .set('Authorization', bearer('alice'))
+        .send(method === 'patch' ? { enabled: false } : {})
+        .expect(403);
+      for (const m of mutators) expect(notifications[m]).not.toHaveBeenCalled();
+      expect(notifications.getById).not.toHaveBeenCalled();
+    },
+  );
+
   describe('a preference carrying both userId and kidId needs both owners', () => {
     const send = (
       method: 'patch' | 'delete',

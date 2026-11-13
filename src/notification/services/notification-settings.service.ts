@@ -120,7 +120,7 @@ export class NotificationSettingsService {
     const ids = dtos.map((dto) => dto.id);
 
     const owned =
-      await this.notificationPreferenceRepository.findManyNotificationPreferencesByIds(
+      await this.notificationPreferenceRepository.findActiveNotificationPreferencesByIds(
         ids,
       );
 

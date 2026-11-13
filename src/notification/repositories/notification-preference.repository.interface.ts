@@ -97,10 +97,13 @@ export interface INotificationPreferenceRepository {
     }[],
   ): Promise<void>;
 
-  // Find many notification preferences by IDs, optionally scoped to a userId
   findManyNotificationPreferencesByIds(
     ids: string[],
-    userId?: string,
+    userId: string,
+  ): Promise<NotificationPreference[]>;
+
+  findActiveNotificationPreferencesByIds(
+    ids: string[],
   ): Promise<NotificationPreference[]>;
 
   // Find many notification preferences for a user, category and set of types

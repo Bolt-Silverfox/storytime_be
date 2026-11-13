@@ -29,21 +29,14 @@ describe('NotificationSettingsService.bulkUpdate', () => {
   const findMany = jest.fn();
   const bulkUpdateInTx = jest.fn();
   const service = new NotificationSettingsService({
-    findManyNotificationPreferencesByIds: findMany,
+    findActiveNotificationPreferencesByIds: findMany,
     bulkUpdateEnabledInTransaction: bulkUpdateInTx,
   } as never);
 
   beforeEach(() => {
     jest.clearAllMocks();
-    findMany.mockImplementation((ids: string[], userId?: string) =>
-      Promise.resolve(
-        rows.filter(
-          (r) =>
-            ids.includes(r.id) &&
-            !r.isDeleted &&
-            (userId === undefined || r.userId === userId),
-        ),
-      ),
+    findMany.mockImplementation((ids: string[]) =>
+      Promise.resolve(rows.filter((r) => ids.includes(r.id) && !r.isDeleted)),
     );
     bulkUpdateInTx.mockImplementation((updates: { id: string }[]) =>
       Promise.resolve(rows.filter((r) => updates.some((u) => u.id === r.id))),
