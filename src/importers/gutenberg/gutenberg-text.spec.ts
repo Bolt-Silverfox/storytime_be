@@ -934,7 +934,12 @@ describe('processGutenbergText hardening', () => {
       const used = process.cpuUsage(before);
       return (used.user + used.system) / 1000;
     };
-    const MIN_OF = 3;
+    const MIN_OF = 5;
+    const COVERAGE_SCALE =
+      typeof (globalThis as { __coverage__?: unknown }).__coverage__ ===
+      'undefined'
+        ? 1
+        : 2;
     const minCpuMs = (text: string): number =>
       Math.min(...Array.from({ length: MIN_OF }, () => cpuMs(text)));
     beforeAll(() => {
@@ -1074,7 +1079,8 @@ describe('processGutenbergText hardening', () => {
       ],
     ])(
       '%s: cpu stays within budget and 8x input costs under 32x',
-      (_n, size, budgetMs, make) => {
+      (_n, size, baseBudgetMs, make) => {
+        const budgetMs = baseBudgetMs * COVERAGE_SCALE;
         expect(minCpuMs(make(size / PROBE_DIVISOR))).toBeLessThan(budgetMs);
         const text = make(size);
         expect(minCpuMs(text)).toBeLessThan(budgetMs);
@@ -1462,5 +1468,8 @@ describe('processGutenbergText title page round 3', () => {
     ['FOREWORD', 'I wrote this little book for my children.'],
   ])('routes "%s" followed by "%s" to review', (heading, next) => {
     expect(run(`${heading}\n\n${next}\n\n${STORY}`)).toEqual(AMBIGUOUS);
+    expect(run(`Lantern Fox\n\n${heading}\n\n${next}\n\n${STORY}`)).toEqual(
+      AMBIGUOUS,
+    );
   });
 });
