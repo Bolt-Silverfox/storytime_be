@@ -56,7 +56,7 @@ export class AvatarService {
     const avatarName = `${entityType}-avatar-${entityId}`;
 
     try {
-      return await this.avatarRepository.upsertByName(avatarName, {
+      return await this.avatarRepository.replaceByName(avatarName, {
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
         isSystemAvatar: false,
@@ -74,16 +74,28 @@ export class AvatarService {
   }
 
   private async releaseReplacedAvatar(
-    previous: { id: string; publicId: string | null; isSystemAvatar: boolean },
-    current: { id: string },
+    previous: {
+      id: string;
+      publicId: string | null;
+      isSystemAvatar: boolean;
+    } | null,
+    replaced: { avatar: { id: string }; displacedPublicId: string | null },
   ) {
-    if (previous.isSystemAvatar || !previous.publicId) return;
     try {
-      const publicId =
-        previous.id === current.id
-          ? previous.publicId
-          : await this.avatarRepository.retireAvatarIfUnreferenced(previous.id);
-      if (publicId) await this.uploadService.deleteImage(publicId);
+      if (replaced.displacedPublicId) {
+        await this.uploadService.deleteImage(replaced.displacedPublicId);
+      }
+      if (
+        previous &&
+        !previous.isSystemAvatar &&
+        previous.publicId &&
+        previous.id !== replaced.avatar.id
+      ) {
+        const publicId = await this.avatarRepository.retireAvatarIfUnreferenced(
+          previous.id,
+        );
+        if (publicId) await this.uploadService.deleteImage(publicId);
+      }
     } catch (error) {
       this.logger.warn('Failed to delete old avatar:', error);
     }
@@ -335,7 +347,7 @@ export class AvatarService {
       ? await this.avatarRepository.findById(user.avatarId)
       : null;
 
-    const avatar = await this.handleCustomAvatarUpload(
+    const replaced = await this.handleCustomAvatarUpload(
       userId,
       'user',
       file,
@@ -345,9 +357,9 @@ export class AvatarService {
 
     const updated = await this.avatarRepository.updateUserAvatar(
       userId,
-      avatar.id,
+      replaced.avatar.id,
     );
-    if (previous) await this.releaseReplacedAvatar(previous, avatar);
+    await this.releaseReplacedAvatar(previous, replaced);
     return this.withoutCredentials(updated);
   }
 
@@ -366,7 +378,7 @@ export class AvatarService {
       ? await this.avatarRepository.findById(kid.avatarId)
       : null;
 
-    const avatar = await this.handleCustomAvatarUpload(
+    const replaced = await this.handleCustomAvatarUpload(
       kidId,
       'kid',
       file,
@@ -376,9 +388,9 @@ export class AvatarService {
 
     const updated = await this.avatarRepository.updateKidAvatar(
       kidId,
-      avatar.id,
+      replaced.avatar.id,
     );
-    if (previous) await this.releaseReplacedAvatar(previous, avatar);
+    await this.releaseReplacedAvatar(previous, replaced);
     return updated;
   }
 }

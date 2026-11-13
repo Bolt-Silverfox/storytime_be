@@ -244,10 +244,6 @@ export class PrismaUserRepository implements IUserRepository {
         include: { avatar: true },
       });
 
-      // Retire the previous custom avatar only if nothing else references it,
-      // counted after this user moved off it and under a row lock so a
-      // concurrent assignment cannot be orphaned. The returned asset id is
-      // non-null only when this transaction deleted the row.
       const retiredPublicId = user.avatarId
         ? await retireAvatarIfUnreferenced(tx, user.avatarId)
         : null;

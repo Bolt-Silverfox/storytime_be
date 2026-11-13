@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { retireAvatarIfUnreferenced } from './retire-avatar';
+import { PrismaAvatarRepository } from './repositories/prisma-avatar.repository';
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
@@ -76,5 +77,43 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
     await expect(assign).rejects.toBeDefined();
     const reloaded = await prisma.user.findUnique({ where: { id: user.id } });
     expect(reloaded?.avatarId).toBeNull();
+  });
+
+  describe('replaceByName', () => {
+    const repo = new PrismaAvatarRepository(prisma as never);
+    const replace = (name: string, publicId: string) =>
+      repo.replaceByName(name, {
+        url: 'u',
+        publicId,
+        isSystemAvatar: false,
+      });
+
+    it('reports no displaced asset when it creates the row', async () => {
+      const r = await replace(`${tag}_new_${n++}`, 'first');
+      expect(r.displacedPublicId).toBeNull();
+    });
+
+    it('reports the asset it overwrote, and none when unchanged', async () => {
+      const name = `${tag}_rep_${n++}`;
+      await replace(name, 'p1');
+      expect((await replace(name, 'p2')).displacedPublicId).toBe('p1');
+      expect((await replace(name, 'p2')).displacedPublicId).toBeNull();
+    });
+
+    it('serialises concurrent replacements so every asset is reported exactly once', async () => {
+      const name = `${tag}_conc_${n++}`;
+      await replace(name, 'p0');
+      const results = await Promise.all([
+        replace(name, 'p1'),
+        replace(name, 'p2'),
+      ]);
+      const displaced = results.map((r) => r.displacedPublicId).sort();
+      const finalRow = await prisma.avatar.findUnique({ where: { name } });
+      expect([...displaced, finalRow?.publicId].sort()).toEqual([
+        'p0',
+        'p1',
+        'p2',
+      ]);
+    });
   });
 });

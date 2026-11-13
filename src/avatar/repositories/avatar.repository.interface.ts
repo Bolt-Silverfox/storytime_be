@@ -31,6 +31,15 @@ export interface IAvatarRepository {
     },
   ): Promise<Avatar>;
 
+  replaceByName(
+    name: string,
+    data: {
+      url: string;
+      publicId?: string | null;
+      isSystemAvatar: boolean;
+    },
+  ): Promise<{ avatar: Avatar; displacedPublicId: string | null }>;
+
   softDelete(id: string): Promise<Avatar>;
   hardDelete(id: string): Promise<Avatar>;
   restore(id: string): Promise<Avatar>;

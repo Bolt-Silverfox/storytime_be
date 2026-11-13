@@ -14,7 +14,9 @@ describe('AvatarService user responses', () => {
     findUserById: jest.fn().mockResolvedValue(row),
     findUserWithAvatar: jest.fn().mockResolvedValue(row),
     findByIdNotDeleted: jest.fn().mockResolvedValue({ id: 'a1' }),
-    upsertByName: jest.fn().mockResolvedValue({ id: 'a1' }),
+    replaceByName: jest
+      .fn()
+      .mockResolvedValue({ avatar: { id: 'a1' }, displacedPublicId: null }),
     updateUserAvatar: jest.fn().mockResolvedValue(row),
     create: jest.fn().mockResolvedValue({ id: 'a2' }),
     findKidWithAvatar: jest
@@ -85,7 +87,7 @@ describe('AvatarService user responses', () => {
     it('deletes the uploaded asset and rethrows the original error', async () => {
       const failure = new Error('db down');
       upload.deleteImage.mockClear();
-      repo.upsertByName.mockRejectedValueOnce(failure);
+      repo.replaceByName.mockRejectedValueOnce(failure);
       await expect(
         service.uploadAndAssignUserAvatar('u1', {} as never, {
           userId: 'u1',

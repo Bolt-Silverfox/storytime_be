@@ -72,6 +72,45 @@ export class PrismaAvatarRepository implements IAvatarRepository {
     return this.prisma.avatar.update({ where: { id }, data });
   }
 
+  replaceByName(
+    name: string,
+    data: {
+      url: string;
+      publicId?: string | null;
+      isSystemAvatar: boolean;
+    },
+  ): Promise<{ avatar: Avatar; displacedPublicId: string | null }> {
+    return this.prisma.$transaction(async (tx) => {
+      const rows = await tx.$queryRaw<
+        { publicId: string | null }[]
+      >`SELECT "publicId" FROM avatars WHERE name = ${name} FOR UPDATE`;
+      const avatar = await tx.avatar.upsert({
+        where: { name },
+        update: {
+          url: data.url,
+          publicId: data.publicId,
+          isSystemAvatar: data.isSystemAvatar,
+          isDeleted: false,
+          deletedAt: null,
+        },
+        create: {
+          name,
+          url: data.url,
+          publicId: data.publicId || null,
+          isSystemAvatar: data.isSystemAvatar,
+          isDeleted: false,
+          deletedAt: null,
+        },
+      });
+      const previous = rows[0]?.publicId ?? null;
+      return {
+        avatar,
+        displacedPublicId:
+          previous && previous !== avatar.publicId ? previous : null,
+      };
+    });
+  }
+
   async upsertByName(
     name: string,
     data: {
