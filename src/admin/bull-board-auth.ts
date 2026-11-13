@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { timingSafeEqual } from 'crypto';
 import type { NextFunction, Request, Response } from 'express';
 import { Logger } from '@nestjs/common';
 import { ExpressAdapter } from '@bull-board/express';
@@ -11,13 +11,23 @@ const FAILURE_LIMIT = 10;
 const FAILURE_WINDOW_MS = 15 * 60 * 1000;
 const MAX_TRACKED_ADDRESSES = 1000;
 
-const lengthEqualiserKey = randomBytes(32);
+const COMPARE_PAD_BYTES = 512;
 
-const digest = (value: string) =>
-  createHmac('sha256', lengthEqualiserKey).update(value).digest();
+const padded = (value: Buffer) => {
+  const out = Buffer.alloc(COMPARE_PAD_BYTES);
+  value.copy(out, 0, 0, COMPARE_PAD_BYTES);
+  return out;
+};
 
-const safeEqual = (a: string, b: string) =>
-  timingSafeEqual(digest(a), digest(b));
+export const safeEqual = (a: string, b: string) => {
+  const left = Buffer.from(a, 'utf8');
+  const right = Buffer.from(b, 'utf8');
+  const bytesEqual = timingSafeEqual(padded(left), padded(right));
+  const sameLength = left.length === right.length;
+  const fitsPad =
+    left.length <= COMPARE_PAD_BYTES && right.length <= COMPARE_PAD_BYTES;
+  return bytesEqual && sameLength && fitsPad;
+};
 
 function parseBasic(header: string | undefined) {
   const match = /^Basic ([A-Za-z0-9+/=]+)$/i.exec(header ?? '');

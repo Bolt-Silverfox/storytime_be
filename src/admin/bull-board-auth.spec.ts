@@ -11,6 +11,7 @@ import {
   bullBoardOptionsFromConfig,
   bullBoardRootOptions,
   createBullBoardAuth,
+  safeEqual,
 } from './bull-board-auth';
 
 const USER = 'ops-admin';
@@ -484,6 +485,51 @@ describe('Bull Board basic auth', () => {
           404,
         );
       }
+    });
+  });
+
+  describe('safeEqual', () => {
+    const PAD = 512;
+
+    it('accepts equal strings', () => {
+      expect(safeEqual('hunter2-hunter2', 'hunter2-hunter2')).toBe(true);
+    });
+
+    it('accepts equal unicode strings', () => {
+      expect(safeEqual('pässwörd-日本語-🔑', 'pässwörd-日本語-🔑')).toBe(true);
+    });
+
+    it('rejects different unicode strings of the same length', () => {
+      expect(safeEqual('pässwörd-日本語-🔑', 'pässwörd-日本語-🗝')).toBe(false);
+    });
+
+    it('rejects same-length different strings', () => {
+      expect(safeEqual('abcdefgh', 'abcdefgx')).toBe(false);
+    });
+
+    it('rejects a prefix of the real value', () => {
+      expect(safeEqual('correct-horse', 'correct-horse-battery')).toBe(false);
+      expect(safeEqual('correct-horse-battery', 'correct-horse')).toBe(false);
+    });
+
+    it('rejects the real value followed by NUL padding', () => {
+      expect(safeEqual('pw', 'pw\0\0')).toBe(false);
+      expect(safeEqual('pw\0\0', 'pw')).toBe(false);
+    });
+
+    it('rejects an input longer than the pad even when it starts with the real value', () => {
+      const real = 'r'.repeat(30);
+      expect(safeEqual(real, real + 'x'.repeat(PAD))).toBe(false);
+    });
+
+    it('rejects two different strings that agree for the first pad bytes', () => {
+      const head = 'h'.repeat(PAD);
+      expect(safeEqual(`${head}a`, `${head}b`)).toBe(false);
+    });
+
+    it('rejects two identical strings longer than the pad', () => {
+      const long = 'l'.repeat(PAD + 10);
+      expect(safeEqual(long, long)).toBe(false);
     });
   });
 });
