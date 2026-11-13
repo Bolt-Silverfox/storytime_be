@@ -34,4 +34,11 @@ describe('AvatarService user responses', () => {
     expect(JSON.stringify(result)).not.toMatch(/passwordHash|pinHash/);
     expect(result).toMatchObject({ id: 'u1' });
   });
+
+  it('uploadAndAssignUserAvatar passes the upload owner to the upload service', async () => {
+    upload.uploadImage.mockClear();
+    const owner = { userId: 'u1', exempt: false };
+    await service.uploadAndAssignUserAvatar('u1', {} as never, owner);
+    expect(upload.uploadImage).toHaveBeenCalledWith({}, 'avatars', owner);
+  });
 });

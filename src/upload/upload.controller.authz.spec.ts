@@ -2,7 +2,12 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { UploadController } from './upload.controller';
 import { UploadService } from './upload.service';
-import { bearer, createAuthzApp } from '@/shared/testing/authz-harness';
+import {
+  ALICE,
+  ADMIN,
+  bearer,
+  createAuthzApp,
+} from '@/shared/testing/authz-harness';
 
 describe('UploadController authorization', () => {
   let app: INestApplication;
@@ -35,6 +40,19 @@ describe('UploadController authorization', () => {
   it('accepts an authenticated user', async () => {
     await post().set('Authorization', bearer('alice')).expect(201);
     expect(uploads.uploadFile).toHaveBeenCalledTimes(1);
+  });
+
+  it('charges the upload to the caller, and exempts admins', async () => {
+    await post().set('Authorization', bearer('alice')).expect(201);
+    expect(uploads.uploadFile).toHaveBeenLastCalledWith(expect.anything(), {
+      userId: ALICE,
+      exempt: false,
+    });
+    await post().set('Authorization', bearer('admin')).expect(201);
+    expect(uploads.uploadFile).toHaveBeenLastCalledWith(expect.anything(), {
+      userId: ADMIN,
+      exempt: true,
+    });
   });
 
   it('rejects a file over 5 MB with 413 without touching storage', async () => {

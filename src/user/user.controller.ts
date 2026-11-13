@@ -34,7 +34,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
 import { stripCredentials } from '@/shared/utils/strip-credentials';
 import { AccessControlService } from '@/shared/access/access-control.service';
-import { UploadService } from '@/upload/upload.service';
+import { UploadService, uploadOwner } from '@/upload/upload.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -234,7 +234,11 @@ export class UserController {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
-    const uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+    const uploadResult = await this.uploadService.uploadImage(
+      file,
+      'avatars',
+      uploadOwner(req.authUserData),
+    );
     try {
       return stripCredentials(
         await this.userService.createAndAssignAvatar(

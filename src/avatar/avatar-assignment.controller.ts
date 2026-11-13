@@ -22,6 +22,7 @@ import {
   MAX_IMAGE_SIZE,
 } from '@/shared/constants/upload.constants';
 import { AvatarService } from './avatar.service';
+import { uploadOwner } from '@/upload/upload.service';
 import {
   AssignAvatarDto,
   AssignAvatarToUserDto,
@@ -381,6 +382,7 @@ export class AvatarAssignmentController {
     const user = await this.avatarService.uploadAndAssignUserAvatar(
       userId,
       file,
+      uploadOwner(req.authUserData),
     );
     return new SuccessResponse(200, user, 'User avatar uploaded successfully');
   }
@@ -487,7 +489,11 @@ export class AvatarAssignmentController {
     @Req() req: AuthenticatedRequest,
   ) {
     await this.accessControl.assertKidAccess(req.authUserData, kidId);
-    const kid = await this.avatarService.uploadAndAssignKidAvatar(kidId, file);
+    const kid = await this.avatarService.uploadAndAssignKidAvatar(
+      kidId,
+      file,
+      uploadOwner(req.authUserData),
+    );
     return new SuccessResponse(
       200,
       { kid },

@@ -5,7 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { UploadService } from '../upload/upload.service';
+import { UploadService, UploadOwner } from '../upload/upload.service';
 import { CreateAvatarDto, UpdateAvatarDto } from './dto/avatar.dto';
 import { IAvatarRepository, AVATAR_REPOSITORY } from './repositories';
 
@@ -34,10 +34,15 @@ export class AvatarService {
     entityType: 'user' | 'kid',
     file: Express.Multer.File,
     entityName: string, // eslint-disable-line @typescript-eslint/no-unused-vars
+    owner?: UploadOwner,
   ) {
     let uploadResult;
     try {
-      uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+      uploadResult = await this.uploadService.uploadImage(
+        file,
+        'avatars',
+        owner,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to upload ${entityType} avatar to Cloudinary:`,
@@ -288,7 +293,11 @@ export class AvatarService {
     return this.avatarRepository.updateKidAvatar(kidId, avatarId);
   }
 
-  async uploadAndAssignUserAvatar(userId: string, file: Express.Multer.File) {
+  async uploadAndAssignUserAvatar(
+    userId: string,
+    file: Express.Multer.File,
+    owner?: UploadOwner,
+  ) {
     const user = await this.avatarRepository.findUserWithAvatar(userId);
 
     if (!user) {
@@ -304,6 +313,7 @@ export class AvatarService {
       'user',
       file,
       user.name || user.email || 'Unknown User',
+      owner,
     );
 
     return this.withoutCredentials(
@@ -311,7 +321,11 @@ export class AvatarService {
     );
   }
 
-  async uploadAndAssignKidAvatar(kidId: string, file: Express.Multer.File) {
+  async uploadAndAssignKidAvatar(
+    kidId: string,
+    file: Express.Multer.File,
+    owner?: UploadOwner,
+  ) {
     const kid = await this.avatarRepository.findKidWithAvatar(kidId);
 
     if (!kid) {
@@ -327,6 +341,7 @@ export class AvatarService {
       'kid',
       file,
       kid.name || 'Unknown Kid',
+      owner,
     );
 
     return this.avatarRepository.updateKidAvatar(kidId, avatar.id);

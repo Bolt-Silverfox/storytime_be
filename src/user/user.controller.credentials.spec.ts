@@ -105,6 +105,11 @@ describe('UserController responses never carry credential hashes', () => {
       .attach('file', PNG, { filename: 'a.png', contentType: 'image/png' });
     expect(res.status).toBeLessThan(300);
     expect(res.body.id).toBe(ALICE);
+    expect(upload.uploadImage).toHaveBeenCalledWith(
+      expect.anything(),
+      'avatars',
+      { userId: ALICE, exempt: false },
+    );
     expectNoCredentials(res.body);
   });
 

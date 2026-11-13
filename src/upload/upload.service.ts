@@ -2,7 +2,11 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  PayloadTooLargeException,
 } from '@nestjs/common';
+import { JwtPayload } from '@/shared/guards/auth.guard';
+import { PrismaService } from '@/prisma/prisma.service';
+import { MAX_USER_UPLOAD_BYTES } from '@/shared/constants/upload.constants';
 import {
   v2 as cloudinary,
   UploadApiResponse,
@@ -10,10 +14,74 @@ import {
 } from 'cloudinary';
 import toStream from 'buffer-to-stream';
 
+export interface UploadOwner {
+  userId: string;
+  exempt?: boolean;
+}
+
+export const uploadOwner = (auth: JwtPayload): UploadOwner => ({
+  userId: auth.userId,
+  exempt: auth.userRole === 'admin',
+});
+
 @Injectable()
 export class UploadService {
   private readonly logger = new Logger(UploadService.name);
-  async uploadFile(file: Express.Multer.File): Promise<UploadApiResponse> {
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async uploadFile(
+    file: Express.Multer.File,
+    owner?: UploadOwner,
+  ): Promise<UploadApiResponse> {
+    return this.countedUpload(owner, file.size, () => this.putFile(file));
+  }
+
+  async uploadImage(
+    file: Express.Multer.File,
+    folder: string,
+    owner?: UploadOwner,
+  ): Promise<UploadApiResponse> {
+    return this.countedUpload(owner, file.size, () =>
+      this.putImage(file, folder),
+    );
+  }
+
+  private async countedUpload(
+    owner: UploadOwner | undefined,
+    incomingBytes: number,
+    upload: () => Promise<UploadApiResponse>,
+  ): Promise<UploadApiResponse> {
+    if (!owner || owner.exempt) return upload();
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user_upload:${owner.userId}`}))`;
+        const { _sum } = await tx.userUpload.aggregate({
+          where: { userId: owner.userId },
+          _sum: { bytes: true },
+        });
+        if ((_sum.bytes ?? 0) + incomingBytes > MAX_USER_UPLOAD_BYTES) {
+          throw new PayloadTooLargeException(
+            'Upload storage limit reached. Delete some uploads and try again.',
+          );
+        }
+        const result = await upload();
+        await tx.userUpload.upsert({
+          where: { publicId: result.public_id },
+          create: {
+            userId: owner.userId,
+            publicId: result.public_id,
+            bytes: result.bytes,
+          },
+          update: { userId: owner.userId, bytes: result.bytes },
+        });
+        return result;
+      },
+      { timeout: 60_000, maxWait: 10_000 },
+    );
+  }
+
+  private putFile(file: Express.Multer.File): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
@@ -43,7 +111,7 @@ export class UploadService {
     });
   }
 
-  async uploadImage(
+  private putImage(
     file: Express.Multer.File,
     folder: string,
   ): Promise<UploadApiResponse> {
@@ -151,6 +219,7 @@ export class UploadService {
           `Delete failed: ${result.result}`,
         );
       }
+      await this.prisma.userUpload.deleteMany({ where: { publicId } });
     } catch (error) {
       this.logger.error('Cloudinary delete error:', error);
       if (error instanceof InternalServerErrorException) {

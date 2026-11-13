@@ -1,14 +1,18 @@
 import {
   Controller,
   Post,
+  Req,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { UploadService } from './upload.service';
+import { UploadService, uploadOwner } from './upload.service';
 import { ApiBody, ApiConsumes } from '@nestjs/swagger';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
 
 @Controller('upload')
 @UseGuards(AuthSessionGuard)
@@ -31,8 +35,14 @@ export class UploadController {
   @UseInterceptors(
     FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
   )
-  async upload(@UploadedFile() file: Express.Multer.File) {
-    const result = await this.uploadService.uploadFile(file);
+  async upload(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const result = await this.uploadService.uploadFile(
+      file,
+      uploadOwner(req.authUserData),
+    );
     return {
       url: result.secure_url,
       publicId: result.public_id,

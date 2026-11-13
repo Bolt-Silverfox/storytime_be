@@ -3,6 +3,7 @@ import request from 'supertest';
 import { AvatarAssignmentController } from './avatar-assignment.controller';
 import { AvatarService } from './avatar.service';
 import {
+  ADMIN,
   ALICE,
   ALICE_KID,
   BOB,
@@ -107,6 +108,7 @@ describe('AvatarAssignmentController authorization', () => {
     expect(avatars.uploadAndAssignUserAvatar).toHaveBeenLastCalledWith(
       ALICE,
       expect.anything(),
+      { userId: ALICE, exempt: false },
     );
     await http()
       .post('/avatars/upload/user')
@@ -116,6 +118,7 @@ describe('AvatarAssignmentController authorization', () => {
     expect(avatars.uploadAndAssignUserAvatar).toHaveBeenLastCalledWith(
       ALICE,
       expect.anything(),
+      { userId: ALICE, exempt: false },
     );
   });
 
@@ -150,6 +153,7 @@ describe('AvatarAssignmentController authorization', () => {
     expect(avatars.uploadAndAssignKidAvatar).toHaveBeenLastCalledWith(
       ALICE_KID,
       expect.objectContaining({ mimetype: 'image/png' }),
+      { userId: ALICE, exempt: false },
     );
     await http()
       .post('/avatars/upload/kid')
@@ -160,6 +164,7 @@ describe('AvatarAssignmentController authorization', () => {
     expect(avatars.uploadAndAssignKidAvatar).toHaveBeenLastCalledWith(
       BOB_KID,
       expect.anything(),
+      { userId: ADMIN, exempt: true },
     );
   });
 });
