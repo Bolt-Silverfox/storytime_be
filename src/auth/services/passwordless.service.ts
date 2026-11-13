@@ -29,7 +29,7 @@ import { PasswordlessGuestMergeService } from './passwordless-guest-merge.servic
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
-import { ipBlock } from './ip-block';
+import { canonicalIp, ipBlock } from './ip-block';
 import {
   findOrCreateParentByVerifiedEmail,
   VerifiedEmailResult,
@@ -228,6 +228,7 @@ export class PasswordlessService {
     }
 
     await this.releaseFailedAttempt(emailHash);
+    await this.assertCreationBudgetLeft(emailNormalized, ip);
     const consumedEmail = await this.challenges.consumeById(
       challengeId,
       new Date(),
@@ -356,21 +357,68 @@ export class PasswordlessService {
     );
   }
 
+  private creationBudgets(ip: string | undefined) {
+    const L = PASSWORDLESS_LIMITS;
+    return [
+      {
+        key: `pwl:create:ip:${this.hmac(canonicalIp(ip))}`,
+        ...L.createPerIpHour,
+      },
+      {
+        key: `pwl:create:net:${this.hmac(ipBlock(ip))}`,
+        ...L.createPerNetworkHour,
+      },
+    ];
+  }
+
+  private tooManyAccounts(): HttpException {
+    return new HttpException(
+      'Too many requests. Please try again later.',
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
   private async spendCreationBudget(ip: string | undefined): Promise<void> {
-    const budget = PASSWORDLESS_LIMITS.createPerIpHour;
-    let count: number;
+    let spent: boolean;
     try {
-      count = await this.throttle.hit(
-        `pwl:create:ip:${this.hmac(ip ?? 'unknown')}`,
-        budget.windowMs,
+      const counts = await Promise.all(
+        this.creationBudgets(ip).map((b) =>
+          this.throttle.hit(b.key, b.windowMs).then((n) => n > b.max),
+        ),
       );
+      spent = counts.some(Boolean);
     } catch {
       this.logger.error('Passwordless throttle store unavailable');
-      throw this.invalid();
+      throw new ServiceUnavailableException(
+        'Service temporarily unavailable. Please try again.',
+      );
     }
-    if (count > budget.max) {
+    if (spent) {
       this.logger.warn('Passwordless account creation budget spent');
-      throw this.invalid();
+      throw this.tooManyAccounts();
+    }
+  }
+
+  private async assertCreationBudgetLeft(
+    email: string,
+    ip: string | undefined,
+  ): Promise<void> {
+    const existing = await this.authRepository
+      .findUserByEmailInsensitive(email)
+      .catch(() => true);
+    if (existing) return;
+    try {
+      for (const b of this.creationBudgets(ip)) {
+        if ((await this.throttle.peek(b.key)) >= b.max) {
+          throw this.tooManyAccounts();
+        }
+      }
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      this.logger.error('Passwordless throttle store unavailable');
+      throw new ServiceUnavailableException(
+        'Service temporarily unavailable. Please try again.',
+      );
     }
   }
 

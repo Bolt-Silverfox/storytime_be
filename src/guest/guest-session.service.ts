@@ -730,6 +730,16 @@ export class GuestSessionService implements OnModuleInit {
   // ==================== Authenticated-user DB access ====================
   // Thin repository passthroughs so controllers never touch Prisma directly.
 
+  async createUserStoryProgressIfAbsent(
+    userId: string,
+    storyId: string,
+  ): Promise<void> {
+    return this.guestRepository.createUserStoryProgressIfAbsent(
+      userId,
+      storyId,
+    );
+  }
+
   /**
    * Upsert an authenticated user's reading progress for a story.
    */

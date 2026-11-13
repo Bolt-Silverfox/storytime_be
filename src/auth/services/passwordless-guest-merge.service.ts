@@ -53,11 +53,9 @@ export class PasswordlessGuestMergeService {
         ? await this.guestSessions.getStoryDetailsByIds(storyIds)
         : [];
     for (const story of existing) {
-      await this.guestSessions.upsertUserStoryProgress(
+      await this.guestSessions.createUserStoryProgressIfAbsent(
         userId,
         story.id,
-        0,
-        false,
       );
     }
     await this.guestSessions.deleteGuestSession(sid);

@@ -18,6 +18,7 @@ import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 import { PrismaDeviceTokenRepository } from '@/notification/repositories/prisma-device-token.repository';
+import { PrismaGuestRepository } from '@/guest/repositories/prisma-guest.repository';
 import { AccountLinkingService } from './account-linking.service';
 import { PrismaAdminUserRepository } from '@/admin/repositories/prisma-admin-user.repository';
 import { DeviceTokenService } from '@/notification/services/device-token.service';
@@ -1870,6 +1871,57 @@ maybe('PasswordlessService against Postgres', () => {
         (await prisma.session.findUniqueOrThrow({ where: { id: session.id } }))
           .isDeleted,
       ).toBe(true);
+    });
+  });
+
+  describe('guest carry-over resume', () => {
+    it('keeps newer progress and a deletion when the carry-over is resumed', async () => {
+      const guests = new PrismaGuestRepository(prisma as never);
+      const stamp = `${process.pid}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-gm-${stamp}@example.com`,
+          passwordHash: 'h',
+          isEmailVerified: true,
+        },
+      });
+      const story = (suffix: string) =>
+        prisma.story.create({
+          data: {
+            title: `pwl-it-${stamp}-${suffix}`,
+            description: 'd',
+            language: 'en',
+            coverImageUrl: 'c',
+            audioUrl: 'a',
+            isInteractive: false,
+            ageMin: 1,
+            ageMax: 9,
+          },
+        });
+      const read = await story('read');
+      const removed = await story('removed');
+      await guests.createUserStoryProgressIfAbsent(user.id, read.id);
+      await guests.createUserStoryProgressIfAbsent(user.id, removed.id);
+      await prisma.userStoryProgress.update({
+        where: { userId_storyId: { userId: user.id, storyId: read.id } },
+        data: { progress: 70 },
+      });
+      await prisma.userStoryProgress.update({
+        where: { userId_storyId: { userId: user.id, storyId: removed.id } },
+        data: { isDeleted: true, deletedAt: new Date() },
+      });
+
+      await guests.createUserStoryProgressIfAbsent(user.id, read.id);
+      await guests.createUserStoryProgressIfAbsent(user.id, removed.id);
+
+      const rows = await prisma.userStoryProgress.findMany({
+        where: { userId: user.id },
+      });
+      expect(rows.find((r) => r.storyId === read.id)?.progress).toBe(70);
+      expect(rows.find((r) => r.storyId === removed.id)?.isDeleted).toBe(true);
+      await prisma.story.deleteMany({
+        where: { id: { in: [read.id, removed.id] } },
+      });
     });
   });
 });

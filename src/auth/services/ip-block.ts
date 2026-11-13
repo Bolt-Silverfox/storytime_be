@@ -46,3 +46,22 @@ export function ipBlock(ip: string | undefined): string {
     .map((g) => g.toString(16))
     .join(':');
 }
+
+export function canonicalIp(ip: string | undefined): string {
+  if (!ip) return UNKNOWN;
+  const address = ip.split('%')[0];
+  if (isIPv4(address)) return address;
+  if (!isIPv6(address)) return UNKNOWN;
+  const groups = expandIPv6(address);
+  if (!groups) return UNKNOWN;
+  const leadingZeros = groups.slice(0, 5).every((g) => g === 0);
+  if (leadingZeros && groups[5] === 0xffff) {
+    return [
+      groups[6] >> 8,
+      groups[6] & 0xff,
+      groups[7] >> 8,
+      groups[7] & 0xff,
+    ].join('.');
+  }
+  return groups.map((g) => g.toString(16)).join(':');
+}

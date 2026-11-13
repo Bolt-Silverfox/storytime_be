@@ -1,5 +1,10 @@
 import * as nodeCrypto from 'crypto';
-import { BadRequestException, HttpException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpException,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import { PasswordlessService } from './passwordless.service';
@@ -162,7 +167,9 @@ describe('PasswordlessService', () => {
     });
   });
 
-  describe('account creation budget per address', () => {
+  describe('account creation budget', () => {
+    const ipKey = (ip: string) =>
+      `pwl:create:ip:${nodeCrypto.createHmac('sha256', PEPPER).update(ip).digest('hex')}`;
     const signIn = async (
       ctx: ReturnType<typeof build>,
       email: string,
@@ -172,15 +179,26 @@ describe('PasswordlessService', () => {
       const { code } = ctx.captured[ctx.captured.length - 1];
       return ctx.service.verify(email, code, ip);
     };
-
-    it('refuses further sign-ups from one address after the budget, with the generic error and no account', async () => {
-      const ctx = build();
+    const expectTooMany = async (p: Promise<unknown>) => {
+      const err = await p.then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(429);
+    };
+    const spend = async (ctx: ReturnType<typeof build>, ip: string) => {
       for (const n of [1, 2, 3]) {
-        await signIn(ctx, `new${n}@example.com`, '203.0.113.9');
+        await signIn(ctx, `fill${n}-${ip}@example.com`, ip);
       }
+    };
+
+    it('answers 429 and leaves the code unconsumed when the address spent its budget', async () => {
+      const ctx = build();
+      await spend(ctx, '203.0.113.9');
       await ctx.service.request('new4@example.com', '203.0.113.9');
 
-      await expectGeneric(
+      await expectTooMany(
         ctx.service.verify(
           'new4@example.com',
           ctx.captured[ctx.captured.length - 1].code,
@@ -188,6 +206,26 @@ describe('PasswordlessService', () => {
         ),
       );
 
+      expect(
+        ctx.authRepo.users.find((u) => u.email === 'new4@example.com'),
+      ).toBeUndefined();
+      expect(
+        ctx.repo.rows.find((r) => r.emailNormalized === 'new4@example.com')
+          ?.consumedAt,
+      ).toBeNull();
+    });
+
+    it('answers 429 for the emailed link too when the budget is spent', async () => {
+      const ctx = build();
+      await spend(ctx, '203.0.113.9');
+      await ctx.service.request('new4@example.com', '203.0.113.9');
+
+      await expectTooMany(
+        ctx.service.consume(
+          ctx.captured[ctx.captured.length - 1].linkToken,
+          '203.0.113.9',
+        ),
+      );
       expect(
         ctx.authRepo.users.find((u) => u.email === 'new4@example.com'),
       ).toBeUndefined();
@@ -201,9 +239,7 @@ describe('PasswordlessService', () => {
         isEmailVerified: true,
         role: 'parent',
       });
-      for (const n of [1, 2, 3]) {
-        await signIn(ctx, `new${n}@example.com`, '203.0.113.9');
-      }
+      await spend(ctx, '203.0.113.9');
 
       const result = await signIn(ctx, 'owner@example.com', '203.0.113.9');
 
@@ -212,16 +248,94 @@ describe('PasswordlessService', () => {
 
     it('does not spend the budget of other addresses', async () => {
       const ctx = build();
-      for (const n of [1, 2, 3]) {
-        await signIn(ctx, `new${n}@example.com`, '203.0.113.9');
-      }
+      await spend(ctx, '203.0.113.9');
 
       const result = await signIn(ctx, 'other@example.com', '198.51.100.7');
 
       expect(result.isNewUser).toBe(true);
     });
 
-    it('refuses to create an account when the throttle store is down', async () => {
+    it('counts a mapped IPv6 address and the plain IPv4 address as one', async () => {
+      const ctx = build();
+      await spend(ctx, '203.0.113.9');
+      await ctx.service.request('new4@example.com', '::ffff:203.0.113.9');
+
+      await expectTooMany(
+        ctx.service.verify(
+          'new4@example.com',
+          ctx.captured[ctx.captured.length - 1].code,
+          '::ffff:203.0.113.9',
+        ),
+      );
+    });
+
+    it('caps creations per network across different addresses', async () => {
+      const ctx = build();
+      for (let host = 1; host <= 10; host++) {
+        await signIn(ctx, `net${host}@example.com`, `198.51.100.${host}`);
+      }
+      await ctx.service.request('net11@example.com', '198.51.100.11');
+
+      await expectTooMany(
+        ctx.service.verify(
+          'net11@example.com',
+          ctx.captured[ctx.captured.length - 1].code,
+          '198.51.100.11',
+        ),
+      );
+    });
+
+    it('does not spend the budget when an unverified account is taken over', async () => {
+      const ctx = build();
+      await ctx.authRepo.createUser({
+        email: 'squat@example.com',
+        passwordHash: 'attacker',
+        isEmailVerified: false,
+        role: 'parent',
+      });
+
+      const result = await signIn(ctx, 'squat@example.com', '203.0.113.9');
+
+      expect(result.isNewUser).toBe(false);
+      expect(await ctx.redis.client.get(ipKey('203.0.113.9'))).toBeNull();
+    });
+
+    it('does not spend the budget when the account is suspended', async () => {
+      const ctx = build();
+      const user = await ctx.authRepo.createUser({
+        email: 'gone@example.com',
+        passwordHash: 'h',
+        isEmailVerified: true,
+        role: 'parent',
+      });
+      user.isSuspended = true;
+
+      await expectGeneric(signIn(ctx, 'gone@example.com', '203.0.113.9'));
+
+      expect(await ctx.redis.client.get(ipKey('203.0.113.9'))).toBeNull();
+    });
+
+    it('spends the budget once when the sign-in loses a create race to the same email', async () => {
+      const ctx = build();
+      const create = ctx.authRepo.createUser;
+      let raced = false;
+      ctx.authRepo.createUser = async (data: Record<string, unknown>) => {
+        if (raced) return create(data);
+        raced = true;
+        await create(data);
+        throw Object.assign(new Error('Unique constraint failed'), {
+          code: 'P2002',
+          meta: { target: ['email'] },
+        });
+      };
+
+      const result = await signIn(ctx, 'race@example.com', '203.0.113.9');
+
+      expect(result.isNewUser).toBe(false);
+      expect(await ctx.redis.client.get(ipKey('203.0.113.9'))).toBe('1');
+    });
+
+    it('refuses with a 503 and creates nothing when the throttle store is down', async () => {
       const ctx = build();
       await ctx.service.request('new@example.com', '203.0.113.9');
       const { code } = ctx.captured[0];
@@ -229,7 +343,7 @@ describe('PasswordlessService', () => {
 
       await expect(
         ctx.service.verify('new@example.com', code, '203.0.113.9'),
-      ).rejects.toBeDefined();
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
       expect(ctx.authRepo.users).toHaveLength(0);
     });

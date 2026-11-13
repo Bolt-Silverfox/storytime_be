@@ -12,7 +12,7 @@ function build(history: Record<string, unknown> | null) {
       .mockImplementation((ids: string[]) =>
         Promise.resolve(ids.filter((i) => i !== 'gone').map((id) => ({ id }))),
       ),
-    upsertUserStoryProgress: jest.fn().mockResolvedValue(undefined),
+    createUserStoryProgressIfAbsent: jest.fn().mockResolvedValue(undefined),
     deleteGuestSession: jest.fn().mockResolvedValue(undefined),
   };
   const service = new PasswordlessGuestMergeService(
@@ -29,18 +29,16 @@ describe('PasswordlessGuestMergeService', () => {
       s2: { progress: 0 },
     });
     await service.carryOver('u1', GUEST, true);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(2);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledWith(
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledTimes(
+      2,
+    );
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledWith(
       'u1',
       's1',
-      0,
-      false,
     );
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledWith(
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledWith(
       'u1',
       's2',
-      0,
-      false,
     );
   });
 
@@ -49,19 +47,23 @@ describe('PasswordlessGuestMergeService', () => {
     await service.carryOver('u1', GUEST.toUpperCase(), true);
     expect(guestSessions.getGuestReadingHistory).toHaveBeenCalledWith(GUEST);
     expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it('claims a guest session only once', async () => {
     const { service, guestSessions } = build({ s1: {} });
     await service.carryOver('u1', GUEST, true);
     await service.carryOver('u2', GUEST, true);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it('lets the same user resume on a later login after a progress write failed, and still refuses other users', async () => {
     const { service, guestSessions } = build({ s1: {}, s2: {} });
-    guestSessions.upsertUserStoryProgress.mockRejectedValueOnce(
+    guestSessions.createUserStoryProgressIfAbsent.mockRejectedValueOnce(
       new Error('db down'),
     );
 
@@ -75,14 +77,12 @@ describe('PasswordlessGuestMergeService', () => {
     await service.carryOver('u1', GUEST, false);
 
     expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledWith(
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledWith(
       'u1',
       's2',
-      0,
-      false,
     );
     expect(
-      guestSessions.upsertUserStoryProgress.mock.calls.every(
+      guestSessions.createUserStoryProgressIfAbsent.mock.calls.every(
         ([userId]) => userId === 'u1',
       ),
     ).toBe(true);
@@ -92,7 +92,9 @@ describe('PasswordlessGuestMergeService', () => {
     const { service, guestSessions } = build({ s1: {} });
     await service.carryOver('u1', GUEST, true);
     await service.carryOver('u1', GUEST, false);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledTimes(
+      1,
+    );
   });
 
   it('does not claim a guest session on an existing account login with no pending claim', async () => {
@@ -117,7 +119,9 @@ describe('PasswordlessGuestMergeService', () => {
   it('does nothing when the guest session is unknown', async () => {
     const { service, guestSessions } = build(null);
     await service.carryOver('u1', GUEST, true);
-    expect(guestSessions.upsertUserStoryProgress).not.toHaveBeenCalled();
+    expect(
+      guestSessions.createUserStoryProgressIfAbsent,
+    ).not.toHaveBeenCalled();
   });
 
   it('never carries more than the guest story limit even if the session lists more', async () => {
@@ -129,18 +133,20 @@ describe('PasswordlessGuestMergeService', () => {
       e: {},
     });
     await service.carryOver('u1', GUEST, true);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(3);
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledTimes(
+      3,
+    );
   });
 
   it('skips stories that no longer exist', async () => {
     const { service, guestSessions } = build({ gone: {}, s1: {} });
     await service.carryOver('u1', GUEST, true);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledTimes(1);
-    expect(guestSessions.upsertUserStoryProgress).toHaveBeenCalledWith(
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledWith(
       'u1',
       's1',
-      0,
-      false,
     );
   });
 

@@ -38,6 +38,23 @@ export class PrismaGuestRepository implements IGuestRepository {
     });
   }
 
+  async createUserStoryProgressIfAbsent(
+    userId: string,
+    storyId: string,
+  ): Promise<void> {
+    await this.prisma.userStoryProgress.upsert({
+      where: { userId_storyId: { userId, storyId } },
+      update: {},
+      create: {
+        userId,
+        storyId,
+        progress: 0,
+        completed: false,
+        lastAccessed: new Date(),
+      },
+    });
+  }
+
   async findUserStoryProgress(
     userId: string,
     storyId: string,
