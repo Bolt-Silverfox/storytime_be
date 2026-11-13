@@ -239,30 +239,21 @@ export class UserController {
       'avatars',
       uploadOwner(req.authUserData),
     );
+    let previous:
+      | { id: string; publicId: string | null; isSystemAvatar: boolean }
+      | null
+      | undefined;
+    let updated;
     try {
-      const previous = (await this.userService.getUser(req.authUserData.userId))
+      previous = (await this.userService.getUser(req.authUserData.userId))
         ?.avatar;
-      const updated = stripCredentials(
+      updated = stripCredentials(
         await this.userService.createAndAssignAvatar(
           req.authUserData.userId,
           uploadResult.secure_url,
           uploadResult.public_id,
         ),
       );
-      if (
-        previous?.publicId &&
-        !previous.isSystemAvatar &&
-        (await this.userService.countAvatarReferences(previous.id)) === 0
-      ) {
-        await this.uploadService
-          .deleteImage(previous.publicId)
-          .catch((cleanupErr: Error) => {
-            this.logger.warn(
-              `Failed to release replaced avatar "${previous.publicId}": ${cleanupErr.message}`,
-            );
-          });
-      }
-      return updated;
     } catch (err) {
       // Compensating action: clean up the Cloudinary asset if the DB transaction fails
       await this.uploadService
@@ -274,6 +265,18 @@ export class UserController {
         });
       throw err;
     }
+    if (previous?.publicId && !previous.isSystemAvatar) {
+      try {
+        if ((await this.userService.countAvatarReferences(previous.id)) === 0) {
+          await this.uploadService.deleteImage(previous.publicId);
+        }
+      } catch (cleanupErr) {
+        this.logger.warn(
+          `Failed to release replaced avatar "${previous.publicId}": ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`,
+        );
+      }
+    }
+    return updated;
   }
 
   @Post('me/pin')

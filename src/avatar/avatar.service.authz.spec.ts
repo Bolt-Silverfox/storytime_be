@@ -81,6 +81,21 @@ describe('AvatarService user responses', () => {
     });
   });
 
+  describe('custom avatar assignment when saving the avatar row fails', () => {
+    it('deletes the uploaded asset and rethrows the original error', async () => {
+      const failure = new Error('db down');
+      upload.deleteImage.mockClear();
+      repo.upsertByName.mockRejectedValueOnce(failure);
+      await expect(
+        service.uploadAndAssignUserAvatar('u1', {} as never, {
+          userId: 'u1',
+          exempt: false,
+        }),
+      ).rejects.toBe(failure);
+      expect(upload.deleteImage).toHaveBeenCalledWith('p');
+    });
+  });
+
   describe('createAvatar when saving the avatar row fails', () => {
     const file = { size: 1 } as never;
 

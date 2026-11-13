@@ -55,11 +55,22 @@ export class AvatarService {
 
     const avatarName = `${entityType}-avatar-${entityId}`;
 
-    return this.avatarRepository.upsertByName(avatarName, {
-      url: uploadResult.secure_url,
-      publicId: uploadResult.public_id,
-      isSystemAvatar: false,
-    });
+    try {
+      return await this.avatarRepository.upsertByName(avatarName, {
+        url: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+        isSystemAvatar: false,
+      });
+    } catch (error) {
+      await this.uploadService
+        .deleteImage(uploadResult.public_id)
+        .catch((cleanupError: Error) =>
+          this.logger.warn(
+            `Failed to release avatar upload "${uploadResult.public_id}": ${cleanupError.message}`,
+          ),
+        );
+      throw error;
+    }
   }
 
   private async cleanupOldCustomAvatar(avatarId: string) {

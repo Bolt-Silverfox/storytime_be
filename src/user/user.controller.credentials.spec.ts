@@ -167,6 +167,18 @@ describe('UserController responses never carry credential hashes', () => {
       expect(upload.deleteImage).not.toHaveBeenCalled();
     });
 
+    it('keeps the new asset and succeeds when the reference lookup for the old avatar fails', async () => {
+      userService.getUser.mockResolvedValueOnce({
+        id: ALICE,
+        avatar: { id: 'old-id', publicId: 'old-asset', isSystemAvatar: false },
+      });
+      userService.countAvatarReferences.mockRejectedValueOnce(
+        new Error('db down'),
+      );
+      await upload$().expect(201);
+      expect(upload.deleteImage).not.toHaveBeenCalled();
+    });
+
     it('leaves a system avatar alone', async () => {
       userService.getUser.mockResolvedValueOnce({
         id: ALICE,
