@@ -49,12 +49,15 @@ describe('upload quota response body', () => {
   afterAll(() => app.close());
 
   it('keeps the machine-readable code and the message through the exception filter', async () => {
-    const res = await request(app.getHttpServer())
+    const res = await request(
+      app.getHttpServer() as Parameters<typeof request>[0],
+    )
       .post('/upload')
       .attach('file', Buffer.from('data'), 'a.txt')
       .expect(413);
     expect(res.body).toMatchObject({
       statusCode: 413,
+      error: 'UPLOAD_QUOTA_EXCEEDED',
       code: 'UPLOAD_QUOTA_EXCEEDED',
       message:
         'Upload storage limit reached. Delete some uploads and try again.',

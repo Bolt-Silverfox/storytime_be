@@ -80,16 +80,26 @@ export class UploadService {
       ]);
     } catch (error) {
       await this.releaseReservation(reservationId);
-      await cloudinary.uploader
-        .destroy(result.public_id)
-        .catch((destroyError: unknown) =>
-          this.logger.warn(
-            `Failed to destroy asset "${result.public_id}" after a failed upload record: ${destroyError instanceof Error ? destroyError.message : String(destroyError)}`,
-          ),
-        );
+      await this.destroyAfterFailedRecord(result);
       throw error;
     }
     return result;
+  }
+
+  private async destroyAfterFailedRecord(
+    result: UploadApiResponse,
+  ): Promise<void> {
+    const reason = await cloudinary.uploader
+      .destroy(result.public_id, { resource_type: result.resource_type })
+      .then((r: { result?: string }) =>
+        r.result === 'ok' ? null : `Cloudinary answered "${r.result}"`,
+      )
+      .catch((e: unknown) => (e instanceof Error ? e.message : String(e)));
+    if (reason) {
+      this.logger.warn(
+        `Failed to destroy asset "${result.public_id}" after a failed upload record: ${reason}`,
+      );
+    }
   }
 
   private async reserve(

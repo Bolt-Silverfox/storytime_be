@@ -114,7 +114,11 @@ describe('UploadService per-user upload cap', () => {
       ...r,
     });
 
-  const cloudinaryReplies = (publicId: string, bytes: number) =>
+  const cloudinaryReplies = (
+    publicId: string,
+    bytes: number,
+    resourceType = 'image',
+  ) =>
     uploads.mockImplementationOnce(((
       _opts: unknown,
       cb: (e: unknown, r?: unknown) => void,
@@ -122,7 +126,12 @@ describe('UploadService per-user upload cap', () => {
       openTxDuringUpload.push(prisma.state.openTx);
       const stream = new PassThrough();
       stream.on('finish', () =>
-        cb(undefined, { public_id: publicId, secure_url: 'u', bytes }),
+        cb(undefined, {
+          public_id: publicId,
+          secure_url: 'u',
+          bytes,
+          resource_type: resourceType,
+        }),
       );
       stream.resume();
       return stream;
@@ -263,7 +272,7 @@ describe('UploadService per-user upload cap', () => {
     await expect(
       service.uploadImage(file(MB), 'avatars', { userId: 'u1' }),
     ).rejects.toThrow('db down');
-    expect(destroy).toHaveBeenCalledWith('p7');
+    expect(destroy).toHaveBeenCalledWith('p7', { resource_type: 'image' });
     expect(prisma.rows).toHaveLength(0);
   });
 
@@ -293,6 +302,39 @@ describe('UploadService per-user upload cap', () => {
     await service.deleteImage('voice-1', 'video');
     expect(destroy).toHaveBeenCalledWith('voice-1', { resource_type: 'video' });
     expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('destroys a non-image upload with its resource type when recording fails', async () => {
+    cloudinaryReplies('voice-9', MB, 'video');
+    prisma.userUpload.update.mockRejectedValueOnce(new Error('db down'));
+    const destroy = jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'ok' });
+    await expect(
+      service.uploadFile(file(MB), { userId: 'u1' }),
+    ).rejects.toThrow('db down');
+    expect(destroy).toHaveBeenCalledWith('voice-9', {
+      resource_type: 'video',
+    });
+    expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('logs a warning when the compensating destroy answers not found', async () => {
+    cloudinaryReplies('voice-10', MB, 'video');
+    prisma.userUpload.update.mockRejectedValueOnce(new Error('db down'));
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'not found' });
+    const warn = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    await expect(
+      service.uploadFile(file(MB), { userId: 'u1' }),
+    ).rejects.toThrow('db down');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('voice-10'));
   });
 
   it('frees the space when the image is deleted', async () => {

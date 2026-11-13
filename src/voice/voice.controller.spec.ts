@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, PayloadTooLargeException } from '@nestjs/common';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
 import {
@@ -457,6 +457,18 @@ describe('VoiceController', () => {
       expect(mockUploadService.deleteImage).not.toHaveBeenCalled();
     });
 
+    it('answers 413 at the cap without cloning or recording a voice', async () => {
+      mockUploadService.uploadFile.mockRejectedValue(
+        new PayloadTooLargeException({ error: 'UPLOAD_QUOTA_EXCEEDED' }),
+      );
+      mockVoiceService.uploadVoice.mockClear();
+      await expect(
+        controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest),
+      ).rejects.toBeInstanceOf(PayloadTooLargeException);
+      expect(mockVoiceService.uploadVoice).not.toHaveBeenCalled();
+      expect(mockUploadService.deleteImage).not.toHaveBeenCalled();
+    });
+
     it('exempts an admin from the quota', async () => {
       mockVoiceService.uploadVoice.mockResolvedValue({ id: 'voice-1' });
       const admin = {
@@ -480,9 +492,16 @@ describe('VoiceController', () => {
     it('still reports the clone failure when the cleanup fails too', async () => {
       mockVoiceService.uploadVoice.mockRejectedValue(new Error('clone failed'));
       mockUploadService.deleteImage.mockRejectedValue(new Error('cdn down'));
+      const warn = jest
+        .spyOn(
+          (controller as unknown as { logger: { warn: () => void } }).logger,
+          'warn',
+        )
+        .mockImplementation(() => undefined);
       await expect(
         controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest),
       ).rejects.toThrow('clone failed');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('cdn down'));
     });
   });
 });
