@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -284,6 +285,13 @@ export class UploadService {
     });
     if (!row || (row.userId !== auth.userId && auth.userRole !== 'admin')) {
       throw new NotFoundException('Upload not found');
+    }
+    const [avatars, voices] = await Promise.all([
+      this.prisma.avatar.count({ where: { publicId } }),
+      this.prisma.voice.count({ where: { url: { contains: publicId } } }),
+    ]);
+    if (avatars + voices > 0) {
+      throw new ConflictException('This upload is still in use');
     }
     await this.deleteImage(publicId);
   }

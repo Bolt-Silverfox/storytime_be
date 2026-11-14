@@ -1,4 +1,8 @@
-import { NotFoundException, PayloadTooLargeException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  PayloadTooLargeException,
+} from '@nestjs/common';
 import { PassThrough } from 'stream';
 import { v2 as cloudinary } from 'cloudinary';
 import { UploadService } from './upload.service';
@@ -83,6 +87,8 @@ function fakePrisma() {
   };
   const tx = { $executeRaw: jest.fn().mockResolvedValue(1), userUpload };
   const prisma = {
+    avatar: { count: jest.fn().mockResolvedValue(0) },
+    voice: { count: jest.fn().mockResolvedValue(0) },
     rows,
     state,
     tx,
@@ -452,6 +458,23 @@ describe('UploadService per-user upload cap', () => {
       await service.deleteOwned('theirs', auth('admin-1', 'admin'));
       expect(prisma.rows).toHaveLength(0);
     });
+
+    it.each(['avatar', 'voice'] as const)(
+      'refuses with 409 while a %s row still references the upload',
+      async (table) => {
+        seed({ userId: 'u1', bytes: 5 * MB, publicId: 'used' });
+        prisma[table].count.mockResolvedValue(1);
+        const destroy = destroyOk();
+        await expect(service.deleteOwned('used', auth('u1'))).rejects.toThrow(
+          ConflictException,
+        );
+        await expect(
+          service.deleteOwned('used', auth('admin-1', 'admin')),
+        ).rejects.toThrow(ConflictException);
+        expect(destroy).not.toHaveBeenCalled();
+        expect(prisma.rows).toHaveLength(1);
+      },
+    );
 
     it('answers not found on a second delete', async () => {
       seed({ userId: 'u1', bytes: 5 * MB, publicId: 'once' });
