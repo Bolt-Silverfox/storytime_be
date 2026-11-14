@@ -4,6 +4,10 @@ describe('PrismaAvatarRepository.replaceByName', () => {
   const build = (existing: string | null | undefined) => {
     const calls: string[] = [];
     const tx = {
+      $executeRaw: jest.fn((strings: TemplateStringsArray) => {
+        calls.push(`advisory:${strings.join('?')}`);
+        return Promise.resolve(1);
+      }),
       $queryRaw: jest.fn((strings: TemplateStringsArray) => {
         calls.push(`lock:${strings.join('?')}`);
         return Promise.resolve(
@@ -27,8 +31,9 @@ describe('PrismaAvatarRepository.replaceByName', () => {
   it('locks the named row before upserting and reports what it displaced', async () => {
     const { repo, calls } = build('old');
     const r = await repo.replaceByName('n', data);
-    expect(calls[0]).toMatch(/FOR UPDATE/);
-    expect(calls[1]).toBe('upsert');
+    expect(calls[0]).toMatch(/pg_advisory_xact_lock/);
+    expect(calls[1]).toMatch(/FOR UPDATE/);
+    expect(calls[2]).toBe('upsert');
     expect(r.displacedPublicId).toBe('old');
   });
 

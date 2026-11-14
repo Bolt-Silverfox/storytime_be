@@ -100,6 +100,20 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
       expect((await replace(name, 'p2')).displacedPublicId).toBeNull();
     });
 
+    it('serialises two first-ever uploads on an absent name', async () => {
+      const name = `${tag}_first_${n++}`;
+      const results = await Promise.all([
+        replace(name, 'f1'),
+        replace(name, 'f2'),
+      ]);
+      const displaced = results.map((r) => r.displacedPublicId);
+      const finalRow = await prisma.avatar.findUnique({ where: { name } });
+      expect([...displaced, finalRow?.publicId].filter(Boolean).sort()).toEqual(
+        ['f1', 'f2'],
+      );
+      expect(displaced.filter((d) => d === null)).toHaveLength(1);
+    });
+
     it('serialises concurrent replacements so every asset is reported exactly once', async () => {
       const name = `${tag}_conc_${n++}`;
       await replace(name, 'p0');

@@ -2,6 +2,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
   PayloadTooLargeException,
 } from '@nestjs/common';
 import { JwtPayload } from '@/shared/guards/auth.guard';
@@ -274,6 +275,17 @@ export class UploadService {
         `Image URL upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
+  }
+
+  async deleteOwned(publicId: string, auth: JwtPayload): Promise<void> {
+    const row = await this.prisma.userUpload.findFirst({
+      where: { publicId },
+      select: { userId: true },
+    });
+    if (!row || (row.userId !== auth.userId && auth.userRole !== 'admin')) {
+      throw new NotFoundException('Upload not found');
+    }
+    await this.deleteImage(publicId);
   }
 
   async deleteImage(publicId: string, resourceType?: string): Promise<void> {

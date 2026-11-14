@@ -1,5 +1,7 @@
 import {
   Controller,
+  Delete,
+  Param,
   Post,
   Req,
   UploadedFile,
@@ -47,5 +49,14 @@ export class UploadController {
       url: result.secure_url,
       publicId: result.public_id,
     };
+  }
+
+  @Delete(':publicId')
+  async remove(
+    @Param('publicId') publicId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.uploadService.deleteOwned(publicId, req.authUserData);
+    return { success: true };
   }
 }

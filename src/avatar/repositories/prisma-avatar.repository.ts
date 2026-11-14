@@ -81,6 +81,7 @@ export class PrismaAvatarRepository implements IAvatarRepository {
     },
   ): Promise<{ avatar: Avatar; displacedPublicId: string | null }> {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${name}, 0))`;
       const rows = await tx.$queryRaw<
         { publicId: string | null }[]
       >`SELECT "publicId" FROM avatars WHERE name = ${name} FOR UPDATE`;

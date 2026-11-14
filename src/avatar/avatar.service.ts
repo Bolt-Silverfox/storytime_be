@@ -73,6 +73,23 @@ export class AvatarService {
     }
   }
 
+  private async releaseAfterFailedAssignment(replaced: {
+    avatar: { id: string };
+    displacedPublicId: string | null;
+  }) {
+    try {
+      if (replaced.displacedPublicId) {
+        await this.uploadService.deleteImage(replaced.displacedPublicId);
+      }
+      const orphan = await this.avatarRepository.retireAvatarIfUnreferenced(
+        replaced.avatar.id,
+      );
+      if (orphan) await this.uploadService.deleteImage(orphan);
+    } catch (error) {
+      this.logger.warn('Failed to release unattached avatar upload:', error);
+    }
+  }
+
   private async releaseReplacedAvatar(
     previous: {
       id: string;
@@ -355,10 +372,16 @@ export class AvatarService {
       owner,
     );
 
-    const updated = await this.avatarRepository.updateUserAvatar(
-      userId,
-      replaced.avatar.id,
-    );
+    let updated;
+    try {
+      updated = await this.avatarRepository.updateUserAvatar(
+        userId,
+        replaced.avatar.id,
+      );
+    } catch (error) {
+      await this.releaseAfterFailedAssignment(replaced);
+      throw error;
+    }
     await this.releaseReplacedAvatar(previous, replaced);
     return this.withoutCredentials(updated);
   }
@@ -386,10 +409,16 @@ export class AvatarService {
       owner,
     );
 
-    const updated = await this.avatarRepository.updateKidAvatar(
-      kidId,
-      replaced.avatar.id,
-    );
+    let updated;
+    try {
+      updated = await this.avatarRepository.updateKidAvatar(
+        kidId,
+        replaced.avatar.id,
+      );
+    } catch (error) {
+      await this.releaseAfterFailedAssignment(replaced);
+      throw error;
+    }
     await this.releaseReplacedAvatar(previous, replaced);
     return updated;
   }

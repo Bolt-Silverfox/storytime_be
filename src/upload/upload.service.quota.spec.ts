@@ -1,4 +1,4 @@
-import { PayloadTooLargeException } from '@nestjs/common';
+import { NotFoundException, PayloadTooLargeException } from '@nestjs/common';
 import { PassThrough } from 'stream';
 import { v2 as cloudinary } from 'cloudinary';
 import { UploadService } from './upload.service';
@@ -410,6 +410,56 @@ describe('UploadService per-user upload cap', () => {
     expect(prisma.rows[0]).toMatchObject({
       publicId: 'p-type',
       resourceType: 'video',
+    });
+  });
+
+  describe('deleteOwned', () => {
+    const destroyOk = () =>
+      jest
+        .spyOn(cloudinary.uploader, 'destroy')
+        .mockResolvedValue({ result: 'ok' });
+    const auth = (userId: string, role = 'parent') =>
+      ({ userId, userRole: role }) as never;
+
+    it('deletes an upload the caller owns and frees its row', async () => {
+      seed({ userId: 'u1', bytes: 5 * MB, publicId: 'mine' });
+      destroyOk();
+      await service.deleteOwned('mine', auth('u1'));
+      expect(prisma.rows).toHaveLength(0);
+    });
+
+    it("answers not found for another user's upload without touching storage", async () => {
+      seed({ userId: 'u2', bytes: 5 * MB, publicId: 'theirs' });
+      const destroy = destroyOk();
+      await expect(service.deleteOwned('theirs', auth('u1'))).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(destroy).not.toHaveBeenCalled();
+      expect(prisma.rows).toHaveLength(1);
+    });
+
+    it('answers not found for an unknown public id', async () => {
+      const destroy = destroyOk();
+      await expect(service.deleteOwned('nope', auth('u1'))).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(destroy).not.toHaveBeenCalled();
+    });
+
+    it('lets an admin delete any recorded upload', async () => {
+      seed({ userId: 'u2', bytes: 5 * MB, publicId: 'theirs' });
+      destroyOk();
+      await service.deleteOwned('theirs', auth('admin-1', 'admin'));
+      expect(prisma.rows).toHaveLength(0);
+    });
+
+    it('answers not found on a second delete', async () => {
+      seed({ userId: 'u1', bytes: 5 * MB, publicId: 'once' });
+      destroyOk();
+      await service.deleteOwned('once', auth('u1'));
+      await expect(service.deleteOwned('once', auth('u1'))).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
