@@ -34,6 +34,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { stripCredentials } from '@/shared/utils/strip-credentials';
 
 @ApiBearerAuth()
 @Controller('admin')
@@ -310,7 +311,7 @@ export class AdminUserModerationController {
     @Req() req: AuthenticatedRequest,
     @Param('userId') userId: string,
   ) {
-    const data = await this.adminService.restoreUser(userId);
+    const data = stripCredentials(await this.adminService.restoreUser(userId));
     await this.auditLog.record({
       adminId: req.authUserData.userId,
       adminEmail: req.authUserData.email,

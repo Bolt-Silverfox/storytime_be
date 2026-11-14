@@ -66,30 +66,40 @@ export class NotificationSettingsService {
   async create(
     dto: CreateNotificationPreferenceDto,
   ): Promise<NotificationPreferenceDto> {
-    // Verify user or kid exists and is not soft deleted
-    if (dto.userId) {
-      const user = await this.notificationPreferenceRepository.findUser(
-        dto.userId,
-      );
-      if (!user) throw new NotFoundException('User not found');
+    const [pref] = await this.createMany([dto]);
+    return pref;
+  }
+
+  async createMany(
+    dtos: CreateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    for (const dto of dtos) {
+      if (dto.userId) {
+        const user = await this.notificationPreferenceRepository.findUser(
+          dto.userId,
+        );
+        if (!user) throw new NotFoundException('User not found');
+      }
+
+      if (dto.kidId) {
+        const kid = await this.notificationPreferenceRepository.findKid(
+          dto.kidId,
+        );
+        if (!kid) throw new NotFoundException('Kid not found');
+      }
     }
 
-    if (dto.kidId) {
-      const kid = await this.notificationPreferenceRepository.findKid(
-        dto.kidId,
+    const prefs =
+      await this.notificationPreferenceRepository.createNotificationPreferencesAtomic(
+        dtos.map((dto) => ({
+          type: dto.type,
+          category: dto.category,
+          enabled: dto.enabled,
+          userId: dto.userId,
+          kidId: dto.kidId,
+        })),
       );
-      if (!kid) throw new NotFoundException('Kid not found');
-    }
-
-    const pref =
-      await this.notificationPreferenceRepository.createNotificationPreference({
-        type: dto.type,
-        category: dto.category,
-        enabled: dto.enabled,
-        userId: dto.userId,
-        kidId: dto.kidId,
-      });
-    return this.toNotificationPreferenceDto(pref);
+    return prefs.map((pref) => this.toNotificationPreferenceDto(pref));
   }
 
   async update(
@@ -105,16 +115,13 @@ export class NotificationSettingsService {
   }
 
   async bulkUpdate(
-    userId: string,
     dtos: BulkUpdateNotificationPreferenceDto[],
   ): Promise<NotificationPreferenceDto[]> {
     const ids = dtos.map((dto) => dto.id);
 
-    // Verify all preferences belong to the requesting user
     const owned =
-      await this.notificationPreferenceRepository.findManyNotificationPreferencesByIds(
+      await this.notificationPreferenceRepository.findActiveNotificationPreferencesByIds(
         ids,
-        userId,
       );
 
     const ownedIds = new Set(owned.map((p) => p.id));
@@ -164,6 +171,18 @@ export class NotificationSettingsService {
         },
       );
     return prefs.map((p) => this.toNotificationPreferenceDto(p));
+  }
+
+  async getPreferenceOwner(
+    id: string,
+  ): Promise<{ userId: string | null; kidId: string | null }> {
+    const pref =
+      await this.notificationPreferenceRepository.findUniqueNotificationPreference(
+        id,
+        true,
+      );
+    if (!pref) throw new NotFoundException('Notification preference not found');
+    return { userId: pref.userId, kidId: pref.kidId };
   }
 
   async getById(id: string): Promise<NotificationPreferenceDto> {

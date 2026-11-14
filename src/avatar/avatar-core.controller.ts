@@ -25,6 +25,7 @@ import {
   ALLOWED_IMAGE_TYPES,
   MAX_IMAGE_SIZE,
 } from '@/shared/constants/upload.constants';
+import { uploadOwner } from '@/upload/upload.service';
 import { AvatarService } from './avatar.service';
 import { CreateAvatarDto, UpdateAvatarDto } from './dto/avatar.dto';
 import {
@@ -144,6 +145,8 @@ export class AvatarCoreController {
       createAvatarDto,
       file,
       isSystemAvatar,
+      undefined,
+      uploadOwner(req.authUserData),
     );
 
     const message = isAdmin

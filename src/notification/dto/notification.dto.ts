@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsOptional, IsUUID } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 import {
   NotificationCategory as PrismaCategory,
   NotificationType as PrismaType,
@@ -13,24 +19,31 @@ export type NotificationCategory = PrismaCategory;
 
 export class CreateNotificationPreferenceDto {
   @ApiProperty({ enum: NotificationType })
+  @IsEnum(NotificationType)
   type: NotificationType;
 
   @ApiProperty({ enum: NotificationCategory })
+  @IsEnum(NotificationCategory)
   category: NotificationCategory;
 
   @ApiProperty()
+  @IsBoolean()
   enabled: boolean;
 
   @ApiProperty({
     required: false,
     description: 'User ID (optional, for user-level preference)',
   })
+  @IsOptional()
+  @IsUUID()
   userId?: string;
 
   @ApiProperty({
     required: false,
     description: 'Kid ID (optional, for kid-level preference)',
   })
+  @IsOptional()
+  @IsUUID()
   kidId?: string;
 }
 

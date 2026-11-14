@@ -32,7 +32,9 @@ import {
 } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UserService } from './user.service';
-import { UploadService } from '@/upload/upload.service';
+import { stripCredentials } from '@/shared/utils/strip-credentials';
+import { AccessControlService } from '@/shared/access/access-control.service';
+import { UploadService, uploadOwner } from '@/upload/upload.service';
 import {
   AuthSessionGuard,
   AuthenticatedRequest,
@@ -74,7 +76,20 @@ export class UserController {
     private readonly userService: UserService,
     private readonly uploadService: UploadService,
     private readonly userDataExportService: UserDataExportService,
+    private readonly accessControl: AccessControlService,
   ) {}
+
+  private toDeleteResponse(result: {
+    id: string;
+    email: string;
+    message: string;
+    permanent: boolean;
+    isDeleted?: boolean;
+    deletedAt?: Date | null;
+  }) {
+    const { id, email, message, permanent, isDeleted, deletedAt } = result;
+    return { id, email, message, permanent, isDeleted, deletedAt };
+  }
   // ============================================================
   //                 SELF / PARENT PROFILE ENDPOINTS
   // ============================================================
@@ -142,7 +157,9 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Body() body: UpdateParentProfileDto,
   ) {
-    return this.userService.updateParentProfile(req.authUserData.userId, body);
+    return stripCredentials(
+      await this.userService.updateParentProfile(req.authUserData.userId, body),
+    );
   }
 
   @Patch('me/rate-app')
@@ -177,9 +194,11 @@ export class UserController {
     @Req() req: AuthenticatedRequest,
     @Body() body: UpdateAvatarDto,
   ) {
-    return this.userService.updateAvatarForParent(
-      req.authUserData.userId,
-      body,
+    return stripCredentials(
+      await this.userService.updateAvatarForParent(
+        req.authUserData.userId,
+        body,
+      ),
     );
   }
 
@@ -215,9 +234,14 @@ export class UserController {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
-    const uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+    const uploadResult = await this.uploadService.uploadImage(
+      file,
+      'avatars',
+      uploadOwner(req.authUserData),
+    );
+    let assigned;
     try {
-      return await this.userService.createAndAssignAvatar(
+      assigned = await this.userService.createAndAssignAvatar(
         req.authUserData.userId,
         uploadResult.secure_url,
         uploadResult.public_id,
@@ -233,6 +257,16 @@ export class UserController {
         });
       throw err;
     }
+    if (assigned.retiredPublicId) {
+      await this.uploadService
+        .deleteImage(assigned.retiredPublicId)
+        .catch((cleanupErr: Error) => {
+          this.logger.warn(
+            `Failed to release replaced avatar "${assigned.retiredPublicId}": ${cleanupErr.message}`,
+          );
+        });
+    }
+    return stripCredentials(assigned.user);
   }
 
   @Post('me/pin')
@@ -411,9 +445,10 @@ export class UserController {
         data: {
           id: 'user-id',
           email: 'user@example.com',
+          message: 'Account deactivated successfully',
+          permanent: false,
           isDeleted: true,
           deletedAt: '2025-12-01T13:20:00.000Z',
-          message: 'Account deactivated successfully',
         },
         message: 'Account deactivated successfully',
       },
@@ -431,6 +466,7 @@ export class UserController {
           email: 'user@example.com',
           message:
             'Account and all associated data deleted permanently. All active sessions have been terminated.',
+          permanent: true,
         },
         message: 'Account and all associated data deleted permanently',
       },
@@ -460,7 +496,7 @@ export class UserController {
     return {
       statusCode: 200,
       success: true,
-      data: result,
+      data: this.toDeleteResponse(result),
       message: result.message,
     };
   }
@@ -590,7 +626,7 @@ export class UserController {
     return {
       statusCode: 200,
       message: 'Your account has been restored successfully',
-      data: restoredUser,
+      data: stripCredentials(restoredUser),
     };
   }
 
@@ -628,23 +664,50 @@ export class UserController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get user profile' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get user profile (self or admin)' })
   @ApiParam({ name: 'id', type: String })
-  async getUser(@Param('id') id: string) {
+  async getUser(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, id);
     const user = await this.userService.getUser(id);
     if (!user) return null;
     return new UserDto(user);
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update user profile' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user profile (self or admin)' })
   @ApiParam({ name: 'id', type: String })
-  async updateUser(@Param('id') id: string, @Body() body: UpdateUserDto) {
-    return await this.userService.updateUser(id, body);
+  @ApiResponse({ status: 200, type: UserDto })
+  async updateUser(
+    @Param('id') id: string,
+    @Body() body: UpdateUserDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, id);
+    const updated = await this.userService.updateUser(id, body);
+    return updated ? new UserDto(updated) : null;
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete user account' })
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete user account (self or admin)' })
+  @ApiResponse({
+    status: 200,
+    schema: {
+      example: {
+        id: 'user-id',
+        email: 'user@example.com',
+        message: 'Account deactivated successfully',
+        permanent: false,
+        isDeleted: true,
+        deletedAt: '2025-12-01T13:20:00.000Z',
+      },
+    },
+  })
   @ApiQuery({
     name: 'permanent',
     required: false,
@@ -654,9 +717,12 @@ export class UserController {
   })
   async deleteUserAccount(
     @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
     @Query('permanent') permanent: boolean = false,
   ) {
-    return await this.userService.deleteUserAccount(id, permanent);
+    this.accessControl.assertSelfOrAdmin(req.authUserData, id);
+    const result = await this.userService.deleteUserAccount(id, permanent);
+    return this.toDeleteResponse(result);
   }
 
   @Post(':id/undo-delete')
@@ -694,7 +760,7 @@ export class UserController {
     return {
       statusCode: 200,
       message: 'User restored successfully',
-      data: restoredUser,
+      data: stripCredentials(restoredUser),
     };
   }
 

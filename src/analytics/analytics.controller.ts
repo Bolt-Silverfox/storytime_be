@@ -1,7 +1,13 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsStatsDto } from './dto/analytics.dto';
+import { Admin } from '@/admin/decorators/admin.decorator';
 
 @ApiTags('analytics')
 @Controller('analytics')
@@ -9,6 +15,8 @@ export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
   @Get('stats')
+  @Admin()
+  @ApiBearerAuth()
   @ApiOperation({ summary: 'Get system statistics' })
   @ApiResponse({ status: 200, type: AnalyticsStatsDto })
   async getStats() {

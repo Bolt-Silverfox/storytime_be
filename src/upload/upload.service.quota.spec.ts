@@ -1,0 +1,514 @@
+import {
+  ConflictException,
+  NotFoundException,
+  PayloadTooLargeException,
+} from '@nestjs/common';
+import { PassThrough } from 'stream';
+import { v2 as cloudinary } from 'cloudinary';
+import { UploadService } from './upload.service';
+import { MAX_USER_UPLOAD_BYTES } from '@/shared/constants/upload.constants';
+
+type Row = {
+  id: string;
+  userId: string;
+  publicId: string | null;
+  resourceType?: string | null;
+  bytes: number;
+  pending: boolean;
+  createdAt: Date;
+};
+
+type Where = {
+  id?: string;
+  userId?: string;
+  publicId?: string;
+  pending?: boolean;
+  createdAt?: { lt: Date };
+  NOT?: { id: string };
+};
+
+const MB = 1024 * 1024;
+
+function fakePrisma() {
+  const rows: Row[] = [];
+  const state = { openTx: 0, seq: 0 };
+  const matches = (r: Row, w: Where) =>
+    (w.id === undefined || r.id === w.id) &&
+    (w.userId === undefined || r.userId === w.userId) &&
+    (w.publicId === undefined || r.publicId === w.publicId) &&
+    (w.pending === undefined || r.pending === w.pending) &&
+    (w.createdAt === undefined || r.createdAt < w.createdAt.lt) &&
+    (w.NOT === undefined || r.id !== w.NOT.id);
+
+  const userUpload = {
+    findFirst: jest.fn(({ where }: { where: Where }) =>
+      Promise.resolve(rows.find((r) => matches(r, where)) ?? null),
+    ),
+    deleteMany: jest.fn(({ where }: { where: Where }) => {
+      let count = 0;
+      for (let i = rows.length - 1; i >= 0; i--) {
+        if (matches(rows[i], where)) {
+          rows.splice(i, 1);
+          count++;
+        }
+      }
+      return Promise.resolve({ count });
+    }),
+    aggregate: jest.fn(({ where }: { where: Where }) =>
+      Promise.resolve({
+        _sum: {
+          bytes:
+            rows
+              .filter((r) => matches(r, where))
+              .reduce((n, r) => n + r.bytes, 0) || null,
+        },
+      }),
+    ),
+    create: jest.fn(
+      ({ data }: { data: Omit<Row, 'id' | 'createdAt' | 'publicId'> }) => {
+        const row: Row = {
+          ...data,
+          id: `row${++state.seq}`,
+          publicId: null,
+          createdAt: new Date(),
+        };
+        rows.push(row);
+        return Promise.resolve({ id: row.id });
+      },
+    ),
+    update: jest.fn(
+      ({ where, data }: { where: { id: string }; data: Partial<Row> }) => {
+        const row = rows.find((r) => r.id === where.id);
+        if (!row) return Promise.reject(new Error('row missing'));
+        Object.assign(row, data);
+        return Promise.resolve(row);
+      },
+    ),
+  };
+  const tx = { $executeRaw: jest.fn().mockResolvedValue(1), userUpload };
+  const prisma = {
+    avatar: { count: jest.fn().mockResolvedValue(0) },
+    voice: { count: jest.fn().mockResolvedValue(0) },
+    rows,
+    state,
+    tx,
+    userUpload,
+    $transaction: jest.fn(async (arg: unknown) => {
+      if (Array.isArray(arg)) return Promise.all(arg as Promise<unknown>[]);
+      state.openTx++;
+      try {
+        return await (arg as (t: typeof tx) => Promise<unknown>)(tx);
+      } finally {
+        state.openTx--;
+      }
+    }),
+  };
+  return prisma;
+}
+
+const file = (size: number) =>
+  ({ buffer: Buffer.from('x'), size }) as Express.Multer.File;
+
+describe('UploadService per-user upload cap', () => {
+  let prisma: ReturnType<typeof fakePrisma>;
+  let service: UploadService;
+  let uploads: jest.SpyInstance;
+  let openTxDuringUpload: number[];
+
+  const seed = (r: Partial<Row> & { userId: string; bytes: number }) =>
+    prisma.rows.push({
+      id: `seed${prisma.rows.length}`,
+      publicId: `seed-${prisma.rows.length}`,
+      pending: false,
+      createdAt: new Date(),
+      ...r,
+    });
+
+  const cloudinaryReplies = (
+    publicId: string,
+    bytes: number,
+    resourceType = 'image',
+  ) =>
+    uploads.mockImplementationOnce(((
+      _opts: unknown,
+      cb: (e: unknown, r?: unknown) => void,
+    ) => {
+      openTxDuringUpload.push(prisma.state.openTx);
+      const stream = new PassThrough();
+      stream.on('finish', () =>
+        cb(undefined, {
+          public_id: publicId,
+          secure_url: 'u',
+          bytes,
+          resource_type: resourceType,
+        }),
+      );
+      stream.resume();
+      return stream;
+    }) as never);
+
+  beforeEach(() => {
+    prisma = fakePrisma();
+    service = new UploadService(prisma as never);
+    uploads = jest.spyOn(cloudinary.uploader, 'upload_stream');
+    openTxDuringUpload = [];
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('is a 200 MB cap by default', () => {
+    expect(MAX_USER_UPLOAD_BYTES).toBe(200 * MB);
+  });
+
+  it("records the uploaded asset's publicId and bytes against the user", async () => {
+    cloudinaryReplies('p1', 3 * MB);
+    await service.uploadImage(file(5 * MB), 'avatars', { userId: 'u1' });
+    expect(prisma.rows).toMatchObject([
+      { userId: 'u1', publicId: 'p1', bytes: 3 * MB, pending: false },
+    ]);
+  });
+
+  it('holds no transaction or lock while Cloudinary is called', async () => {
+    cloudinaryReplies('p1', MB);
+    await service.uploadImage(file(MB), 'avatars', { userId: 'u1' });
+    expect(openTxDuringUpload).toEqual([0]);
+    expect(prisma.rows[0].pending).toBe(false);
+  });
+
+  it('reserves the incoming size while the upload is in flight', async () => {
+    let reservedDuringUpload = 0;
+    uploads.mockImplementationOnce(((
+      _opts: unknown,
+      cb: (e: unknown, r?: unknown) => void,
+    ) => {
+      reservedDuringUpload = prisma.rows
+        .filter((r) => r.pending)
+        .reduce((n, r) => n + r.bytes, 0);
+      const stream = new PassThrough();
+      stream.on('finish', () =>
+        cb(undefined, { public_id: 'p', secure_url: 'u', bytes: MB }),
+      );
+      stream.resume();
+      return stream;
+    }) as never);
+    await service.uploadImage(file(5 * MB), 'avatars', { userId: 'u1' });
+    expect(reservedDuringUpload).toBe(5 * MB);
+  });
+
+  it('refuses an upload that would pass the cap, before calling Cloudinary', async () => {
+    seed({ userId: 'u1', bytes: MAX_USER_UPLOAD_BYTES - MB });
+    await expect(
+      service.uploadImage(file(2 * MB), 'avatars', { userId: 'u1' }),
+    ).rejects.toBeInstanceOf(PayloadTooLargeException);
+    expect(uploads).not.toHaveBeenCalled();
+    expect(prisma.rows).toHaveLength(1);
+  });
+
+  it('answers a refusal with a machine-readable quota code and the same message', async () => {
+    seed({ userId: 'u1', bytes: MAX_USER_UPLOAD_BYTES });
+    const error = await service
+      .uploadImage(file(1), 'avatars', { userId: 'u1' })
+      .catch((e: PayloadTooLargeException) => e);
+    expect((error as PayloadTooLargeException).getResponse()).toEqual({
+      statusCode: 413,
+      error: 'UPLOAD_QUOTA_EXCEEDED',
+      code: 'UPLOAD_QUOTA_EXCEEDED',
+      message:
+        'Upload storage limit reached. Delete some uploads and try again.',
+    });
+  });
+
+  it('allows an upload that lands exactly on the cap', async () => {
+    seed({ userId: 'u1', bytes: MAX_USER_UPLOAD_BYTES - 2 * MB });
+    cloudinaryReplies('p2', 2 * MB);
+    await service.uploadImage(file(2 * MB), 'avatars', { userId: 'u1' });
+    expect(prisma.rows).toHaveLength(2);
+  });
+
+  it("does not count another user's uploads", async () => {
+    seed({ userId: 'u2', bytes: MAX_USER_UPLOAD_BYTES });
+    cloudinaryReplies('p3', MB);
+    await service.uploadImage(file(MB), 'avatars', { userId: 'u1' });
+    expect(prisma.rows).toHaveLength(2);
+  });
+
+  it('counts a fresh pending reservation against the cap', async () => {
+    seed({
+      userId: 'u1',
+      bytes: MAX_USER_UPLOAD_BYTES,
+      pending: true,
+      publicId: null,
+    });
+    await expect(
+      service.uploadImage(file(1), 'avatars', { userId: 'u1' }),
+    ).rejects.toBeInstanceOf(PayloadTooLargeException);
+  });
+
+  it('sweeps stale pending reservations when it reserves', async () => {
+    seed({
+      userId: 'u1',
+      bytes: MAX_USER_UPLOAD_BYTES,
+      pending: true,
+      publicId: null,
+      createdAt: new Date(Date.now() - 16 * 60_000),
+    });
+    cloudinaryReplies('p6', MB);
+    await service.uploadImage(file(MB), 'avatars', { userId: 'u1' });
+    expect(prisma.rows).toMatchObject([{ publicId: 'p6', pending: false }]);
+  });
+
+  it('leaves no counted row when the Cloudinary upload fails', async () => {
+    uploads.mockImplementationOnce(((
+      _opts: unknown,
+      cb: (e: unknown) => void,
+    ) => {
+      const stream = new PassThrough();
+      stream.on('finish', () => cb({ message: 'boom' }));
+      stream.resume();
+      return stream;
+    }) as never);
+    await expect(
+      service.uploadImage(file(MB), 'avatars', { userId: 'u1' }),
+    ).rejects.toThrow();
+    expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('removes the reservation and the asset when recording the upload fails', async () => {
+    cloudinaryReplies('p7', MB);
+    prisma.userUpload.update.mockRejectedValueOnce(new Error('db down'));
+    const destroy = jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'ok' });
+    await expect(
+      service.uploadImage(file(MB), 'avatars', { userId: 'u1' }),
+    ).rejects.toThrow('db down');
+    expect(destroy).toHaveBeenCalledWith('p7', { resource_type: 'image' });
+    expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('logs a warning when destroying the asset after a failed record also fails', async () => {
+    cloudinaryReplies('p8', MB);
+    prisma.userUpload.update.mockRejectedValueOnce(new Error('db down'));
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockRejectedValue(new Error('cdn down'));
+    const warn = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    await expect(
+      service.uploadImage(file(MB), 'avatars', { userId: 'u1' }),
+    ).rejects.toThrow('db down');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('p8'));
+  });
+
+  it('deletes a non-image asset with its resource type and frees the row', async () => {
+    seed({ userId: 'u1', bytes: 4 * MB, publicId: 'voice-1' });
+    const destroy = jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'ok' });
+    await service.deleteImage('voice-1', 'video');
+    expect(destroy).toHaveBeenCalledWith('voice-1', { resource_type: 'video' });
+    expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('destroys a non-image upload with its resource type when recording fails', async () => {
+    cloudinaryReplies('voice-9', MB, 'video');
+    prisma.userUpload.update.mockRejectedValueOnce(new Error('db down'));
+    const destroy = jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'ok' });
+    await expect(
+      service.uploadFile(file(MB), { userId: 'u1' }),
+    ).rejects.toThrow('db down');
+    expect(destroy).toHaveBeenCalledWith('voice-9', {
+      resource_type: 'video',
+    });
+    expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('logs a warning when the compensating destroy answers not found', async () => {
+    cloudinaryReplies('voice-10', MB, 'video');
+    prisma.userUpload.update.mockRejectedValueOnce(new Error('db down'));
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'not found' });
+    const warn = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    await expect(
+      service.uploadFile(file(MB), { userId: 'u1' }),
+    ).rejects.toThrow('db down');
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('voice-10'));
+  });
+
+  it('frees the space when the image is deleted', async () => {
+    seed({ userId: 'u1', bytes: 10 * MB, publicId: 'gone' });
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'ok' });
+    await service.deleteImage('gone');
+    expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('keeps the row when the Cloudinary delete fails and no type was recorded', async () => {
+    seed({ userId: 'u1', bytes: 10 * MB, publicId: 'stays' });
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'not found' });
+    await expect(service.deleteImage('stays')).rejects.toThrow();
+    expect(prisma.rows).toHaveLength(1);
+  });
+
+  it('releases the row when Cloudinary reports the recorded asset type as not found', async () => {
+    seed({
+      userId: 'u1',
+      bytes: 10 * MB,
+      publicId: 'gone-already',
+      resourceType: 'video',
+    });
+    const destroy = jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'not found' });
+    await expect(service.deleteImage('gone-already')).resolves.toBeUndefined();
+    expect(destroy).toHaveBeenCalledWith('gone-already', {
+      resource_type: 'video',
+    });
+    expect(prisma.rows).toHaveLength(0);
+  });
+
+  it('keeps the row when not found was answered for a type other than the recorded one', async () => {
+    seed({
+      userId: 'u1',
+      bytes: 10 * MB,
+      publicId: 'wrong-type',
+      resourceType: 'video',
+    });
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'not found' });
+    await expect(service.deleteImage('wrong-type', 'image')).rejects.toThrow();
+    expect(prisma.rows).toHaveLength(1);
+  });
+
+  it('keeps the row on any other non-ok answer even with a recorded type', async () => {
+    seed({
+      userId: 'u1',
+      bytes: 10 * MB,
+      publicId: 'odd',
+      resourceType: 'image',
+    });
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'error' });
+    await expect(service.deleteImage('odd')).rejects.toThrow();
+    expect(prisma.rows).toHaveLength(1);
+  });
+
+  it('records the Cloudinary resource type when an upload is finalised', async () => {
+    cloudinaryReplies('p-type', MB, 'video');
+    await service.uploadFile(file(MB), { userId: 'u1' });
+    expect(prisma.rows[0]).toMatchObject({
+      publicId: 'p-type',
+      resourceType: 'video',
+    });
+  });
+
+  describe('deleteOwned', () => {
+    const destroyOk = () =>
+      jest
+        .spyOn(cloudinary.uploader, 'destroy')
+        .mockResolvedValue({ result: 'ok' });
+    const auth = (userId: string, role = 'parent') =>
+      ({ userId, userRole: role }) as never;
+
+    it('deletes an upload the caller owns and frees its row', async () => {
+      seed({ userId: 'u1', bytes: 5 * MB, publicId: 'mine' });
+      destroyOk();
+      await service.deleteOwned('mine', auth('u1'));
+      expect(prisma.rows).toHaveLength(0);
+    });
+
+    it("answers not found for another user's upload without touching storage", async () => {
+      seed({ userId: 'u2', bytes: 5 * MB, publicId: 'theirs' });
+      const destroy = destroyOk();
+      await expect(service.deleteOwned('theirs', auth('u1'))).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(destroy).not.toHaveBeenCalled();
+      expect(prisma.rows).toHaveLength(1);
+    });
+
+    it('answers not found for an unknown public id', async () => {
+      const destroy = destroyOk();
+      await expect(service.deleteOwned('nope', auth('u1'))).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(destroy).not.toHaveBeenCalled();
+    });
+
+    it('lets an admin delete any recorded upload', async () => {
+      seed({ userId: 'u2', bytes: 5 * MB, publicId: 'theirs' });
+      destroyOk();
+      await service.deleteOwned('theirs', auth('admin-1', 'admin'));
+      expect(prisma.rows).toHaveLength(0);
+    });
+
+    it.each(['avatar', 'voice'] as const)(
+      'refuses with 409 while a %s row still references the upload',
+      async (table) => {
+        seed({ userId: 'u1', bytes: 5 * MB, publicId: 'used' });
+        prisma[table].count.mockResolvedValue(1);
+        const destroy = destroyOk();
+        await expect(service.deleteOwned('used', auth('u1'))).rejects.toThrow(
+          ConflictException,
+        );
+        await expect(
+          service.deleteOwned('used', auth('admin-1', 'admin')),
+        ).rejects.toThrow(ConflictException);
+        expect(destroy).not.toHaveBeenCalled();
+        expect(prisma.rows).toHaveLength(1);
+      },
+    );
+
+    it('answers not found on a second delete', async () => {
+      seed({ userId: 'u1', bytes: 5 * MB, publicId: 'once' });
+      destroyOk();
+      await service.deleteOwned('once', auth('u1'));
+      await expect(service.deleteOwned('once', auth('u1'))).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  it('does not count or cap admin uploads', async () => {
+    seed({ userId: 'admin', bytes: MAX_USER_UPLOAD_BYTES });
+    cloudinaryReplies('p4', 5 * MB);
+    await service.uploadImage(file(5 * MB), 'avatars', {
+      userId: 'admin',
+      exempt: true,
+    });
+    expect(prisma.rows).toHaveLength(1);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not count uploads with no owner (system uploads)', async () => {
+    cloudinaryReplies('p5', 5 * MB);
+    await service.uploadImage(file(5 * MB), 'categories');
+    expect(prisma.rows).toHaveLength(0);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('applies the cap to uploadFile as well', async () => {
+    seed({ userId: 'u1', bytes: MAX_USER_UPLOAD_BYTES });
+    await expect(
+      service.uploadFile(file(1), { userId: 'u1' }),
+    ).rejects.toBeInstanceOf(PayloadTooLargeException);
+    expect(uploads).not.toHaveBeenCalled();
+  });
+});

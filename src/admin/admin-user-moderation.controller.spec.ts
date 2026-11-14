@@ -15,6 +15,7 @@ describe('AdminUserModerationController (audit logging)', () => {
   const bulkUserAction = jest.fn();
   const updateUser = jest.fn();
   const record = jest.fn();
+  const restoreUser = jest.fn();
 
   const req = {
     authUserData: { userId: 'admin-1', email: 'admin@example.com' },
@@ -31,6 +32,7 @@ describe('AdminUserModerationController (audit logging)', () => {
             suspendUser,
             bulkUserAction,
             updateUser,
+            restoreUser,
           },
         },
         { provide: AdminAuditLogService, useValue: { record } },
@@ -110,5 +112,20 @@ describe('AdminUserModerationController (audit logging)', () => {
       targetId: 'user-1',
       details: { name: 'New Name' },
     });
+  });
+
+  it('restoring a user never returns the restored account credential hashes', async () => {
+    restoreUser.mockResolvedValue({
+      id: 'user-1',
+      email: 'u@example.com',
+      isDeleted: false,
+      passwordHash: '$2b$10$passwordhashsentinel',
+      pinHash: '$2b$10$pinhashsentinel',
+    });
+
+    const result = await controller.restoreUser(req, 'user-1');
+
+    expect(JSON.stringify(result)).not.toMatch(/passwordHash|pinHash/);
+    expect(result.data).toMatchObject({ id: 'user-1', isDeleted: false });
   });
 });

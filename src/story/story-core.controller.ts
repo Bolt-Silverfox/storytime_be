@@ -30,6 +30,7 @@ import {
   AuthSessionGuard,
   AuthenticatedRequest,
 } from '@/shared/guards/auth.guard';
+import { AdminGuard } from '@/shared/guards/admin.guard';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import { Public } from '@/shared/decorators/public.decorator';
 
@@ -50,6 +51,7 @@ import { StoryService } from './story.service';
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { Throttle } from '@nestjs/throttler';
 import { THROTTLE_LIMITS } from '@/shared/constants/throttle.constants';
+import { AccessControlService } from '@/shared/access/access-control.service';
 import { KidOwnershipService } from './services/kid-ownership.service';
 
 @ApiTags('stories')
@@ -61,6 +63,7 @@ export class StoryCoreController {
   constructor(
     private readonly storyService: StoryService,
     private readonly kidOwnership: KidOwnershipService,
+    private readonly accessControl: AccessControlService,
   ) {}
 
   @Get()
@@ -349,7 +352,8 @@ export class StoryCoreController {
   }
 
   @Post()
-  @ApiOperation({ summary: 'Create a new story' })
+  @UseGuards(AdminGuard)
+  @ApiOperation({ summary: 'Create a new story (admin only)' })
   @ApiBody({ type: CreateStoryDto })
   @ApiOkResponse({ description: 'Created story', type: CreateStoryDto })
   @ApiResponse({
@@ -396,7 +400,12 @@ export class StoryCoreController {
     @Param('id') id: string,
     @Body() body: UpdateStoryDto,
   ) {
-    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId);
+    await this.kidOwnership.getOwnedStoryOrThrow(
+      id,
+      req.authUserData.userId,
+      false,
+      this.accessControl.isAdmin(req.authUserData),
+    );
     return this.storyService.updateStory(id, body);
   }
 
@@ -498,7 +507,12 @@ export class StoryCoreController {
     @Param('id') id: string,
     @Body() body: StoryImageDto,
   ) {
-    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId);
+    await this.kidOwnership.getOwnedStoryOrThrow(
+      id,
+      req.authUserData.userId,
+      false,
+      this.accessControl.isAdmin(req.authUserData),
+    );
     return this.storyService.addImage(id, body);
   }
 
@@ -528,7 +542,12 @@ export class StoryCoreController {
     @Param('id') id: string,
     @Body() body: StoryBranchDto,
   ) {
-    await this.kidOwnership.getOwnedStoryOrThrow(id, req.authUserData.userId);
+    await this.kidOwnership.getOwnedStoryOrThrow(
+      id,
+      req.authUserData.userId,
+      false,
+      this.accessControl.isAdmin(req.authUserData),
+    );
     return this.storyService.addBranch(id, body);
   }
 }

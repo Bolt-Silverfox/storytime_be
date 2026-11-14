@@ -29,6 +29,14 @@ export class ScreenTimeService {
     return { sessionId: session.id };
   }
 
+  async getSessionKidId(sessionId: string): Promise<string> {
+    const session = await this.screenTimeRepository.findSessionById(sessionId);
+    if (!session) {
+      throw new BadRequestException('Invalid or already ended session');
+    }
+    return session.kidId;
+  }
+
   /**
    * End a screen time session
    */

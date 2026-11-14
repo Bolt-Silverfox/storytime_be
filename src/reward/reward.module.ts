@@ -4,9 +4,10 @@ import { RewardController } from './reward.controller';
 import { AuthModule } from '@/auth/auth.module';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { REWARD_REPOSITORY, PrismaRewardRepository } from './repositories';
+import { AccessControlModule } from '@/shared/access/access-control.module';
 
 @Module({
-  imports: [AuthModule, PrismaModule],
+  imports: [AccessControlModule, AuthModule, PrismaModule],
   controllers: [RewardController],
   providers: [
     RewardService,

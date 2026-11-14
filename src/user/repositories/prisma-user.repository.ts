@@ -9,6 +9,7 @@ import {
   SupportTicket,
 } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { retireAvatarIfUnreferenced } from '@/avatar/retire-avatar';
 import {
   IUserRepository,
   UserWithRelations,
@@ -216,7 +217,7 @@ export class PrismaUserRepository implements IUserRepository {
     userId: string,
     url: string,
     publicId: string,
-  ): Promise<UserWithAvatar> {
+  ): Promise<{ user: UserWithAvatar; retiredPublicId: string | null }> {
     return this.prisma.$transaction(async (tx) => {
       // Fetch current avatar so we can retire it after assigning the new one
       const user = await tx.user.findUnique({
@@ -243,15 +244,11 @@ export class PrismaUserRepository implements IUserRepository {
         include: { avatar: true },
       });
 
-      // Delete the previous custom avatar if it exists and wasn't a system avatar.
-      // deleteMany is idempotent — safe if the record was already deleted concurrently.
-      if (user?.avatarId) {
-        await tx.avatar.deleteMany({
-          where: { id: user.avatarId, isSystemAvatar: false },
-        });
-      }
+      const retiredPublicId = user.avatarId
+        ? await retireAvatarIfUnreferenced(tx, user.avatarId)
+        : null;
 
-      return updated;
+      return { user: updated, retiredPublicId };
     });
   }
 

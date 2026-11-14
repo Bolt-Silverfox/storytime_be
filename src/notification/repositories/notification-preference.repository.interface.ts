@@ -24,6 +24,16 @@ export interface INotificationPreferenceRepository {
     kidId?: string;
   }): Promise<NotificationPreference>;
 
+  createNotificationPreferencesAtomic(
+    items: {
+      type: NotificationType;
+      category: NotificationCategory;
+      enabled: boolean;
+      userId?: string;
+      kidId?: string;
+    }[],
+  ): Promise<NotificationPreference[]>;
+
   // Update notification preference (only matches non-deleted rows)
   updateNotificationPreference(
     id: string,
@@ -87,10 +97,13 @@ export interface INotificationPreferenceRepository {
     }[],
   ): Promise<void>;
 
-  // Find many notification preferences by IDs and userId
   findManyNotificationPreferencesByIds(
     ids: string[],
     userId: string,
+  ): Promise<NotificationPreference[]>;
+
+  findActiveNotificationPreferencesByIds(
+    ids: string[],
   ): Promise<NotificationPreference[]>;
 
   // Find many notification preferences for a user, category and set of types

@@ -8,9 +8,16 @@ import { UploadModule } from '@/upload/upload.module';
 import { USER_REPOSITORY } from './repositories';
 import { PrismaUserRepository } from './repositories/prisma-user.repository';
 import { UserDataExportService } from './services/user-data-export.service';
+import { AccessControlModule } from '@/shared/access/access-control.module';
 
 @Module({
-  imports: [AuthModule, NotificationModule, PrismaModule, UploadModule],
+  imports: [
+    AccessControlModule,
+    AuthModule,
+    NotificationModule,
+    PrismaModule,
+    UploadModule,
+  ],
   controllers: [UserController],
   providers: [
     UserService,

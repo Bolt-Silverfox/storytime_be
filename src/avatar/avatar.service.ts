@@ -3,9 +3,10 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  PayloadTooLargeException,
   Logger,
 } from '@nestjs/common';
-import { UploadService } from '../upload/upload.service';
+import { UploadService, UploadOwner } from '../upload/upload.service';
 import { CreateAvatarDto, UpdateAvatarDto } from './dto/avatar.dto';
 import { IAvatarRepository, AVATAR_REPOSITORY } from './repositories';
 
@@ -21,16 +22,30 @@ export class AvatarService {
 
   // Helper Methods
 
+  private withoutCredentials<
+    T extends { passwordHash: string | null; pinHash: string | null },
+  >(user: T): Omit<T, 'passwordHash' | 'pinHash'> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, pinHash, ...safe } = user;
+    return safe;
+  }
+
   private async handleCustomAvatarUpload(
     entityId: string,
     entityType: 'user' | 'kid',
     file: Express.Multer.File,
-    entityName: string, // eslint-disable-line @typescript-eslint/no-unused-vars
+    entityName: string,
+    owner?: UploadOwner,
   ) {
     let uploadResult;
     try {
-      uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+      uploadResult = await this.uploadService.uploadImage(
+        file,
+        'avatars',
+        owner,
+      );
     } catch (error) {
+      if (error instanceof PayloadTooLargeException) throw error;
       this.logger.error(
         `Failed to upload ${entityType} avatar to Cloudinary:`,
         error,
@@ -40,31 +55,66 @@ export class AvatarService {
 
     const avatarName = `${entityType}-avatar-${entityId}`;
 
-    return this.avatarRepository.upsertByName(avatarName, {
-      url: uploadResult.secure_url,
-      publicId: uploadResult.public_id,
-      isSystemAvatar: false,
-    });
+    try {
+      return await this.avatarRepository.replaceByName(avatarName, {
+        url: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+        isSystemAvatar: false,
+      });
+    } catch (error) {
+      await this.uploadService
+        .deleteImage(uploadResult.public_id)
+        .catch((cleanupError: Error) =>
+          this.logger.warn(
+            `Failed to release avatar upload "${uploadResult.public_id}": ${cleanupError.message}`,
+          ),
+        );
+      throw error;
+    }
   }
 
-  private async cleanupOldCustomAvatar(avatarId: string) {
-    const oldAvatar = await this.avatarRepository.findById(avatarId);
-
-    if (oldAvatar && oldAvatar.publicId && !oldAvatar.isSystemAvatar) {
-      try {
-        await this.uploadService.deleteImage(oldAvatar.publicId);
-
-        const usersUsing =
-          await this.avatarRepository.countUsersUsingAvatar(avatarId);
-        const kidsUsing =
-          await this.avatarRepository.countKidsUsingAvatar(avatarId);
-
-        if (usersUsing === 0 && kidsUsing === 0) {
-          await this.avatarRepository.hardDelete(avatarId);
-        }
-      } catch (error) {
-        this.logger.warn('Failed to delete old avatar:', error);
+  private async releaseAfterFailedAssignment(replaced: {
+    avatar: { id: string };
+    displacedPublicId: string | null;
+  }) {
+    try {
+      if (replaced.displacedPublicId) {
+        await this.uploadService.deleteImage(replaced.displacedPublicId);
       }
+      const orphan = await this.avatarRepository.retireAvatarIfUnreferenced(
+        replaced.avatar.id,
+      );
+      if (orphan) await this.uploadService.deleteImage(orphan);
+    } catch (error) {
+      this.logger.warn('Failed to release unattached avatar upload:', error);
+    }
+  }
+
+  private async releaseReplacedAvatar(
+    previous: {
+      id: string;
+      publicId: string | null;
+      isSystemAvatar: boolean;
+    } | null,
+    replaced: { avatar: { id: string }; displacedPublicId: string | null },
+  ) {
+    try {
+      if (replaced.displacedPublicId) {
+        await this.uploadService.deleteImage(replaced.displacedPublicId);
+      }
+      if (
+        previous &&
+        !previous.isSystemAvatar &&
+        previous.publicId &&
+        previous.id !== replaced.avatar.id
+      ) {
+        const publicId = await this.avatarRepository.retireAvatarIfUnreferenced(
+          previous.id,
+        );
+        if (publicId) await this.uploadService.deleteImage(publicId);
+      }
+    } catch (error) {
+      this.logger.warn('Failed to delete old avatar:', error);
     }
   }
 
@@ -85,13 +135,19 @@ export class AvatarService {
     file: Express.Multer.File,
     isSystemAvatar: boolean = false,
     createdByUserId?: string,
+    owner?: UploadOwner,
   ) {
     let uploadResult: { secure_url: string; public_id: string } | undefined;
 
     if (file) {
       try {
-        uploadResult = await this.uploadService.uploadImage(file, 'avatars');
+        uploadResult = await this.uploadService.uploadImage(
+          file,
+          'avatars',
+          owner,
+        );
       } catch (error) {
+        if (error instanceof PayloadTooLargeException) throw error;
         this.logger.error('Failed to upload image to Cloudinary:', error);
         throw new BadRequestException('Failed to upload image');
       }
@@ -120,13 +176,26 @@ export class AvatarService {
       throw new BadRequestException('Avatar URL is required');
     }
 
-    return this.avatarRepository.create({
-      name: avatarName,
-      url: avatarUrl,
-      publicId: uploadResult?.public_id || null,
-      isSystemAvatar: isSystemAvatar,
-      createdBy: createdByUserId,
-    });
+    try {
+      return await this.avatarRepository.create({
+        name: avatarName,
+        url: avatarUrl,
+        publicId: uploadResult?.public_id || null,
+        isSystemAvatar: isSystemAvatar,
+        createdBy: createdByUserId,
+      });
+    } catch (error) {
+      if (uploadResult) {
+        await this.uploadService
+          .deleteImage(uploadResult.public_id)
+          .catch((cleanupError: Error) =>
+            this.logger.warn(
+              `Failed to release avatar upload "${uploadResult.public_id}": ${cleanupError.message}`,
+            ),
+          );
+      }
+      throw error;
+    }
   }
 
   async updateAvatar(
@@ -261,7 +330,9 @@ export class AvatarService {
       throw new NotFoundException('Avatar not found');
     }
 
-    return this.avatarRepository.updateUserAvatar(userId, avatarId);
+    return this.withoutCredentials(
+      await this.avatarRepository.updateUserAvatar(userId, avatarId),
+    );
   }
 
   async assignAvatarToKid(kidId: string, avatarId: string) {
@@ -278,45 +349,77 @@ export class AvatarService {
     return this.avatarRepository.updateKidAvatar(kidId, avatarId);
   }
 
-  async uploadAndAssignUserAvatar(userId: string, file: Express.Multer.File) {
+  async uploadAndAssignUserAvatar(
+    userId: string,
+    file: Express.Multer.File,
+    owner?: UploadOwner,
+  ) {
     const user = await this.avatarRepository.findUserWithAvatar(userId);
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
 
-    if (user.avatarId) {
-      await this.cleanupOldCustomAvatar(user.avatarId);
-    }
+    const previous = user.avatarId
+      ? await this.avatarRepository.findById(user.avatarId)
+      : null;
 
-    const avatar = await this.handleCustomAvatarUpload(
+    const replaced = await this.handleCustomAvatarUpload(
       userId,
       'user',
       file,
       user.name || user.email || 'Unknown User',
+      owner,
     );
 
-    return this.avatarRepository.updateUserAvatar(userId, avatar.id);
+    let updated;
+    try {
+      updated = await this.avatarRepository.updateUserAvatar(
+        userId,
+        replaced.avatar.id,
+      );
+    } catch (error) {
+      await this.releaseAfterFailedAssignment(replaced);
+      throw error;
+    }
+    await this.releaseReplacedAvatar(previous, replaced);
+    return this.withoutCredentials(updated);
   }
 
-  async uploadAndAssignKidAvatar(kidId: string, file: Express.Multer.File) {
+  async uploadAndAssignKidAvatar(
+    kidId: string,
+    file: Express.Multer.File,
+    owner?: UploadOwner,
+  ) {
     const kid = await this.avatarRepository.findKidWithAvatar(kidId);
 
     if (!kid) {
       throw new NotFoundException('Kid not found');
     }
 
-    if (kid.avatarId) {
-      await this.cleanupOldCustomAvatar(kid.avatarId);
-    }
+    const previous = kid.avatarId
+      ? await this.avatarRepository.findById(kid.avatarId)
+      : null;
 
-    const avatar = await this.handleCustomAvatarUpload(
+    const replaced = await this.handleCustomAvatarUpload(
       kidId,
       'kid',
       file,
       kid.name || 'Unknown Kid',
+      owner,
     );
 
-    return this.avatarRepository.updateKidAvatar(kidId, avatar.id);
+    let updated;
+    try {
+      updated = await this.avatarRepository.updateKidAvatar(
+        kidId,
+        replaced.avatar.id,
+      );
+    } catch (error) {
+      await this.releaseAfterFailedAssignment(replaced);
+      throw error;
+    }
+    await this.releaseReplacedAvatar(previous, replaced);
+    return updated;
   }
 }

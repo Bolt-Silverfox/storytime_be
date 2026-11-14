@@ -165,7 +165,7 @@ export interface IUserRepository {
     userId: string,
     url: string,
     publicId: string,
-  ): Promise<UserWithAvatar>;
+  ): Promise<{ user: UserWithAvatar; retiredPublicId: string | null }>;
 
   // Session operations
   deleteAllUserSessions(userId: string): Promise<void>;

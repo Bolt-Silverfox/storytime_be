@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Avatar, User, Kid } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
+import { retireAvatarIfUnreferenced } from '../retire-avatar';
 import { IAvatarRepository } from './avatar.repository.interface';
 
 @Injectable()
@@ -71,6 +72,46 @@ export class PrismaAvatarRepository implements IAvatarRepository {
     return this.prisma.avatar.update({ where: { id }, data });
   }
 
+  replaceByName(
+    name: string,
+    data: {
+      url: string;
+      publicId?: string | null;
+      isSystemAvatar: boolean;
+    },
+  ): Promise<{ avatar: Avatar; displacedPublicId: string | null }> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${name}, 0))`;
+      const rows = await tx.$queryRaw<
+        { publicId: string | null }[]
+      >`SELECT "publicId" FROM avatars WHERE name = ${name} FOR UPDATE`;
+      const avatar = await tx.avatar.upsert({
+        where: { name },
+        update: {
+          url: data.url,
+          publicId: data.publicId,
+          isSystemAvatar: data.isSystemAvatar,
+          isDeleted: false,
+          deletedAt: null,
+        },
+        create: {
+          name,
+          url: data.url,
+          publicId: data.publicId || null,
+          isSystemAvatar: data.isSystemAvatar,
+          isDeleted: false,
+          deletedAt: null,
+        },
+      });
+      const previous = rows[0]?.publicId ?? null;
+      return {
+        avatar,
+        displacedPublicId:
+          previous && previous !== avatar.publicId ? previous : null,
+      };
+    });
+  }
+
   async upsertByName(
     name: string,
     data: {
@@ -118,6 +159,12 @@ export class PrismaAvatarRepository implements IAvatarRepository {
   }
 
   // Usage counts
+  retireAvatarIfUnreferenced(avatarId: string): Promise<string | null> {
+    return this.prisma.$transaction((tx) =>
+      retireAvatarIfUnreferenced(tx, avatarId),
+    );
+  }
+
   async countUsersUsingAvatar(avatarId: string): Promise<number> {
     return this.prisma.user.count({ where: { avatarId } });
   }

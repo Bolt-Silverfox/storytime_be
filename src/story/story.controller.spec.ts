@@ -7,6 +7,7 @@ import { StoryService } from './story.service';
 import { StoryQuotaService } from './story-quota.service';
 import { SubscriptionThrottleGuard } from '@/shared/guards/subscription-throttle.guard';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { AccessControlService } from '@/shared/access/access-control.service';
 import { KidOwnershipService } from './services/kid-ownership.service';
 import { STORY_REPOSITORY } from './repositories/story.repository.interface';
 import { AuthenticatedRequest } from '@/shared/guards/auth.guard';
@@ -57,6 +58,7 @@ describe('StoryController', () => {
         { provide: StoryService, useValue: mockStoryService },
         { provide: StoryQuotaService, useValue: mockStoryQuotaService },
         KidOwnershipService,
+        { provide: AccessControlService, useValue: { isAdmin: () => false } },
         { provide: STORY_REPOSITORY, useValue: mockStoryRepository },
         {
           provide: 'CACHE_MANAGER',

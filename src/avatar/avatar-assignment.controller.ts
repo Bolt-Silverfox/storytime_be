@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Body,
+  Req,
   UseInterceptors,
   UploadedFile,
   UseGuards,
@@ -21,18 +22,26 @@ import {
   MAX_IMAGE_SIZE,
 } from '@/shared/constants/upload.constants';
 import { AvatarService } from './avatar.service';
+import { uploadOwner } from '@/upload/upload.service';
 import {
   AssignAvatarDto,
   AssignAvatarToUserDto,
   AssignAvatarToKidDto,
 } from './dto/avatar.dto';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+import { AccessControlService } from '@/shared/access/access-control.service';
 import { SuccessResponse } from '@/shared/dtos/api-response.dto';
 
 @Controller('avatars')
 @UseGuards(AuthSessionGuard)
 export class AvatarAssignmentController {
-  constructor(private readonly avatarService: AvatarService) {}
+  constructor(
+    private readonly avatarService: AvatarService,
+    private readonly accessControl: AccessControlService,
+  ) {}
 
   @Post('assign/user')
   @ApiOperation({
@@ -97,8 +106,19 @@ export class AvatarAssignmentController {
     description: 'Bad Request',
     schema: {
       example: {
-        message: 'userId is required',
+        message: ['avatarId should not be empty'],
         statusCode: 400,
+        details: {},
+      },
+    },
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Assigning to another user without being an admin',
+    schema: {
+      example: {
+        message: 'You can only access your own data',
+        statusCode: 403,
         details: {},
       },
     },
@@ -125,9 +145,16 @@ export class AvatarAssignmentController {
       },
     },
   })
-  async assignAvatarToUser(@Body() assignAvatarDto: AssignAvatarToUserDto) {
-    const user = await this.avatarService.assignAvatarToUser(
+  async assignAvatarToUser(
+    @Body() assignAvatarDto: AssignAvatarToUserDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const userId = this.accessControl.resolveUserId(
+      req.authUserData,
       assignAvatarDto.userId,
+    );
+    const user = await this.avatarService.assignAvatarToUser(
+      userId,
       assignAvatarDto.avatarId,
     );
     return new SuccessResponse(
@@ -217,7 +244,14 @@ export class AvatarAssignmentController {
       },
     },
   })
-  async assignAvatarToKid(@Body() assignAvatarDto: AssignAvatarToKidDto) {
+  async assignAvatarToKid(
+    @Body() assignAvatarDto: AssignAvatarToKidDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.accessControl.assertKidAccess(
+      req.authUserData,
+      assignAvatarDto.kidId,
+    );
     const kid = await this.avatarService.assignAvatarToKid(
       assignAvatarDto.kidId,
       assignAvatarDto.avatarId,
@@ -240,7 +274,6 @@ export class AvatarAssignmentController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['userId'],
       properties: {
         image: {
           type: 'string',
@@ -249,7 +282,8 @@ export class AvatarAssignmentController {
         },
         userId: {
           type: 'string',
-          description: 'User ID to assign the avatar to (required)',
+          description:
+            'User ID to assign the avatar to (optional; defaults to the authenticated user, other users are admin only)',
           example: 'user-123',
         },
       },
@@ -338,11 +372,17 @@ export class AvatarAssignmentController {
       }),
     )
     file: Express.Multer.File,
-    @Body('userId') userId: string,
+    @Body('userId') requestedUserId: string | undefined,
+    @Req() req: AuthenticatedRequest,
   ) {
+    const userId = this.accessControl.resolveUserId(
+      req.authUserData,
+      requestedUserId,
+    );
     const user = await this.avatarService.uploadAndAssignUserAvatar(
       userId,
       file,
+      uploadOwner(req.authUserData),
     );
     return new SuccessResponse(200, user, 'User avatar uploaded successfully');
   }
@@ -446,8 +486,14 @@ export class AvatarAssignmentController {
     )
     file: Express.Multer.File,
     @Body('kidId') kidId: string,
+    @Req() req: AuthenticatedRequest,
   ) {
-    const kid = await this.avatarService.uploadAndAssignKidAvatar(kidId, file);
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
+    const kid = await this.avatarService.uploadAndAssignKidAvatar(
+      kidId,
+      file,
+      uploadOwner(req.authUserData),
+    );
     return new SuccessResponse(
       200,
       { kid },
