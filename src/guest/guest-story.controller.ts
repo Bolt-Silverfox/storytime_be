@@ -33,6 +33,7 @@ import {
 import { ReadStatus } from './dto/guest.dto';
 import { deriveReadStatus } from '@/shared/utils/read-status.util';
 import { StoryService } from '@/story/story.service';
+import { SceneReadService } from '@/story/scenes/scene-read.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { GuestActivityEvent } from './events/guest-activity.event';
 import {
@@ -58,6 +59,7 @@ export class GuestStoryController {
     private readonly guestSessionService: GuestSessionService,
     private readonly storyService: StoryService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly sceneReadService: SceneReadService,
   ) {}
 
   private validateSessionId(guestSessionId: string): void {
@@ -168,6 +170,11 @@ export class GuestStoryController {
       });
     }
 
+    const sceneExtras = await this.sceneReadService.getReadExtras(
+      story.id,
+      story.textContent,
+    );
+
     return {
       id: story.id,
       title: story.title,
@@ -183,8 +190,19 @@ export class GuestStoryController {
       ageMax: story.ageMax,
       images: story.images ?? [],
       branches: story.branches ?? [],
+      pages: sceneExtras.pages,
+      pageCount: sceneExtras.pageCount,
+      scenes: sceneExtras.scenes,
       createdAt: story.createdAt,
       updatedAt: story.updatedAt,
+      // Credit info only (null for stories without provenance). sourceId,
+      // contentHash, adaptationNotes and importedAt are never exposed.
+      attributionText: story.attributionText ?? null,
+      authorName: story.authorName ?? null,
+      licenseCode: story.licenseCode ?? null,
+      licenseUrl: story.licenseUrl ?? null,
+      sourceName: story.sourceName ?? null,
+      sourceUrl: story.sourceUrl ?? null,
     };
   }
 

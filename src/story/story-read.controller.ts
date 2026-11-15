@@ -10,7 +10,7 @@ import {
 import { AuthSessionGuard } from '@/shared/guards/auth.guard';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 
-import { CreateStoryDto, ErrorResponseDto } from './dto/story.dto';
+import { ErrorResponseDto, StoryReadResponseDto } from './dto/story.dto';
 import { StoryService } from './story.service';
 
 import {
@@ -19,6 +19,7 @@ import {
 } from '@/shared/guards/story-access.guard';
 import { CheckStoryQuota } from '@/shared/decorators/story-quota.decorator';
 import { StoryQuotaService } from './story-quota.service';
+import { SceneReadService } from './scenes/scene-read.service';
 
 @ApiTags('stories')
 @UseGuards(AuthSessionGuard)
@@ -28,6 +29,7 @@ export class StoryReadController {
   constructor(
     private readonly storyService: StoryService,
     private readonly storyQuotaService: StoryQuotaService,
+    private readonly sceneReadService: SceneReadService,
   ) {}
 
   @Get(':id')
@@ -36,7 +38,7 @@ export class StoryReadController {
   @CheckStoryQuota()
   @ApiOperation({ summary: 'Get a story by id' })
   @ApiParam({ name: 'id', type: String })
-  @ApiOkResponse({ description: 'Story', type: CreateStoryDto })
+  @ApiOkResponse({ description: 'Story', type: StoryReadResponseDto })
   @ApiResponse({
     status: 400,
     description: 'Bad Request',
@@ -75,6 +77,11 @@ export class StoryReadController {
       );
     }
 
-    return story;
+    // Additive: backend page split + approved, non-stale scene art.
+    const extras = await this.sceneReadService.getReadExtras(
+      story.id,
+      story.textContent,
+    );
+    return { ...story, ...extras };
   }
 }

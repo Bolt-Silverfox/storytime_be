@@ -48,6 +48,9 @@ export class PrismaAdminStoryRepository implements IAdminStoryRepository {
   async findStoryById(storyId: string): Promise<StoryDetail | null> {
     return this.prisma.story.findUnique({
       where: { id: storyId },
+      // Admin detail may show how a story was adapted and when it was
+      // imported; sourceId/contentHash stay hidden (global omit).
+      omit: { adaptationNotes: false, importedAt: false },
       include: {
         images: true,
         categories: true,

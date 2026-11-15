@@ -1,3 +1,4 @@
+import { StoryCreditDto } from '@/story/dto/story.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
@@ -154,7 +155,21 @@ export class GuestStoryThemeDto {
   image?: string | null;
 }
 
-export class GuestStoryResponseDto {
+export class StorySceneDto {
+  @ApiProperty({ example: 0 })
+  index: number;
+
+  @ApiProperty({ example: 0, description: '0-based first page (inclusive)' })
+  startPage: number;
+
+  @ApiProperty({ example: 2, description: '0-based last page (inclusive)' })
+  endPage: number;
+
+  @ApiProperty()
+  imageUrl: string;
+}
+
+export class GuestStoryResponseDto extends StoryCreditDto {
   @ApiProperty()
   id: string;
 
@@ -199,6 +214,28 @@ export class GuestStoryResponseDto {
 
   @ApiProperty({ type: [GuestStoryBranchDto], required: false })
   branches?: GuestStoryBranchDto[];
+
+  @ApiProperty({
+    type: [String],
+    required: false,
+    description:
+      'Backend page split of textContent (30-word, sentence-preserving, 0-based); same pages as TTS paragraphs.',
+  })
+  pages?: string[];
+
+  @ApiProperty({
+    required: false,
+    description: 'Number of pages (= pages.length).',
+  })
+  pageCount?: number;
+
+  @ApiProperty({
+    type: [StorySceneDto],
+    required: false,
+    description:
+      'Approved scene illustrations only (stale and unapproved are never returned).',
+  })
+  scenes?: StorySceneDto[];
 
   @ApiProperty()
   createdAt: Date;

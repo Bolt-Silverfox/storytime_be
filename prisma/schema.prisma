@@ -352,7 +352,21 @@ model Story {
   // SOFT DELETE FIELDS
   isDeleted             Boolean                @default(false)
   deletedAt             DateTime?
+  // PROVENANCE (all nullable; null for every pre-existing/AI-generated story).
+  // See docs/story-provenance.md. sourceId/contentHash/adaptationNotes/
+  // importedAt are internal: PrismaService omits them from reads by default.
+  sourceName            String? // gutenberg | bookdash | storyweaver | africanstorybook | community ...
+  sourceId              String? // id of the story at the source
+  sourceUrl             String?
+  licenseCode           String? // PD-US | CC0 | CC-BY-4.0 | STORYTIME_SUBMISSION_V1 ...
+  licenseUrl            String?
+  authorName            String?
+  attributionText       String? // exact credit string to display
+  adaptationNotes       String? // what we changed (internal/admin)
+  importedAt            DateTime?
+  contentHash           String? // sha256 of normalised text (dedupe)
   images                StoryImage[]
+  sceneImages           StorySceneImage[]
   branches              StoryBranch[]
   favorites             Favorite[]
   parentFavorites       ParentFavorite[]
@@ -384,7 +398,41 @@ model Story {
   @@index([recommended, isDeleted])
   @@index([ageMin, ageMax])
   @@index([isDeleted, createdAt(sort: Desc)])
+  // Postgres treats NULLs as distinct, so non-imported stories (NULL, NULL)
+  // never collide; an imported (sourceName, sourceId) pair is unique.
+  @@unique([sourceName, sourceId])
+  @@index([contentHash])
   @@map("stories")
+}
+
+// "Fetch once" cache for openly-licensed story sources. Importers read only
+// from here. The raw payload is NOT stored in the table; rawPayloadKey points
+// at the object store / file path holding it. 404s are cached too.
+model SourceCache {
+  id                  String    @id @default(uuid())
+  sourceName          String
+  sourceId            String
+  sourceUrl           String?
+  rawPayloadKey       String?
+  contentHash         String?
+  // Set when a re-fetch returned a different contentHash. Only a flag for
+  // human review: it never creates, updates or publishes a story.
+  contentChanged      Boolean   @default(false)
+  previousContentHash String?
+  httpStatus          Int
+  etag                String?
+  lastModified        String?
+  fetchedAt           DateTime  @default(now())
+  revalidateAfter     DateTime
+  licenseSnapshot     String? // licence/rights statement as captured at fetch time
+  fetchedBy           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([sourceName, sourceId])
+  @@index([revalidateAfter])
+  @@index([contentChanged])
+  @@map("source_cache")
 }
 
 model StoryImage {
@@ -402,6 +450,48 @@ model StoryImage {
   @@index([storyId])
   @@index([isDeleted])
   @@map("story_images")
+}
+
+// Per-scene illustration. A scene is a STORED range of pages (pages = the
+// backend's 30-word split of Story.textContent, 0-based, endPage inclusive).
+// Kept separate from StoryImage (no ordering, no review workflow, unused by
+// clients) so the legacy `images` payload is untouched. Only APPROVED rows with
+// an imageUrl and a matching textHash are ever served to clients.
+enum SceneImageStatus {
+  PENDING_GENERATION
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+model StorySceneImage {
+  id              String           @id @default(uuid())
+  storyId         String
+  story           Story            @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  sceneIndex      Int
+  startPage       Int
+  endPage         Int
+  // sha256 of the scene's page text at definition time; mismatch => stale
+  textHash        String
+  imageUrl        String?
+  prompt          String?
+  styleNotes      String?
+  provider        String?
+  model           String?
+  status          SceneImageStatus @default(PENDING_GENERATION)
+  // admin user id (no FK, same convention as FxRate.createdByAdminId)
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  // SOFT DELETE FIELDS
+  isDeleted       Boolean          @default(false)
+  deletedAt       DateTime?
+
+  @@unique([storyId, sceneIndex])
+  @@index([status, isDeleted, updatedAt, id])
+  @@map("story_scene_images")
 }
 
 model StoryBranch {
@@ -1323,4 +1413,16 @@ model FxRate {
   @@unique([currency, effectiveFrom])
   @@index([currency, effectiveFrom(sort: Desc)])
   @@map("fx_rates")
+}
+
+// Short-lived claim so only one process fetches a given source key. Holding a
+// lease never holds a DB connection; expiry (DB clock) frees a crashed holder.
+model SourceFetchLease {
+  sourceName String
+  sourceId   String
+  lockedBy   String
+  expiresAt  DateTime
+
+  @@id([sourceName, sourceId])
+  @@map("source_fetch_lease")
 }

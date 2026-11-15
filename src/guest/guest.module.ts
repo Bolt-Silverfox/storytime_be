@@ -4,12 +4,13 @@ import { GuestSessionController } from './guest-session.controller';
 import { GuestStoryController } from './guest-story.controller';
 import { PrismaModule } from '@/prisma/prisma.module';
 import { StoryModule } from '@/story/story.module';
+import { SceneModule } from '@/story/scenes/scene.module';
 import { GuestActivityListener } from './listeners/guest-activity.listener';
 import { GUEST_REPOSITORY } from './repositories/guest.repository.interface';
 import { PrismaGuestRepository } from './repositories/prisma-guest.repository';
 
 @Module({
-  imports: [PrismaModule, forwardRef(() => StoryModule)],
+  imports: [PrismaModule, forwardRef(() => StoryModule), SceneModule],
   controllers: [GuestSessionController, GuestStoryController],
   providers: [
     GuestSessionService,

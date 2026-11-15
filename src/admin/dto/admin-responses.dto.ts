@@ -1,4 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { StoryCreditDto } from '@/story/dto/story.dto';
 
 // Nested type definitions for DTOs
 export class ProfileInfo {
@@ -8,10 +9,15 @@ export class ProfileInfo {
   @ApiProperty({ example: false, required: false })
   explicitContent?: boolean;
 
-  @ApiProperty({ example: 120, required: false, nullable: true })
+  @ApiProperty({ type: Number, example: 120, required: false, nullable: true })
   maxScreenTimeMins?: number | null;
 
-  @ApiProperty({ example: 'english', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'english',
+    required: false,
+    nullable: true,
+  })
   language?: string | null;
 
   @ApiProperty({ example: 'US', required: false })
@@ -28,7 +34,12 @@ export class AvatarInfo {
   @ApiProperty({ example: 'avatar-123' })
   id: string;
 
-  @ApiProperty({ example: 'Default Avatar', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'Default Avatar',
+    required: false,
+    nullable: true,
+  })
   name?: string | null;
 
   @ApiProperty({ example: 'https://example.com/avatar.png' })
@@ -37,7 +48,12 @@ export class AvatarInfo {
   @ApiProperty({ example: true, required: false })
   isSystemAvatar?: boolean;
 
-  @ApiProperty({ example: 'cloudinary-id', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'cloudinary-id',
+    required: false,
+    nullable: true,
+  })
   publicId?: string | null;
 
   @ApiProperty({ example: '2023-10-01T12:00:00Z', required: false })
@@ -48,10 +64,15 @@ export class KidInfo {
   @ApiProperty({ example: 'kid-123' })
   id: string;
 
-  @ApiProperty({ example: 'Emma Doe', nullable: true })
+  @ApiProperty({ type: String, example: 'Emma Doe', nullable: true })
   name: string | null;
 
-  @ApiProperty({ example: '6-8', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: '6-8',
+    required: false,
+    nullable: true,
+  })
   ageRange?: string | null;
 
   @ApiProperty({ example: '2023-10-05T12:00:00Z' })
@@ -75,6 +96,7 @@ export class SubscriptionInfo {
   startedAt: Date;
 
   @ApiProperty({
+    type: Date,
     example: '2023-11-01T12:00:00Z',
     required: false,
     nullable: true,
@@ -107,6 +129,7 @@ export class StoryImageInfo {
   url: string;
 
   @ApiProperty({
+    type: String,
     example: 'Story cover image',
     required: false,
     nullable: true,
@@ -135,22 +158,43 @@ export class StoryBranchInfo {
   id: string;
 
   @ApiProperty({
+    type: String,
     example: 'What happens next?',
     required: false,
     nullable: true,
   })
   prompt?: string | null;
 
-  @ApiProperty({ example: 'Go left', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'Go left',
+    required: false,
+    nullable: true,
+  })
   optionA?: string | null;
 
-  @ApiProperty({ example: 'Go right', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'Go right',
+    required: false,
+    nullable: true,
+  })
   optionB?: string | null;
 
-  @ApiProperty({ example: 'next-branch-a', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'next-branch-a',
+    required: false,
+    nullable: true,
+  })
   nextA?: string | null;
 
-  @ApiProperty({ example: 'next-branch-b', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'next-branch-b',
+    required: false,
+    nullable: true,
+  })
   nextB?: string | null;
 }
 
@@ -175,7 +219,12 @@ export class UserBasicInfo {
   @ApiProperty({ example: 'parent@example.com' })
   email: string;
 
-  @ApiProperty({ example: 'John Doe', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    example: 'John Doe',
+    required: false,
+    nullable: true,
+  })
   name?: string | null;
 }
 
@@ -970,6 +1019,7 @@ export class UserDetailDto {
   avatar: AvatarInfo | null;
 
   @ApiProperty({
+    type: () => SubscriptionInfo,
     description: 'User subscription',
     nullable: true,
     example: {
@@ -1017,7 +1067,22 @@ export class UserDetailDto {
   };
 }
 
-export class StoryDetailDto {
+export class StoryDetailDto extends StoryCreditDto {
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Admin only: what Storytime changed from the source text',
+    example: 'Shortened for ages 3-5; AI-assisted rewrite of paragraph 2',
+  })
+  adaptationNotes?: string | null;
+
+  @ApiPropertyOptional({
+    type: Date,
+    nullable: true,
+    description: 'Admin only: when the story was imported',
+  })
+  importedAt?: Date | null;
+
   @ApiProperty({ description: 'Story ID', example: 'story-123' })
   id: string;
 
@@ -1308,6 +1373,7 @@ export class SubscriptionDto {
   isComplimentary: boolean;
 
   @ApiProperty({
+    type: String,
     description: 'Admin user id who granted it (admin_grant only)',
     nullable: true,
     example: null,
@@ -1315,6 +1381,7 @@ export class SubscriptionDto {
   grantedByAdminId: string | null;
 
   @ApiProperty({
+    type: String,
     description: 'Name of the granting admin, when still resolvable',
     nullable: true,
     example: null,
@@ -1322,6 +1389,7 @@ export class SubscriptionDto {
   grantedByAdminName: string | null;
 
   @ApiProperty({
+    type: String,
     description: 'Reason given for the grant (admin_grant only)',
     nullable: true,
     example: null,
@@ -1460,7 +1528,7 @@ export class UserListItemDto {
   @ApiProperty({ example: 'parent@example.com' })
   email: string;
 
-  @ApiProperty({ example: 'John Doe', nullable: true })
+  @ApiProperty({ type: String, example: 'John Doe', nullable: true })
   name: string | null;
 
   @ApiProperty({ example: 'parent' })
@@ -1478,7 +1546,7 @@ export class UserListItemDto {
   @ApiProperty({ example: '2023-10-15T10:30:00Z' })
   updatedAt: Date;
 
-  @ApiProperty({ example: null, required: false, nullable: true })
+  @ApiProperty({ type: Date, example: null, required: false, nullable: true })
   deletedAt?: Date | null;
 
   @ApiProperty({ example: '2023-10-01T12:00:00Z' })
@@ -1546,7 +1614,7 @@ export class StoryListItemDto {
   @ApiProperty({ example: 'https://example.com/cover.png' })
   coverImageUrl: string;
 
-  @ApiProperty({ example: null, required: false, nullable: true })
+  @ApiProperty({ type: String, example: null, required: false, nullable: true })
   audioUrl?: string | null;
 
   @ApiProperty({ example: true })
@@ -1614,7 +1682,7 @@ export class AdminCreatedDto {
   @ApiProperty({ example: 'admin@storytime.com' })
   email: string;
 
-  @ApiProperty({ example: 'Super Admin', nullable: true })
+  @ApiProperty({ type: String, example: 'Super Admin', nullable: true })
   name: string | null;
 
   @ApiProperty({ example: 'admin' })
@@ -1632,7 +1700,7 @@ export class UserUpdatedDto {
   @ApiProperty({ example: 'updated@example.com' })
   email: string;
 
-  @ApiProperty({ example: 'Updated Name', nullable: true })
+  @ApiProperty({ type: String, example: 'Updated Name', nullable: true })
   name: string | null;
 
   @ApiProperty({ example: 'parent' })
@@ -1659,7 +1727,7 @@ export class StoryActionResultDto {
   @ApiProperty({ example: false })
   isDeleted: boolean;
 
-  @ApiProperty({ example: null, nullable: true })
+  @ApiProperty({ type: Date, example: null, nullable: true })
   deletedAt: Date | null;
 
   @ApiProperty({ example: '2023-10-15T10:30:00Z' })
