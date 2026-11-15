@@ -79,16 +79,16 @@ docker run -d --rm --name postgres --network wpnet -e POSTGRES_USER=postgres \
 docker run -d --rm --name redis --network wpnet redis:7-alpine
 
 docker run --rm --network wpnet --memory 3g -v "$PWD":/w -w /w \
-  -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
-  -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/storytime_test \
-  -e REDIS_URL=redis://redis:6379 node:24.22.1-bookworm sh -c '
+  --env-file ci/woodpecker/ci.env -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+  node:24.22.1-bookworm sh -c '
     corepack enable && corepack prepare pnpm@10.15.1 --activate &&
     pnpm install --frozen-lockfile --ignore-scripts && pnpm db:generate &&
-    cp ci/woodpecker/ci.env .env && pnpm db:migrate:deploy &&
+    pnpm db:migrate:deploy &&
     NODE_OPTIONS=--max-old-space-size=2048 pnpm test --maxWorkers=1'
 ```
 
-The `.env` this writes is gitignored. Lint the pipeline files themselves with
+The synthetic values are passed with `--env-file`, so an existing `.env` in your
+checkout is never overwritten. Lint the pipeline files themselves with
 `docker run --rm -v "$PWD":/w -w /w woodpeckerci/woodpecker-cli:v3.18.1 lint .woodpecker/`.
 
 ## Memory
