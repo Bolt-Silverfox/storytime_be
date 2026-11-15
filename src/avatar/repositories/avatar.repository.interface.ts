@@ -44,7 +44,10 @@ export interface IAvatarRepository {
   hardDelete(id: string): Promise<Avatar>;
   restore(id: string): Promise<Avatar>;
 
-  retireAvatarIfUnreferenced(avatarId: string): Promise<string | null>;
+  retireAvatarIfUnreferenced(
+    avatarId: string,
+    expectedPublicId?: string,
+  ): Promise<string | null>;
 
   // Usage counts for validation
   countUsersUsingAvatar(avatarId: string): Promise<number>;

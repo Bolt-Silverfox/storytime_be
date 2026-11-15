@@ -124,7 +124,10 @@ describe('AvatarService custom avatar replacement', () => {
         });
         repo.retireAvatarIfUnreferenced.mockResolvedValue('new-asset');
         await expect(run()).rejects.toBe(failure);
-        expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledWith('row');
+        expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledWith(
+          'row',
+          'new-asset',
+        );
         expect(upload.deleteImage).toHaveBeenCalledWith('old-asset');
         expect(upload.deleteImage).toHaveBeenCalledWith('new-asset');
       });

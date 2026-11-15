@@ -219,7 +219,7 @@ export class PrismaUserRepository implements IUserRepository {
     publicId: string,
   ): Promise<{ user: UserWithAvatar; retiredPublicId: string | null }> {
     return this.prisma.$transaction(async (tx) => {
-      // Fetch current avatar so we can retire it after assigning the new one
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
       const user = await tx.user.findUnique({
         where: { id: userId, isDeleted: false },
         select: { avatarId: true },

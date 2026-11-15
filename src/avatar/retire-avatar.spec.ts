@@ -29,8 +29,8 @@ describe('retireAvatarIfUnreferenced', () => {
     };
     return { tx, calls };
   };
-  const retire = (tx: unknown) =>
-    retireAvatarIfUnreferenced(tx as never, 'old');
+  const retire = (tx: unknown, expectedPublicId?: string) =>
+    retireAvatarIfUnreferenced(tx as never, 'old', expectedPublicId);
 
   it('locks the avatar row before counting and deleting', async () => {
     const { tx, calls } = build(
@@ -67,5 +67,17 @@ describe('retireAvatarIfUnreferenced', () => {
   it('returns null for an avatar that has no stored asset', async () => {
     const { tx } = build({ publicId: null, isSystemAvatar: false }, 0, 0);
     await expect(retire(tx)).resolves.toBeNull();
+  });
+
+  it('retires the row when it still holds the expected asset', async () => {
+    const { tx } = build({ publicId: 'asset', isSystemAvatar: false }, 0, 0);
+    await expect(retire(tx, 'asset')).resolves.toBe('asset');
+    expect(tx.avatar.deleteMany).toHaveBeenCalled();
+  });
+
+  it('keeps a row another upload has since replaced with a different asset', async () => {
+    const { tx } = build({ publicId: 'p2', isSystemAvatar: false }, 0, 0);
+    await expect(retire(tx, 'p1')).resolves.toBeNull();
+    expect(tx.avatar.deleteMany).not.toHaveBeenCalled();
   });
 });

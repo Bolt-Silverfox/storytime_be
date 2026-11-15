@@ -74,16 +74,19 @@ export class AvatarService {
   }
 
   private async releaseAfterFailedAssignment(replaced: {
-    avatar: { id: string };
+    avatar: { id: string; publicId: string | null };
     displacedPublicId: string | null;
   }) {
     try {
       if (replaced.displacedPublicId) {
         await this.uploadService.deleteImage(replaced.displacedPublicId);
       }
-      const orphan = await this.avatarRepository.retireAvatarIfUnreferenced(
-        replaced.avatar.id,
-      );
+      const orphan = replaced.avatar.publicId
+        ? await this.avatarRepository.retireAvatarIfUnreferenced(
+            replaced.avatar.id,
+            replaced.avatar.publicId,
+          )
+        : null;
       if (orphan) await this.uploadService.deleteImage(orphan);
     } catch (error) {
       this.logger.warn('Failed to release unattached avatar upload:', error);

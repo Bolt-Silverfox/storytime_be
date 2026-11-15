@@ -7,11 +7,10 @@ describe('MAX_USER_UPLOAD_BYTES', () => {
     let value = 0;
     try {
       jest.isolateModules(() => {
-        value = (
-          jest.requireActual('./upload.constants') as {
-            MAX_USER_UPLOAD_BYTES: number;
-          }
-        ).MAX_USER_UPLOAD_BYTES;
+        value =
+          jest.requireActual<typeof import('./upload.constants')>(
+            './upload.constants',
+          ).MAX_USER_UPLOAD_BYTES;
       });
     } finally {
       if (saved === undefined) delete process.env.MAX_USER_UPLOAD_BYTES;

@@ -11,12 +11,18 @@ describe('PrismaUserRepository.createAndAssignAvatar', () => {
   ) => {
     const calls: string[] = [];
     const tx = {
-      $queryRaw: jest.fn(() => {
-        calls.push('lock');
-        return Promise.resolve(oldRow ? [oldRow] : []);
+      $queryRaw: jest.fn((strings: TemplateStringsArray) => {
+        const isUserLock = strings.join('?').includes('FROM users');
+        calls.push(isUserLock ? 'lockUser' : 'lock');
+        return Promise.resolve(
+          isUserLock ? [{ id: 'u1' }] : oldRow ? [oldRow] : [],
+        );
       }),
       user: {
-        findUnique: jest.fn().mockResolvedValue({ avatarId: 'old' }),
+        findUnique: jest.fn(() => {
+          calls.push('readAvatarId');
+          return Promise.resolve({ avatarId: 'old' });
+        }),
         update: jest.fn(() => {
           calls.push('assign');
           return Promise.resolve({ id: 'u1', avatarId: 'new' });
@@ -51,7 +57,21 @@ describe('PrismaUserRepository.createAndAssignAvatar', () => {
   it('locks and counts only after the owner has been moved to the new avatar', async () => {
     const { repo, calls } = build(0, 0);
     await repo.createAndAssignAvatar('u1', 'url', 'pid');
-    expect(calls).toEqual(['assign', 'lock', 'count']);
+    expect(calls).toEqual([
+      'lockUser',
+      'readAvatarId',
+      'assign',
+      'lock',
+      'count',
+    ]);
+  });
+
+  it('locks the user row before reading the avatar it will displace', async () => {
+    const { repo, calls } = build(0, 0);
+    await repo.createAndAssignAvatar('u1', 'url', 'pid');
+    expect(calls.indexOf('lockUser')).toBeLessThan(
+      calls.indexOf('readAvatarId'),
+    );
   });
 
   it.each([

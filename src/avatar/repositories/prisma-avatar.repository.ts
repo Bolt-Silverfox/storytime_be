@@ -159,9 +159,12 @@ export class PrismaAvatarRepository implements IAvatarRepository {
   }
 
   // Usage counts
-  retireAvatarIfUnreferenced(avatarId: string): Promise<string | null> {
+  retireAvatarIfUnreferenced(
+    avatarId: string,
+    expectedPublicId?: string,
+  ): Promise<string | null> {
     return this.prisma.$transaction((tx) =>
-      retireAvatarIfUnreferenced(tx, avatarId),
+      retireAvatarIfUnreferenced(tx, avatarId, expectedPublicId),
     );
   }
 
