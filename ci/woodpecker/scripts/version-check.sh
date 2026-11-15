@@ -13,8 +13,9 @@
 #
 # Differences from the GitHub job: a package.json that is a symlink at the base
 # commit is not followed (its content then reads as "no version", so the tag
-# check runs, which fails closed); the base is the target branch tip, because
-# Woodpecker checks out the PR head, not a merge commit.
+# check runs, which fails closed); the base is the merge base with the target
+# branch, so a version bump that landed only on the target is not read as this
+# PR's change (Woodpecker checks out the PR head, not a merge commit).
 set -euo pipefail
 
 TAG_PREFIX="${TAG_PREFIX:-v}"
@@ -67,13 +68,16 @@ fi
 BASE=""
 for ref in "refs/remotes/origin/$TARGET" "origin/$TARGET" "refs/heads/$TARGET"; do
   if [ -n "$TARGET" ] && git rev-parse -q --verify "${ref}^{commit}" >/dev/null 2>&1; then
-    BASE=$(git rev-parse "${ref}^{commit}")
+    if ! BASE=$(git merge-base "${ref}^{commit}" HEAD); then
+      echo "ERROR: no merge base between '$TARGET' and HEAD; failing closed." >&2
+      exit 1
+    fi
     break
   fi
 done
 
 if [ -n "$BASE" ]; then
-  echo "Comparing against the target branch '$TARGET' at $BASE."
+  echo "Comparing against the merge base with '$TARGET' at $BASE."
   BASE_DECL=$(git show "$BASE:package.json" 2>/dev/null | node -e '
 let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
   let v = null; try { const j = JSON.parse(s); v = j.version === undefined ? null : j.version; } catch (e) {}
