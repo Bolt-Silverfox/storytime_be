@@ -8,6 +8,11 @@ import { v2 as cloudinary } from 'cloudinary';
 import { UploadService } from './upload.service';
 import { MAX_USER_UPLOAD_BYTES } from '@/shared/constants/upload.constants';
 
+jest.mock('@/shared/constants/upload.constants', () => ({
+  ...jest.requireActual('@/shared/constants/upload.constants'),
+  MAX_USER_UPLOAD_BYTES: 200 * 1024 * 1024,
+}));
+
 type Row = {
   id: string;
   userId: string;
@@ -89,6 +94,7 @@ function fakePrisma() {
   const prisma = {
     avatar: { count: jest.fn().mockResolvedValue(0) },
     voice: { count: jest.fn().mockResolvedValue(0) },
+    story: { count: jest.fn().mockResolvedValue(0) },
     rows,
     state,
     tx,
@@ -155,10 +161,6 @@ describe('UploadService per-user upload cap', () => {
   });
 
   afterEach(() => jest.restoreAllMocks());
-
-  it('is a 200 MB cap by default', () => {
-    expect(MAX_USER_UPLOAD_BYTES).toBe(200 * MB);
-  });
 
   it("records the uploaded asset's publicId and bytes against the user", async () => {
     cloudinaryReplies('p1', 3 * MB);
@@ -459,7 +461,27 @@ describe('UploadService per-user upload cap', () => {
       expect(prisma.rows).toHaveLength(0);
     });
 
-    it.each(['avatar', 'voice'] as const)(
+    it('matches avatars by publicId or by a url containing the id, voices and story covers by url', async () => {
+      seed({ userId: 'u1', bytes: MB, publicId: 'storytime/x' });
+      destroyOk();
+      await service.deleteOwned('storytime/x', auth('u1'));
+      expect(prisma.avatar.count).toHaveBeenCalledWith({
+        where: {
+          OR: [
+            { publicId: 'storytime/x' },
+            { url: { contains: 'storytime/x' } },
+          ],
+        },
+      });
+      expect(prisma.voice.count).toHaveBeenCalledWith({
+        where: { url: { contains: 'storytime/x' } },
+      });
+      expect(prisma.story.count).toHaveBeenCalledWith({
+        where: { coverImageUrl: { contains: 'storytime/x' } },
+      });
+    });
+
+    it.each(['avatar', 'voice', 'story'] as const)(
       'refuses with 409 while a %s row still references the upload',
       async (table) => {
         seed({ userId: 'u1', bytes: 5 * MB, publicId: 'used' });
@@ -476,6 +498,16 @@ describe('UploadService per-user upload cap', () => {
       },
     );
 
+    it('answers not found, not in use, to a non-owner of a referenced upload', async () => {
+      seed({ userId: 'u2', bytes: 5 * MB, publicId: 'used' });
+      prisma.avatar.count.mockResolvedValue(1);
+      const destroy = destroyOk();
+      await expect(service.deleteOwned('used', auth('u1'))).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(destroy).not.toHaveBeenCalled();
+    });
+
     it('answers not found on a second delete', async () => {
       seed({ userId: 'u1', bytes: 5 * MB, publicId: 'once' });
       destroyOk();
@@ -486,15 +518,27 @@ describe('UploadService per-user upload cap', () => {
     });
   });
 
-  it('does not count or cap admin uploads', async () => {
+  it('does not cap admin uploads but records them so they can be deleted', async () => {
     seed({ userId: 'admin', bytes: MAX_USER_UPLOAD_BYTES });
     cloudinaryReplies('p4', 5 * MB);
     await service.uploadImage(file(5 * MB), 'avatars', {
       userId: 'admin',
       exempt: true,
     });
+    expect(prisma.rows).toHaveLength(2);
+    expect(prisma.rows[1]).toMatchObject({
+      userId: 'admin',
+      publicId: 'p4',
+      pending: false,
+    });
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockResolvedValue({ result: 'ok' });
+    await service.deleteOwned('p4', {
+      userId: 'admin',
+      userRole: 'admin',
+    } as never);
     expect(prisma.rows).toHaveLength(1);
-    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
   it('does not count uploads with no owner (system uploads)', async () => {

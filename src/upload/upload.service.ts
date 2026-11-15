@@ -57,8 +57,12 @@ export class UploadService {
     incomingBytes: number,
     upload: () => Promise<UploadApiResponse>,
   ): Promise<UploadApiResponse> {
-    if (!owner || owner.exempt) return upload();
-    const reservationId = await this.reserve(owner.userId, incomingBytes);
+    if (!owner) return upload();
+    const reservationId = await this.reserve(
+      owner.userId,
+      incomingBytes,
+      !!owner.exempt,
+    );
     let result: UploadApiResponse;
     try {
       result = await upload();
@@ -108,6 +112,7 @@ export class UploadService {
   private async reserve(
     userId: string,
     incomingBytes: number,
+    exempt: boolean,
   ): Promise<string> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user_upload:${userId}`}))`;
@@ -122,7 +127,10 @@ export class UploadService {
         where: { userId },
         _sum: { bytes: true },
       });
-      if ((_sum.bytes ?? 0) + incomingBytes > MAX_USER_UPLOAD_BYTES) {
+      if (
+        !exempt &&
+        (_sum.bytes ?? 0) + incomingBytes > MAX_USER_UPLOAD_BYTES
+      ) {
         throw new PayloadTooLargeException({
           statusCode: 413,
           error: UPLOAD_QUOTA_EXCEEDED,
@@ -286,11 +294,18 @@ export class UploadService {
     if (!row || (row.userId !== auth.userId && auth.userRole !== 'admin')) {
       throw new NotFoundException('Upload not found');
     }
-    const [avatars, voices] = await Promise.all([
-      this.prisma.avatar.count({ where: { publicId } }),
+    const [avatars, voices, stories] = await Promise.all([
+      this.prisma.avatar.count({
+        where: {
+          OR: [{ publicId }, { url: { contains: publicId } }],
+        },
+      }),
       this.prisma.voice.count({ where: { url: { contains: publicId } } }),
+      this.prisma.story.count({
+        where: { coverImageUrl: { contains: publicId } },
+      }),
     ]);
-    if (avatars + voices > 0) {
+    if (avatars + voices + stories > 0) {
       throw new ConflictException('This upload is still in use');
     }
     await this.deleteImage(publicId);

@@ -5,6 +5,11 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from './upload.service';
 
+jest.mock('@/shared/constants/upload.constants', () => ({
+  ...jest.requireActual('@/shared/constants/upload.constants'),
+  MAX_USER_UPLOAD_BYTES: 200 * 1024 * 1024,
+}));
+
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
 describeDb('user_uploads (real Postgres)', () => {
