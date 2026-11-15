@@ -103,6 +103,39 @@ describe('AvatarService custom avatar replacement', () => {
       expect(upload.deleteImage).toHaveBeenCalledWith('p1');
     });
 
+    describe('when destroying the displaced asset fails', () => {
+      beforeEach(() => {
+        repo.replaceByName.mockResolvedValue({
+          avatar: { id: 'new', publicId: 'new-asset' },
+          displacedPublicId: 'disp',
+        });
+        upload.deleteImage.mockImplementation((id: string) =>
+          id === 'disp'
+            ? Promise.reject(new Error('cdn down'))
+            : Promise.resolve(),
+        );
+      });
+
+      it('still retires and destroys the previous avatar after a successful assignment', async () => {
+        await run();
+        expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledWith('old');
+        expect(upload.deleteImage).toHaveBeenCalledWith('old-asset');
+      });
+
+      it('still retires and destroys the unattached avatar after a failed assignment', async () => {
+        const failure = new Error('db down');
+        repo.updateUserAvatar.mockRejectedValue(failure);
+        repo.updateKidAvatar.mockRejectedValue(failure);
+        repo.retireAvatarIfUnreferenced.mockResolvedValue('new-asset');
+        await expect(run()).rejects.toBe(failure);
+        expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledWith(
+          'new',
+          'new-asset',
+        );
+        expect(upload.deleteImage).toHaveBeenCalledWith('new-asset');
+      });
+    });
+
     it('does nothing for a displaced asset when the upsert displaced none', async () => {
       repo.retireAvatarIfUnreferenced.mockResolvedValue(null);
       await run();

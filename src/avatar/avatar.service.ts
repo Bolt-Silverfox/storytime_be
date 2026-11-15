@@ -73,14 +73,21 @@ export class AvatarService {
     }
   }
 
+  private async destroyDisplaced(publicId: string | null) {
+    if (!publicId) return;
+    try {
+      await this.uploadService.deleteImage(publicId);
+    } catch (error) {
+      this.logger.warn('Failed to delete displaced avatar upload:', error);
+    }
+  }
+
   private async releaseAfterFailedAssignment(replaced: {
     avatar: { id: string; publicId: string | null };
     displacedPublicId: string | null;
   }) {
+    await this.destroyDisplaced(replaced.displacedPublicId);
     try {
-      if (replaced.displacedPublicId) {
-        await this.uploadService.deleteImage(replaced.displacedPublicId);
-      }
       const orphan = replaced.avatar.publicId
         ? await this.avatarRepository.retireAvatarIfUnreferenced(
             replaced.avatar.id,
@@ -101,10 +108,8 @@ export class AvatarService {
     } | null,
     replaced: { avatar: { id: string }; displacedPublicId: string | null },
   ) {
+    await this.destroyDisplaced(replaced.displacedPublicId);
     try {
-      if (replaced.displacedPublicId) {
-        await this.uploadService.deleteImage(replaced.displacedPublicId);
-      }
       if (
         previous &&
         !previous.isSystemAvatar &&
