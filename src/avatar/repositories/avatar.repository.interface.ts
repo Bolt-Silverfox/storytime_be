@@ -79,6 +79,13 @@ export interface IAvatarRepository {
     kidId: string,
     avatarId: string,
   ): Promise<Kid & { avatar: Avatar | null }>;
+  replaceKidAvatar(
+    kidId: string,
+    avatarId: string,
+  ): Promise<{
+    kid: Kid & { avatar: Avatar | null };
+    previous: Avatar | null;
+  }>;
 }
 
 export const AVATAR_REPOSITORY = Symbol('AVATAR_REPOSITORY');

@@ -401,10 +401,6 @@ export class AvatarService {
       throw new NotFoundException('Kid not found');
     }
 
-    const previous = kid.avatarId
-      ? await this.avatarRepository.findById(kid.avatarId)
-      : null;
-
     const replaced = await this.handleCustomAvatarUpload(
       kidId,
       'kid',
@@ -413,9 +409,9 @@ export class AvatarService {
       owner,
     );
 
-    let updated;
+    let assigned;
     try {
-      updated = await this.avatarRepository.updateKidAvatar(
+      assigned = await this.avatarRepository.replaceKidAvatar(
         kidId,
         replaced.avatar.id,
       );
@@ -423,7 +419,7 @@ export class AvatarService {
       await this.releaseAfterFailedAssignment(replaced);
       throw error;
     }
-    await this.releaseReplacedAvatar(previous, replaced);
-    return updated;
+    await this.releaseReplacedAvatar(assigned.previous, replaced);
+    return assigned.kid;
   }
 }

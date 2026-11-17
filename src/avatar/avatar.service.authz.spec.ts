@@ -21,6 +21,9 @@ describe('AvatarService user responses', () => {
     replaceUserAvatar: jest
       .fn()
       .mockResolvedValue({ user: row, previous: null }),
+    replaceKidAvatar: jest
+      .fn()
+      .mockResolvedValue({ kid: { id: 'k1' }, previous: null }),
     create: jest.fn().mockResolvedValue({ id: 'a2' }),
     findKidWithAvatar: jest
       .fn()

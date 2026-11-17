@@ -14,7 +14,7 @@ describe('AvatarService custom avatar replacement', () => {
     findById: jest.fn(),
     replaceByName: jest.fn(),
     replaceUserAvatar: jest.fn(),
-    updateKidAvatar: jest.fn(),
+    replaceKidAvatar: jest.fn(),
     retireAvatarIfUnreferenced: jest.fn(),
   };
   const upload = { uploadImage: jest.fn(), deleteImage: jest.fn() };
@@ -46,9 +46,9 @@ describe('AvatarService custom avatar replacement', () => {
       order.push('assign');
       return Promise.resolve({ user: { id: 'u1' }, previous: previousRow() });
     });
-    repo.updateKidAvatar.mockImplementation(() => {
+    repo.replaceKidAvatar.mockImplementation(() => {
       order.push('assign');
-      return Promise.resolve({ id: 'k1' });
+      return Promise.resolve({ kid: { id: 'k1' }, previous: previousRow() });
     });
     repo.retireAvatarIfUnreferenced.mockImplementation(() => {
       order.push('retire');
@@ -129,7 +129,7 @@ describe('AvatarService custom avatar replacement', () => {
       it('still retires and destroys the unattached avatar after a failed assignment', async () => {
         const failure = new Error('db down');
         repo.replaceUserAvatar.mockRejectedValue(failure);
-        repo.updateKidAvatar.mockRejectedValue(failure);
+        repo.replaceKidAvatar.mockRejectedValue(failure);
         repo.retireAvatarIfUnreferenced.mockResolvedValue('new-asset');
         await expect(run()).rejects.toBe(failure);
         expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledWith(
@@ -150,7 +150,7 @@ describe('AvatarService custom avatar replacement', () => {
       const failure = new Error('db down');
       const failAssign = () => {
         repo.replaceUserAvatar.mockRejectedValue(failure);
-        repo.updateKidAvatar.mockRejectedValue(failure);
+        repo.replaceKidAvatar.mockRejectedValue(failure);
       };
 
       it('rethrows, destroys the displaced asset and the unattached new asset', async () => {
@@ -208,6 +208,18 @@ describe('AvatarService custom avatar replacement', () => {
     expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledTimes(1);
     expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledWith('raced');
     expect(upload.deleteImage).toHaveBeenCalledWith('raced-asset');
+  });
+
+  it('retires the kid avatar displaced at assignment time, not the one read before the upload', async () => {
+    previousAvatar = {
+      id: 'raced',
+      publicId: 'raced-asset',
+      isSystemAvatar: false,
+    };
+    repo.retireAvatarIfUnreferenced.mockResolvedValue('raced-asset');
+    await service.uploadAndAssignKidAvatar('k1', file);
+    expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledTimes(1);
+    expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledWith('raced');
   });
 
   it('concurrent uploads by one user each destroy only the asset they displaced', async () => {
