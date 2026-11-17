@@ -306,6 +306,32 @@ describe('UploadService per-user upload cap', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('p8'));
   });
 
+  it('keeps the asset recorded and counted when the compensating destroy fails', async () => {
+    cloudinaryReplies('p11', MB);
+    prisma.userUpload.update.mockRejectedValueOnce(new Error('db down'));
+    jest
+      .spyOn(cloudinary.uploader, 'destroy')
+      .mockRejectedValue(new Error('cdn down'));
+    jest
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+    await expect(
+      service.uploadImage(file(MB), 'avatars', { userId: 'u1' }),
+    ).rejects.toThrow('db down');
+    expect(prisma.rows).toEqual([
+      expect.objectContaining({
+        userId: 'u1',
+        publicId: 'p11',
+        resourceType: 'image',
+        bytes: MB,
+        pending: false,
+      }),
+    ]);
+  });
+
   it('deletes a non-image asset with its resource type and frees the row', async () => {
     seed({ userId: 'u1', bytes: 4 * MB, publicId: 'voice-1' });
     const destroy = jest

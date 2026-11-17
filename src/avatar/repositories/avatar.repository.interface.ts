@@ -63,6 +63,14 @@ export interface IAvatarRepository {
     avatarId: string,
   ): Promise<User & { avatar: Avatar | null }>;
 
+  replaceUserAvatar(
+    userId: string,
+    avatarId: string,
+  ): Promise<{
+    user: User & { avatar: Avatar | null };
+    previous: Avatar | null;
+  }>;
+
   findKidById(kidId: string): Promise<Kid | null>;
   findKidWithAvatar(
     kidId: string,

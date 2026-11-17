@@ -201,6 +201,28 @@ export class PrismaAvatarRepository implements IAvatarRepository {
     });
   }
 
+  replaceUserAvatar(
+    userId: string,
+    avatarId: string,
+  ): Promise<{
+    user: User & { avatar: Avatar | null };
+    previous: Avatar | null;
+  }> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const current = await tx.user.findUnique({
+        where: { id: userId },
+        select: { avatar: true },
+      });
+      const user = await tx.user.update({
+        where: { id: userId },
+        data: { avatarId },
+        include: { avatar: true },
+      });
+      return { user, previous: current?.avatar ?? null };
+    });
+  }
+
   // Kid avatar operations
   async findKidById(kidId: string): Promise<Kid | null> {
     return this.prisma.kid.findUnique({ where: { id: kidId } });

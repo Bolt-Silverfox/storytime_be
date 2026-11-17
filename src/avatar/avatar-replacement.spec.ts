@@ -13,16 +13,19 @@ describe('AvatarService custom avatar replacement', () => {
     findKidWithAvatar: jest.fn(),
     findById: jest.fn(),
     replaceByName: jest.fn(),
-    updateUserAvatar: jest.fn(),
+    replaceUserAvatar: jest.fn(),
     updateKidAvatar: jest.fn(),
     retireAvatarIfUnreferenced: jest.fn(),
   };
   const upload = { uploadImage: jest.fn(), deleteImage: jest.fn() };
   const service = new AvatarService(repo as never, upload as never);
   const file = {} as never;
+  let previousAvatar: typeof oldRow | null = oldRow;
+  const previousRow = () => previousAvatar;
 
   beforeEach(() => {
     jest.resetAllMocks();
+    previousAvatar = oldRow;
     order.length = 0;
     repo.findUserWithAvatar.mockResolvedValue({
       id: 'u1',
@@ -39,9 +42,9 @@ describe('AvatarService custom avatar replacement', () => {
       avatar: { id: 'new', publicId: 'new-asset' },
       displacedPublicId: null,
     });
-    repo.updateUserAvatar.mockImplementation(() => {
+    repo.replaceUserAvatar.mockImplementation(() => {
       order.push('assign');
-      return Promise.resolve({ id: 'u1' });
+      return Promise.resolve({ user: { id: 'u1' }, previous: previousRow() });
     });
     repo.updateKidAvatar.mockImplementation(() => {
       order.push('assign');
@@ -94,6 +97,7 @@ describe('AvatarService custom avatar replacement', () => {
 
     it('destroys the displaced asset even when the previous avatar is a system avatar', async () => {
       repo.findById.mockResolvedValue({ ...oldRow, isSystemAvatar: true });
+      previousAvatar = { ...oldRow, isSystemAvatar: true };
       repo.replaceByName.mockResolvedValue({
         avatar: { id: 'named-row', publicId: 'new-asset' },
         displacedPublicId: 'p1',
@@ -124,7 +128,7 @@ describe('AvatarService custom avatar replacement', () => {
 
       it('still retires and destroys the unattached avatar after a failed assignment', async () => {
         const failure = new Error('db down');
-        repo.updateUserAvatar.mockRejectedValue(failure);
+        repo.replaceUserAvatar.mockRejectedValue(failure);
         repo.updateKidAvatar.mockRejectedValue(failure);
         repo.retireAvatarIfUnreferenced.mockResolvedValue('new-asset');
         await expect(run()).rejects.toBe(failure);
@@ -145,7 +149,7 @@ describe('AvatarService custom avatar replacement', () => {
     describe('when assigning the new avatar fails', () => {
       const failure = new Error('db down');
       const failAssign = () => {
-        repo.updateUserAvatar.mockRejectedValue(failure);
+        repo.replaceUserAvatar.mockRejectedValue(failure);
         repo.updateKidAvatar.mockRejectedValue(failure);
       };
 
@@ -180,6 +184,7 @@ describe('AvatarService custom avatar replacement', () => {
 
     it('does not touch a system avatar', async () => {
       repo.findById.mockResolvedValue({ ...oldRow, isSystemAvatar: true });
+      previousAvatar = { ...oldRow, isSystemAvatar: true };
       await run();
       expect(repo.retireAvatarIfUnreferenced).not.toHaveBeenCalled();
       expect(upload.deleteImage).not.toHaveBeenCalled();
@@ -189,6 +194,20 @@ describe('AvatarService custom avatar replacement', () => {
       upload.deleteImage.mockRejectedValue(new Error('cdn down'));
       await expect(run()).resolves.toBeDefined();
     });
+  });
+
+  it('retires the avatar displaced at assignment time, not the one read before the upload', async () => {
+    repo.findById.mockResolvedValue(oldRow);
+    previousAvatar = {
+      id: 'raced',
+      publicId: 'raced-asset',
+      isSystemAvatar: false,
+    };
+    repo.retireAvatarIfUnreferenced.mockResolvedValue('raced-asset');
+    await service.uploadAndAssignUserAvatar('u1', file);
+    expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledTimes(1);
+    expect(repo.retireAvatarIfUnreferenced).toHaveBeenCalledWith('raced');
+    expect(upload.deleteImage).toHaveBeenCalledWith('raced-asset');
   });
 
   it('concurrent uploads by one user each destroy only the asset they displaced', async () => {

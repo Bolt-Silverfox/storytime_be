@@ -86,16 +86,40 @@ export class UploadService {
         }),
       ]);
     } catch (error) {
-      await this.releaseReservation(reservationId);
-      await this.destroyAfterFailedRecord(result);
+      if (await this.destroyAfterFailedRecord(result)) {
+        await this.releaseReservation(reservationId);
+      } else {
+        await this.keepAsRecorded(reservationId, result);
+      }
       throw error;
     }
     return result;
   }
 
-  private async destroyAfterFailedRecord(
+  private async keepAsRecorded(
+    reservationId: string,
     result: UploadApiResponse,
   ): Promise<void> {
+    await this.prisma.userUpload
+      .update({
+        where: { id: reservationId },
+        data: {
+          publicId: result.public_id,
+          resourceType: result.resource_type,
+          bytes: result.bytes,
+          pending: false,
+        },
+      })
+      .catch((error: unknown) =>
+        this.logger.warn(
+          `Failed to record undeleted asset "${result.public_id}": ${String(error)}`,
+        ),
+      );
+  }
+
+  private async destroyAfterFailedRecord(
+    result: UploadApiResponse,
+  ): Promise<boolean> {
     const reason = await cloudinary.uploader
       .destroy(result.public_id, { resource_type: result.resource_type })
       .then((r: { result?: string }) =>
@@ -107,6 +131,7 @@ export class UploadService {
         `Failed to destroy asset "${result.public_id}" after a failed upload record: ${reason}`,
       );
     }
+    return !reason;
   }
 
   private async reserve(
