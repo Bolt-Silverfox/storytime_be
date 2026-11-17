@@ -1,8 +1,48 @@
 import { Injectable } from '@nestjs/common';
-import { Avatar, User, Kid } from '@prisma/client';
+import { Avatar, User, Kid, Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { retireAvatarIfUnreferenced } from '../retire-avatar';
-import { IAvatarRepository } from './avatar.repository.interface';
+import {
+  IAvatarRepository,
+  ReplacementData,
+  ReplacedUserAvatar,
+  ReplacedKidAvatar,
+} from './avatar.repository.interface';
+
+async function replaceNamedRow(
+  tx: Prisma.TransactionClient,
+  name: string,
+  data: ReplacementData,
+): Promise<{ avatar: Avatar; displacedPublicId: string | null }> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${name}, 0))`;
+  const rows = await tx.$queryRaw<
+    { publicId: string | null }[]
+  >`SELECT "publicId" FROM avatars WHERE name = ${name} FOR UPDATE`;
+  const avatar = await tx.avatar.upsert({
+    where: { name },
+    update: {
+      url: data.url,
+      publicId: data.publicId,
+      isSystemAvatar: data.isSystemAvatar,
+      isDeleted: false,
+      deletedAt: null,
+    },
+    create: {
+      name,
+      url: data.url,
+      publicId: data.publicId || null,
+      isSystemAvatar: data.isSystemAvatar,
+      isDeleted: false,
+      deletedAt: null,
+    },
+  });
+  const previous = rows[0]?.publicId ?? null;
+  return {
+    avatar,
+    displacedPublicId:
+      previous && previous !== avatar.publicId ? previous : null,
+  };
+}
 
 @Injectable()
 export class PrismaAvatarRepository implements IAvatarRepository {
@@ -70,46 +110,6 @@ export class PrismaAvatarRepository implements IAvatarRepository {
     data: Partial<Pick<Avatar, 'name' | 'url' | 'publicId'>>,
   ): Promise<Avatar> {
     return this.prisma.avatar.update({ where: { id }, data });
-  }
-
-  replaceByName(
-    name: string,
-    data: {
-      url: string;
-      publicId?: string | null;
-      isSystemAvatar: boolean;
-    },
-  ): Promise<{ avatar: Avatar; displacedPublicId: string | null }> {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${name}, 0))`;
-      const rows = await tx.$queryRaw<
-        { publicId: string | null }[]
-      >`SELECT "publicId" FROM avatars WHERE name = ${name} FOR UPDATE`;
-      const avatar = await tx.avatar.upsert({
-        where: { name },
-        update: {
-          url: data.url,
-          publicId: data.publicId,
-          isSystemAvatar: data.isSystemAvatar,
-          isDeleted: false,
-          deletedAt: null,
-        },
-        create: {
-          name,
-          url: data.url,
-          publicId: data.publicId || null,
-          isSystemAvatar: data.isSystemAvatar,
-          isDeleted: false,
-          deletedAt: null,
-        },
-      });
-      const previous = rows[0]?.publicId ?? null;
-      return {
-        avatar,
-        displacedPublicId:
-          previous && previous !== avatar.publicId ? previous : null,
-      };
-    });
   }
 
   async upsertByName(
@@ -201,25 +201,24 @@ export class PrismaAvatarRepository implements IAvatarRepository {
     });
   }
 
-  replaceUserAvatar(
+  replaceAndAssignUserAvatar(
     userId: string,
-    avatarId: string,
-  ): Promise<{
-    user: User & { avatar: Avatar | null };
-    previous: Avatar | null;
-  }> {
+    name: string,
+    data: ReplacementData,
+  ): Promise<ReplacedUserAvatar> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
       const current = await tx.user.findUnique({
         where: { id: userId },
         select: { avatar: true },
       });
+      const replaced = await replaceNamedRow(tx, name, data);
       const user = await tx.user.update({
         where: { id: userId },
-        data: { avatarId },
+        data: { avatarId: replaced.avatar.id },
         include: { avatar: true },
       });
-      return { user, previous: current?.avatar ?? null };
+      return { ...replaced, user, previous: current?.avatar ?? null };
     });
   }
 
@@ -248,25 +247,24 @@ export class PrismaAvatarRepository implements IAvatarRepository {
     });
   }
 
-  replaceKidAvatar(
+  replaceAndAssignKidAvatar(
     kidId: string,
-    avatarId: string,
-  ): Promise<{
-    kid: Kid & { avatar: Avatar | null };
-    previous: Avatar | null;
-  }> {
+    name: string,
+    data: ReplacementData,
+  ): Promise<ReplacedKidAvatar> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM kids WHERE id = ${kidId} FOR UPDATE`;
       const current = await tx.kid.findUnique({
         where: { id: kidId },
         select: { avatar: true },
       });
+      const replaced = await replaceNamedRow(tx, name, data);
       const kid = await tx.kid.update({
         where: { id: kidId },
-        data: { avatarId },
+        data: { avatarId: replaced.avatar.id },
         include: { avatar: true },
       });
-      return { kid, previous: current?.avatar ?? null };
+      return { ...replaced, kid, previous: current?.avatar ?? null };
     });
   }
 }

@@ -1,5 +1,25 @@
 import { Avatar, User, Kid } from '@prisma/client';
 
+export interface ReplacementData {
+  url: string;
+  publicId?: string | null;
+  isSystemAvatar: boolean;
+}
+
+interface ReplacedAvatar {
+  avatar: Avatar;
+  displacedPublicId: string | null;
+  previous: Avatar | null;
+}
+
+export type ReplacedUserAvatar = ReplacedAvatar & {
+  user: User & { avatar: Avatar | null };
+};
+
+export type ReplacedKidAvatar = ReplacedAvatar & {
+  kid: Kid & { avatar: Avatar | null };
+};
+
 export interface IAvatarRepository {
   // Avatar CRUD
   findById(id: string): Promise<Avatar | null>;
@@ -31,15 +51,6 @@ export interface IAvatarRepository {
     },
   ): Promise<Avatar>;
 
-  replaceByName(
-    name: string,
-    data: {
-      url: string;
-      publicId?: string | null;
-      isSystemAvatar: boolean;
-    },
-  ): Promise<{ avatar: Avatar; displacedPublicId: string | null }>;
-
   softDelete(id: string): Promise<Avatar>;
   hardDelete(id: string): Promise<Avatar>;
   restore(id: string): Promise<Avatar>;
@@ -63,13 +74,11 @@ export interface IAvatarRepository {
     avatarId: string,
   ): Promise<User & { avatar: Avatar | null }>;
 
-  replaceUserAvatar(
+  replaceAndAssignUserAvatar(
     userId: string,
-    avatarId: string,
-  ): Promise<{
-    user: User & { avatar: Avatar | null };
-    previous: Avatar | null;
-  }>;
+    name: string,
+    data: ReplacementData,
+  ): Promise<ReplacedUserAvatar>;
 
   findKidById(kidId: string): Promise<Kid | null>;
   findKidWithAvatar(
@@ -79,13 +88,11 @@ export interface IAvatarRepository {
     kidId: string,
     avatarId: string,
   ): Promise<Kid & { avatar: Avatar | null }>;
-  replaceKidAvatar(
+  replaceAndAssignKidAvatar(
     kidId: string,
-    avatarId: string,
-  ): Promise<{
-    kid: Kid & { avatar: Avatar | null };
-    previous: Avatar | null;
-  }>;
+    name: string,
+    data: ReplacementData,
+  ): Promise<ReplacedKidAvatar>;
 }
 
 export const AVATAR_REPOSITORY = Symbol('AVATAR_REPOSITORY');

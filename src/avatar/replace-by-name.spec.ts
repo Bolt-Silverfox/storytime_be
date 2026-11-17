@@ -1,6 +1,6 @@
 import { PrismaAvatarRepository } from './repositories/prisma-avatar.repository';
 
-describe('PrismaAvatarRepository.replaceByName', () => {
+describe('PrismaAvatarRepository.replaceAndAssignUserAvatar', () => {
   const build = (existing: string | null | undefined) => {
     const calls: string[] = [];
     const tx = {
@@ -9,11 +9,24 @@ describe('PrismaAvatarRepository.replaceByName', () => {
         return Promise.resolve(1);
       }),
       $queryRaw: jest.fn((strings: TemplateStringsArray) => {
-        calls.push(`lock:${strings.join('?')}`);
+        const text = strings.join('?');
+        calls.push(`lock:${text}`);
         return Promise.resolve(
-          existing === undefined ? [] : [{ publicId: existing }],
+          /FROM users/.test(text) || existing === undefined
+            ? []
+            : [{ publicId: existing }],
         );
       }),
+      user: {
+        findUnique: jest.fn(() => {
+          calls.push('read-current');
+          return Promise.resolve({ avatar: null });
+        }),
+        update: jest.fn(() => {
+          calls.push('assign');
+          return Promise.resolve({ id: 'u1', avatar: { id: 'row' } });
+        }),
+      },
       avatar: {
         upsert: jest.fn(({ create }: { create: { publicId: string } }) => {
           calls.push('upsert');
@@ -28,12 +41,14 @@ describe('PrismaAvatarRepository.replaceByName', () => {
   };
   const data = { url: 'u', publicId: 'new', isSystemAvatar: false };
 
-  it('locks the named row before upserting and reports what it displaced', async () => {
+  it('locks the owner, then the named row, upserts it and assigns it in one transaction', async () => {
     const { repo, calls } = build('old');
-    const r = await repo.replaceByName('n', data);
-    expect(calls[0]).toMatch(/pg_advisory_xact_lock/);
-    expect(calls[1]).toMatch(/FOR UPDATE/);
-    expect(calls[2]).toBe('upsert');
+    const r = await repo.replaceAndAssignUserAvatar('u1', 'n', data);
+    expect(calls[0]).toMatch(/FROM users.*FOR UPDATE/);
+    expect(calls[1]).toBe('read-current');
+    expect(calls[2]).toMatch(/pg_advisory_xact_lock/);
+    expect(calls[3]).toMatch(/FOR UPDATE/);
+    expect(calls.slice(4)).toEqual(['upsert', 'assign']);
     expect(r.displacedPublicId).toBe('old');
   });
 
@@ -43,6 +58,9 @@ describe('PrismaAvatarRepository.replaceByName', () => {
     ['the same asset', 'new'],
   ])('reports nothing displaced for %s', async (_n, existing) => {
     const { repo } = build(existing);
-    expect((await repo.replaceByName('n', data)).displacedPublicId).toBeNull();
+    expect(
+      (await repo.replaceAndAssignUserAvatar('u1', 'n', data))
+        .displacedPublicId,
+    ).toBeNull();
   });
 });

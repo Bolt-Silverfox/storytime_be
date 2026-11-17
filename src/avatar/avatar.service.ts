@@ -8,7 +8,11 @@ import {
 } from '@nestjs/common';
 import { UploadService, UploadOwner } from '../upload/upload.service';
 import { CreateAvatarDto, UpdateAvatarDto } from './dto/avatar.dto';
-import { IAvatarRepository, AVATAR_REPOSITORY } from './repositories';
+import {
+  IAvatarRepository,
+  AVATAR_REPOSITORY,
+  ReplacementData,
+} from './repositories';
 
 @Injectable()
 export class AvatarService {
@@ -30,13 +34,13 @@ export class AvatarService {
     return safe;
   }
 
-  private async handleCustomAvatarUpload(
+  private async uploadAndReplace<T>(
     entityId: string,
     entityType: 'user' | 'kid',
     file: Express.Multer.File,
-    entityName: string,
-    owner?: UploadOwner,
-  ) {
+    owner: UploadOwner | undefined,
+    replaceAndAssign: (name: string, data: ReplacementData) => Promise<T>,
+  ): Promise<T> {
     let uploadResult;
     try {
       uploadResult = await this.uploadService.uploadImage(
@@ -53,10 +57,8 @@ export class AvatarService {
       throw new BadRequestException('Failed to upload avatar image');
     }
 
-    const avatarName = `${entityType}-avatar-${entityId}`;
-
     try {
-      return await this.avatarRepository.replaceByName(avatarName, {
+      return await replaceAndAssign(`${entityType}-avatar-${entityId}`, {
         url: uploadResult.secure_url,
         publicId: uploadResult.public_id,
         isSystemAvatar: false,
@@ -79,24 +81,6 @@ export class AvatarService {
       await this.uploadService.deleteImage(publicId);
     } catch (error) {
       this.logger.warn('Failed to delete displaced avatar upload:', error);
-    }
-  }
-
-  private async releaseAfterFailedAssignment(replaced: {
-    avatar: { id: string; publicId: string | null };
-    displacedPublicId: string | null;
-  }) {
-    await this.destroyDisplaced(replaced.displacedPublicId);
-    try {
-      const orphan = replaced.avatar.publicId
-        ? await this.avatarRepository.retireAvatarIfUnreferenced(
-            replaced.avatar.id,
-            replaced.avatar.publicId,
-          )
-        : null;
-      if (orphan) await this.uploadService.deleteImage(orphan);
-    } catch (error) {
-      this.logger.warn('Failed to release unattached avatar upload:', error);
     }
   }
 
@@ -368,26 +352,16 @@ export class AvatarService {
       throw new NotFoundException('User not found');
     }
 
-    const replaced = await this.handleCustomAvatarUpload(
+    const replaced = await this.uploadAndReplace(
       userId,
       'user',
       file,
-      user.name || user.email || 'Unknown User',
       owner,
+      (name, data) =>
+        this.avatarRepository.replaceAndAssignUserAvatar(userId, name, data),
     );
-
-    let assigned;
-    try {
-      assigned = await this.avatarRepository.replaceUserAvatar(
-        userId,
-        replaced.avatar.id,
-      );
-    } catch (error) {
-      await this.releaseAfterFailedAssignment(replaced);
-      throw error;
-    }
-    await this.releaseReplacedAvatar(assigned.previous, replaced);
-    return this.withoutCredentials(assigned.user);
+    await this.releaseReplacedAvatar(replaced.previous, replaced);
+    return this.withoutCredentials(replaced.user);
   }
 
   async uploadAndAssignKidAvatar(
@@ -401,25 +375,15 @@ export class AvatarService {
       throw new NotFoundException('Kid not found');
     }
 
-    const replaced = await this.handleCustomAvatarUpload(
+    const replaced = await this.uploadAndReplace(
       kidId,
       'kid',
       file,
-      kid.name || 'Unknown Kid',
       owner,
+      (name, data) =>
+        this.avatarRepository.replaceAndAssignKidAvatar(kidId, name, data),
     );
-
-    let assigned;
-    try {
-      assigned = await this.avatarRepository.replaceKidAvatar(
-        kidId,
-        replaced.avatar.id,
-      );
-    } catch (error) {
-      await this.releaseAfterFailedAssignment(replaced);
-      throw error;
-    }
-    await this.releaseReplacedAvatar(assigned.previous, replaced);
-    return assigned.kid;
+    await this.releaseReplacedAvatar(replaced.previous, replaced);
+    return replaced.kid;
   }
 }
