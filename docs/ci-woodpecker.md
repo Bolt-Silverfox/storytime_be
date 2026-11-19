@@ -74,6 +74,7 @@ and Redis; start them yourself on a Docker network named `wpnet`:
 
 ```sh
 docker network create wpnet
+trap 'docker rm -f postgres redis >/dev/null 2>&1; docker network rm wpnet >/dev/null 2>&1' EXIT
 docker run -d --rm --name postgres --network wpnet -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=storytime_test postgres:16-alpine
 docker run -d --rm --name redis --network wpnet redis:7-alpine
@@ -83,11 +84,15 @@ docker run --rm --network wpnet --memory 3g -v "$PWD":/w -w /w \
   node:24.22.1-bookworm sh -c '
     corepack enable && corepack prepare pnpm@10.15.1 --activate &&
     pnpm install --frozen-lockfile --ignore-scripts && pnpm db:generate &&
+    node ci/woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379 &&
     pnpm db:migrate:deploy &&
     NODE_OPTIONS=--max-old-space-size=2048 pnpm test --maxWorkers=1'
 ```
 
-The synthetic values are passed with `--env-file`, so an existing `.env` in your
+The `trap` removes both containers and the `wpnet` network when the shell exits,
+including after a failed test command (run the block in one shell session; if
+you run it line by line, run the `docker rm -f` and `docker network rm` command
+yourself afterwards). The synthetic values are passed with `--env-file`, so an existing `.env` in your
 checkout is never overwritten. Lint the pipeline files themselves with
 `docker run --rm -v "$PWD":/w -w /w woodpeckerci/woodpecker-cli:v3.18.1 lint .woodpecker/`.
 
