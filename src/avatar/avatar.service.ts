@@ -311,6 +311,17 @@ export class AvatarService {
     return this.avatarRepository.restore(id);
   }
 
+  private isAssignableTo(
+    avatar: { isSystemAvatar: boolean; name: string | null },
+    entityType: 'user' | 'kid',
+    entityId: string,
+  ) {
+    return (
+      avatar.isSystemAvatar ||
+      avatar.name === `${entityType}-avatar-${entityId}`
+    );
+  }
+
   async assignAvatarToUser(userId: string, avatarId: string) {
     const user = await this.avatarRepository.findUserById(userId);
     if (!user) {
@@ -318,7 +329,7 @@ export class AvatarService {
     }
 
     const avatar = await this.avatarRepository.findByIdNotDeleted(avatarId);
-    if (!avatar) {
+    if (!avatar || !this.isAssignableTo(avatar, 'user', userId)) {
       throw new NotFoundException('Avatar not found');
     }
 
@@ -334,7 +345,7 @@ export class AvatarService {
     }
 
     const avatar = await this.avatarRepository.findByIdNotDeleted(avatarId);
-    if (!avatar) {
+    if (!avatar || !this.isAssignableTo(avatar, 'kid', kidId)) {
       throw new NotFoundException('Avatar not found');
     }
 

@@ -13,7 +13,9 @@ describe('AvatarService user responses', () => {
   const repo = {
     findUserById: jest.fn().mockResolvedValue(row),
     findUserWithAvatar: jest.fn().mockResolvedValue(row),
-    findByIdNotDeleted: jest.fn().mockResolvedValue({ id: 'a1' }),
+    findByIdNotDeleted: jest
+      .fn()
+      .mockResolvedValue({ id: 'a1', isSystemAvatar: true }),
     updateUserAvatar: jest.fn().mockResolvedValue(row),
     replaceAndAssignUserAvatar: jest.fn().mockResolvedValue({
       user: row,
