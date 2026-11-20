@@ -96,7 +96,7 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
     const repo = new PrismaAvatarRepository(prisma as never);
     const replace = (userId: string, name: string, publicId: string) =>
       repo.replaceAndAssignUserAvatar(userId, name, {
-        url: `${tag}_url_${publicId}`,
+        url: `${tag}_url_${n++}`,
         publicId,
         isSystemAvatar: false,
       });
