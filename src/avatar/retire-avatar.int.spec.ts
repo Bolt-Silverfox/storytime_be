@@ -139,17 +139,17 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
     it('serialises concurrent replacements so every asset is reported exactly once', async () => {
       const user = await makeUser();
       const name = `${tag}_conc_${n++}`;
-      await replace(user.id, name, pid('p0'));
+      await replace(user.id, name, pid('c0'));
       const results = await Promise.all([
-        replace(user.id, name, pid('p1')),
-        replace(user.id, name, pid('p2')),
+        replace(user.id, name, pid('c1')),
+        replace(user.id, name, pid('c2')),
       ]);
       const displaced = results.map((r) => r.displacedPublicId).sort();
       const finalRow = await prisma.avatar.findUnique({ where: { name } });
       expect([...displaced, finalRow?.publicId].sort()).toEqual([
-        pid('p0'),
-        pid('p1'),
-        pid('p2'),
+        pid('c0'),
+        pid('c1'),
+        pid('c2'),
       ]);
     });
   });
