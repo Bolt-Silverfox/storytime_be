@@ -443,6 +443,7 @@ export class StoryCoreController {
       id,
       req.authUserData.userId,
       true,
+      this.accessControl.isAdmin(req.authUserData),
     );
     return this.storyService.deleteStory(id, permanent);
   }
@@ -477,6 +478,7 @@ export class StoryCoreController {
       id,
       req.authUserData.userId,
       true,
+      this.accessControl.isAdmin(req.authUserData),
     );
     return this.storyService.undoDeleteStory(id);
   }

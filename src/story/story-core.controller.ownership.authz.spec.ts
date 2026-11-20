@@ -18,6 +18,7 @@ const CATALOG_STORY = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const ALICE_STORY = 'aaaaaaaa-1111-4aaa-8aaa-aaaaaaaaaaaa';
 const BOB_STORY = 'bbbbbbbb-2222-4bbb-8bbb-bbbbbbbbbbbb';
 const DELETED_STORY = 'dddddddd-3333-4ddd-8ddd-dddddddddddd';
+const DELETED_CATALOG_STORY = 'eeeeeeee-4444-4eee-8eee-eeeeeeeeeeee';
 
 const STORIES: Record<string, unknown> = {
   [CATALOG_STORY]: { id: CATALOG_STORY, creatorKidId: null, creatorKid: null },
@@ -37,6 +38,12 @@ const STORIES: Record<string, unknown> = {
     creatorKid: { parentId: ALICE },
     isDeleted: true,
   },
+  [DELETED_CATALOG_STORY]: {
+    id: DELETED_CATALOG_STORY,
+    creatorKidId: null,
+    creatorKid: null,
+    isDeleted: true,
+  },
 };
 
 describe('StoryCoreController story write ownership', () => {
@@ -45,6 +52,8 @@ describe('StoryCoreController story write ownership', () => {
     updateStory: jest.fn(),
     addImage: jest.fn(),
     addBranch: jest.fn(),
+    deleteStory: jest.fn(),
+    undoDeleteStory: jest.fn(),
   };
   const repository = { findStoryByIdWithCreatorParent: jest.fn() };
 
@@ -144,6 +153,76 @@ describe('StoryCoreController story write ownership', () => {
 
     it("lets a parent write their own kid's story", async () => {
       await call(ALICE_STORY)
+        .set('Authorization', bearer('alice'))
+        .expect(okStatus);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  const removalRoutes: [
+    string,
+    (id: string) => request.Test,
+    jest.Mock,
+    number,
+  ][] = [
+    [
+      'DELETE /stories/:id',
+      (id) =>
+        request(app.getHttpServer() as Parameters<typeof request>[0]).delete(
+          `/stories/${id}`,
+        ),
+      stories.deleteStory,
+      200,
+    ],
+    [
+      'POST /stories/:id/undo-delete',
+      (id) =>
+        request(app.getHttpServer() as Parameters<typeof request>[0]).post(
+          `/stories/${id}/undo-delete`,
+        ),
+      stories.undoDeleteStory,
+      201,
+    ],
+  ];
+
+  describe.each(removalRoutes)('%s', (_name, call, handler, okStatus) => {
+    it('lets an admin act on a story with no creator kid', async () => {
+      await call(CATALOG_STORY)
+        .set('Authorization', bearer('admin'))
+        .expect(okStatus);
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler.mock.calls[0][0]).toBe(CATALOG_STORY);
+    });
+
+    it('lets an admin act on a soft-deleted story with no creator kid', async () => {
+      await call(DELETED_CATALOG_STORY)
+        .set('Authorization', bearer('admin'))
+        .expect(okStatus);
+      expect(handler).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns 404 for an admin on a missing story', async () => {
+      await call('missing').set('Authorization', bearer('admin')).expect(404);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it('refuses a non-admin parent on a story with no creator kid', async () => {
+      await call(CATALOG_STORY)
+        .set('Authorization', bearer('alice'))
+        .expect(403);
+      await call(DELETED_CATALOG_STORY)
+        .set('Authorization', bearer('alice'))
+        .expect(403);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("refuses a parent on another family's story", async () => {
+      await call(BOB_STORY).set('Authorization', bearer('alice')).expect(403);
+      expect(handler).not.toHaveBeenCalled();
+    });
+
+    it("lets a parent act on their own kid's soft-deleted story", async () => {
+      await call(DELETED_STORY)
         .set('Authorization', bearer('alice'))
         .expect(okStatus);
       expect(handler).toHaveBeenCalledTimes(1);
