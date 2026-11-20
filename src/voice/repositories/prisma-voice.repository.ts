@@ -102,18 +102,8 @@ export class PrismaVoiceRepository implements IVoiceRepository {
     });
   }
 
-  async isVoiceReferenced(id: string): Promise<boolean> {
-    const referenced = await this.prisma.voice.count({
-      where: {
-        id,
-        OR: [
-          { usersPreferring: { some: {} } },
-          { kidsPreferring: { some: {} } },
-          { usersWithAsSecond: { some: {} } },
-        ],
-      },
-    });
-    return referenced > 0;
+  async findByIdAndUser(id: string, userId: string): Promise<Voice | null> {
+    return this.prisma.voice.findFirst({ where: { id, userId } });
   }
 
   async softDeleteOwnedIfUnreferenced(

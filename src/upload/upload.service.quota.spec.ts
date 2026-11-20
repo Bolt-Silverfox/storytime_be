@@ -556,7 +556,9 @@ describe('UploadService per-user upload cap', () => {
         .spyOn(cloudinary.uploader, 'destroy')
         .mockResolvedValue({ result: 'ok' });
 
-      await service.releaseRecorded('voice-1', 'u1');
+      await expect(service.releaseRecorded('voice-1', 'u1')).resolves.toBe(
+        true,
+      );
 
       expect(destroy).toHaveBeenCalledWith('voice-1', {
         resource_type: 'video',
@@ -567,9 +569,9 @@ describe('UploadService per-user upload cap', () => {
     it('does nothing when the asset was already released', async () => {
       const destroy = jest.spyOn(cloudinary.uploader, 'destroy');
 
-      await expect(
-        service.releaseRecorded('voice-1', 'u1'),
-      ).resolves.toBeUndefined();
+      await expect(service.releaseRecorded('voice-1', 'u1')).resolves.toBe(
+        false,
+      );
       expect(destroy).not.toHaveBeenCalled();
     });
 
@@ -577,7 +579,9 @@ describe('UploadService per-user upload cap', () => {
       seed({ userId: 'u2', bytes: 25 * MB, publicId: 'voice-1' });
       const destroy = jest.spyOn(cloudinary.uploader, 'destroy');
 
-      await service.releaseRecorded('voice-1', 'u1');
+      await expect(service.releaseRecorded('voice-1', 'u1')).resolves.toBe(
+        false,
+      );
 
       expect(destroy).not.toHaveBeenCalled();
       expect(prisma.rows).toHaveLength(1);

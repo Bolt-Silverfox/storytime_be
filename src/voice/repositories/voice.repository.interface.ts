@@ -50,7 +50,7 @@ export interface IVoiceRepository {
     id: string,
   ): Promise<{ elevenLabsVoiceId: string | null } | null>;
 
-  isVoiceReferenced(id: string): Promise<boolean>;
+  findByIdAndUser(id: string, userId: string): Promise<Voice | null>;
 
   softDeleteOwnedIfUnreferenced(id: string, userId: string): Promise<boolean>;
 }

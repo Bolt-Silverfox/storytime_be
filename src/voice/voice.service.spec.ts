@@ -35,7 +35,7 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   findSystemVoiceIdByElevenLabsId: jest.fn(),
   findVoiceIdElevenLabsPairs: jest.fn(),
   findElevenLabsIdById: jest.fn(),
-  isVoiceReferenced: jest.fn(),
+  findByIdAndUser: jest.fn(),
   softDeleteOwnedIfUnreferenced: jest.fn(),
 };
 

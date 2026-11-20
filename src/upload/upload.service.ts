@@ -336,13 +336,14 @@ export class UploadService {
     await this.deleteImage(publicId);
   }
 
-  async releaseRecorded(publicId: string, userId: string): Promise<void> {
+  async releaseRecorded(publicId: string, userId: string): Promise<boolean> {
     const recorded = await this.prisma.userUpload.findFirst({
       where: { publicId, userId },
       select: { resourceType: true },
     });
-    if (!recorded) return;
+    if (!recorded) return false;
     await this.deleteImage(publicId, recorded.resourceType ?? undefined);
+    return true;
   }
 
   async deleteImage(publicId: string, resourceType?: string): Promise<void> {

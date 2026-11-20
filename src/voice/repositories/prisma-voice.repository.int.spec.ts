@@ -57,7 +57,6 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
   });
 
   it('soft-deletes an unreferenced voice for its owner', async () => {
-    expect(await repo.isVoiceReferenced(voiceId)).toBe(false);
     expect(await repo.softDeleteOwnedIfUnreferenced(voiceId, userId)).toBe(
       true,
     );
@@ -65,6 +64,16 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
     expect(voice.isDeleted).toBe(true);
     expect(voice.deletedAt).toBeInstanceOf(Date);
     expect(await repo.findManyByUserNotDeleted(userId)).toEqual([]);
+  });
+
+  it('finds a voice for its owner only, deleted or not', async () => {
+    const other = await newUser();
+    expect(await repo.findByIdAndUser(voiceId, other)).toBeNull();
+    expect((await repo.findByIdAndUser(voiceId, userId))?.isDeleted).toBe(
+      false,
+    );
+    await repo.softDeleteOwnedIfUnreferenced(voiceId, userId);
+    expect((await repo.findByIdAndUser(voiceId, userId))?.isDeleted).toBe(true);
   });
 
   it('reports nothing deleted on a second delete', async () => {
@@ -87,7 +96,6 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
       where: { id: userId },
       data: { preferredVoiceId: voiceId },
     });
-    expect(await repo.isVoiceReferenced(voiceId)).toBe(true);
     expect(await repo.softDeleteOwnedIfUnreferenced(voiceId, userId)).toBe(
       false,
     );
@@ -98,7 +106,6 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
     await raw.kid.create({
       data: { parentId: userId, name: 'Kid', preferredVoiceId: voiceId },
     });
-    expect(await repo.isVoiceReferenced(voiceId)).toBe(true);
     expect(await repo.softDeleteOwnedIfUnreferenced(voiceId, userId)).toBe(
       false,
     );
@@ -109,7 +116,6 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
     await raw.userUsage.create({
       data: { userId, currentMonth: '2026-11', selectedSecondVoiceId: voiceId },
     });
-    expect(await repo.isVoiceReferenced(voiceId)).toBe(true);
     expect(await repo.softDeleteOwnedIfUnreferenced(voiceId, userId)).toBe(
       false,
     );

@@ -22,7 +22,7 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   findSystemVoiceIdByElevenLabsId: jest.fn(),
   findVoiceIdElevenLabsPairs: jest.fn(),
   findElevenLabsIdById: jest.fn(),
-  isVoiceReferenced: jest.fn(),
+  findByIdAndUser: jest.fn(),
   softDeleteOwnedIfUnreferenced: jest.fn(),
 };
 
@@ -195,11 +195,16 @@ describe('VoiceLibraryService', () => {
 
     beforeEach(() => {
       steps.length = 0;
-      mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(owned());
-      mockVoiceRepository.isVoiceReferenced.mockResolvedValue(false);
+      mockVoiceRepository.findByIdAndUser.mockImplementation(
+        (id: string, userId: string) =>
+          Promise.resolve(
+            id === VOICE_ID && userId === 'user-1' ? owned() : null,
+          ),
+      );
+      mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(null);
       mockUploadService.releaseRecorded.mockImplementation(() => {
         steps.push('release');
-        return Promise.resolve();
+        return Promise.resolve(true);
       });
       mockVoiceRepository.softDeleteOwnedIfUnreferenced.mockImplementation(
         () => {
@@ -216,35 +221,32 @@ describe('VoiceLibraryService', () => {
       ).not.toHaveBeenCalled();
     };
 
-    it("frees the sample's storage, then soft-deletes the voice", async () => {
+    it("soft-deletes the voice, then frees its sample's storage", async () => {
       await service.deleteVoice('user-1', VOICE_ID);
 
+      expect(
+        mockVoiceRepository.softDeleteOwnedIfUnreferenced,
+      ).toHaveBeenCalledWith(VOICE_ID, 'user-1');
       expect(mockUploadService.releaseRecorded).toHaveBeenCalledWith(
         'storytime/v',
         'user-1',
       );
-      expect(
-        mockVoiceRepository.softDeleteOwnedIfUnreferenced,
-      ).toHaveBeenCalledWith(VOICE_ID, 'user-1');
-      expect(steps).toEqual(['release', 'softDelete']);
+      expect(steps).toEqual(['softDelete', 'release']);
     });
 
     it('soft-deletes a voice that has no recorded sample without touching storage', async () => {
-      mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(
+      mockVoiceRepository.findByIdAndUser.mockResolvedValue(
         owned({ publicId: null }),
       );
 
       await service.deleteVoice('user-1', VOICE_ID);
 
-      expect(mockUploadService.releaseRecorded).not.toHaveBeenCalled();
       expect(steps).toEqual(['softDelete']);
     });
 
-    it('answers not found for an unknown or already deleted voice', async () => {
-      mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(null);
-
+    it('answers not found for an unknown voice', async () => {
       await expect(
-        service.deleteVoice('user-1', VOICE_ID),
+        service.deleteVoice('user-1', 'other-voice'),
       ).rejects.toBeInstanceOf(NotFoundException);
       expectUntouched();
     });
@@ -256,27 +258,19 @@ describe('VoiceLibraryService', () => {
       expectUntouched();
     });
 
-    it('answers not found for a system voice', async () => {
-      mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(
-        owned({ userId: null }),
-      );
-
-      await expect(
-        service.deleteVoice('user-1', VOICE_ID),
-      ).rejects.toBeInstanceOf(NotFoundException);
-      expectUntouched();
-    });
-
     it('refuses a voice that is still selected, keeping its sample', async () => {
-      mockVoiceRepository.isVoiceReferenced.mockResolvedValue(true);
+      mockVoiceRepository.softDeleteOwnedIfUnreferenced.mockResolvedValue(
+        false,
+      );
+      mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(owned());
 
       await expect(
         service.deleteVoice('user-1', VOICE_ID),
       ).rejects.toBeInstanceOf(ConflictException);
-      expectUntouched();
+      expect(mockUploadService.releaseRecorded).not.toHaveBeenCalled();
     });
 
-    it('keeps the voice when freeing the sample fails', async () => {
+    it('reports the failure when freeing the sample fails', async () => {
       mockUploadService.releaseRecorded.mockRejectedValue(
         new Error('cdn down'),
       );
@@ -284,32 +278,51 @@ describe('VoiceLibraryService', () => {
       await expect(service.deleteVoice('user-1', VOICE_ID)).rejects.toThrow(
         'cdn down',
       );
-      expect(
-        mockVoiceRepository.softDeleteOwnedIfUnreferenced,
-      ).not.toHaveBeenCalled();
     });
 
-    it('answers not found when a concurrent request deleted the voice first', async () => {
-      mockVoiceRepository.softDeleteOwnedIfUnreferenced.mockResolvedValue(
-        false,
+    it('frees the sample on a retry after the voice was already deleted', async () => {
+      mockVoiceRepository.findByIdAndUser.mockResolvedValue(
+        owned({ isDeleted: true }),
       );
-      mockVoiceRepository.findFirstByIdNotDeleted
-        .mockResolvedValueOnce(owned())
-        .mockResolvedValueOnce(null);
+
+      await service.deleteVoice('user-1', VOICE_ID);
+
+      expect(steps).toEqual(['release']);
+    });
+
+    it('answers not found for a deleted voice with nothing left to free', async () => {
+      mockVoiceRepository.findByIdAndUser.mockResolvedValue(
+        owned({ isDeleted: true }),
+      );
+      mockUploadService.releaseRecorded.mockResolvedValue(false);
 
       await expect(
         service.deleteVoice('user-1', VOICE_ID),
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it('answers conflict when the voice was selected while it was being deleted', async () => {
-      mockVoiceRepository.softDeleteOwnedIfUnreferenced.mockResolvedValue(
-        false,
+    it('answers not found for a deleted voice that never had a sample', async () => {
+      mockVoiceRepository.findByIdAndUser.mockResolvedValue(
+        owned({ isDeleted: true, publicId: null }),
       );
 
       await expect(
         service.deleteVoice('user-1', VOICE_ID),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expectUntouched();
+    });
+
+    it('still frees the sample when a concurrent request deleted the voice first', async () => {
+      mockVoiceRepository.softDeleteOwnedIfUnreferenced.mockResolvedValue(
+        false,
+      );
+
+      await service.deleteVoice('user-1', VOICE_ID);
+
+      expect(mockUploadService.releaseRecorded).toHaveBeenCalledWith(
+        'storytime/v',
+        'user-1',
+      );
     });
   });
 });

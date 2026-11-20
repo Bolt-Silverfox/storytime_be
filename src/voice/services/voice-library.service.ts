@@ -23,9 +23,6 @@ import { withResilience } from '@/shared/resilience';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 import { UploadService } from '@/upload/upload.service';
 
-const VOICE_IN_USE =
-  'This voice is still selected. Choose another voice before deleting it.';
-
 /**
  * Owns a user's personal voice library: uploaded clones, registered ElevenLabs
  * voices, listing and lazy import of ElevenLabs voices.
@@ -85,26 +82,28 @@ export class VoiceLibraryService {
   }
 
   async deleteVoice(userId: string, voiceId: string): Promise<void> {
-    const voice = await this.voiceRepository.findFirstByIdNotDeleted(voiceId);
-    if (!voice || voice.userId !== userId) {
+    const voice = await this.voiceRepository.findByIdAndUser(voiceId, userId);
+    if (!voice) {
       throw new NotFoundException('Voice not found');
     }
-    if (await this.voiceRepository.isVoiceReferenced(voiceId)) {
-      throw new ConflictException(VOICE_IN_USE);
+    const wasActive = !voice.isDeleted;
+    if (
+      wasActive &&
+      !(await this.voiceRepository.softDeleteOwnedIfUnreferenced(
+        voiceId,
+        userId,
+      )) &&
+      (await this.voiceRepository.findFirstByIdNotDeleted(voiceId))
+    ) {
+      throw new ConflictException(
+        'This voice is still selected. Choose another voice before deleting it.',
+      );
     }
-    if (voice.publicId) {
-      await this.uploadService.releaseRecorded(voice.publicId, userId);
-    }
-    const deleted = await this.voiceRepository.softDeleteOwnedIfUnreferenced(
-      voiceId,
-      userId,
-    );
-    if (!deleted) {
-      const remaining =
-        await this.voiceRepository.findFirstByIdNotDeleted(voiceId);
-      throw remaining
-        ? new ConflictException(VOICE_IN_USE)
-        : new NotFoundException('Voice not found');
+    const released =
+      !!voice.publicId &&
+      (await this.uploadService.releaseRecorded(voice.publicId, userId));
+    if (!wasActive && !released) {
+      throw new NotFoundException('Voice not found');
     }
   }
 
