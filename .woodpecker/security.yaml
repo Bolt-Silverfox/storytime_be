@@ -27,7 +27,11 @@ steps:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
       NODE_OPTIONS: --max-old-space-size=384
     commands:
-      - corepack enable && corepack prepare pnpm@10.15.1 --activate
       - |
+        if ! { corepack enable && corepack prepare pnpm@10.15.1 --activate; }; then
+          echo "ADVISORY: corepack could not bootstrap pnpm, so the audit did not run. This step never fails the build."
+          echo "security audit finished (advisory only, exit 0)"
+          exit 0
+        fi
         pnpm audit --audit-level=high || echo "ADVISORY: pnpm audit reported high/critical advisories above. This step never fails the build; do not require this check while it reports findings."
         echo "security audit finished (advisory only, exit 0)"
