@@ -1,7 +1,7 @@
 import { PrismaAvatarRepository } from './repositories/prisma-avatar.repository';
 
 describe('PrismaAvatarRepository.replaceAndAssignUserAvatar', () => {
-  const build = (existing: string | null | undefined) => {
+  const build = (existing: string | null | undefined, sharing = 0) => {
     const calls: string[] = [];
     const tx = {
       $executeRaw: jest.fn((strings: TemplateStringsArray) => {
@@ -14,7 +14,7 @@ describe('PrismaAvatarRepository.replaceAndAssignUserAvatar', () => {
         return Promise.resolve(
           /FROM users/.test(text) || existing === undefined
             ? []
-            : [{ publicId: existing }],
+            : [{ publicId: existing, url: 'old-url' }],
         );
       }),
       user: {
@@ -28,6 +28,7 @@ describe('PrismaAvatarRepository.replaceAndAssignUserAvatar', () => {
         }),
       },
       avatar: {
+        count: jest.fn(() => Promise.resolve(sharing)),
         upsert: jest.fn(({ create }: { create: { publicId: string } }) => {
           calls.push('upsert');
           return Promise.resolve({ id: 'row', publicId: create.publicId });
@@ -58,6 +59,14 @@ describe('PrismaAvatarRepository.replaceAndAssignUserAvatar', () => {
     ['the same asset', 'new'],
   ])('reports nothing displaced for %s', async (_n, existing) => {
     const { repo } = build(existing);
+    expect(
+      (await repo.replaceAndAssignUserAvatar('u1', 'n', data))
+        .displacedPublicId,
+    ).toBeNull();
+  });
+
+  it('does not report the old asset displaced while another avatar still references it', async () => {
+    const { repo } = build('old', 1);
     expect(
       (await repo.replaceAndAssignUserAvatar('u1', 'n', data))
         .displacedPublicId,

@@ -16,8 +16,8 @@ async function replaceNamedRow(
 ): Promise<{ avatar: Avatar; displacedPublicId: string | null }> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${name}, 0))`;
   const rows = await tx.$queryRaw<
-    { publicId: string | null }[]
-  >`SELECT "publicId" FROM avatars WHERE name = ${name} FOR UPDATE`;
+    { publicId: string | null; url: string }[]
+  >`SELECT "publicId", url FROM avatars WHERE name = ${name} FOR UPDATE`;
   const avatar = await tx.avatar.upsert({
     where: { name },
     update: {
@@ -37,11 +37,16 @@ async function replaceNamedRow(
     },
   });
   const previous = rows[0]?.publicId ?? null;
-  return {
-    avatar,
-    displacedPublicId:
-      previous && previous !== avatar.publicId ? previous : null,
-  };
+  if (!previous || previous === avatar.publicId) {
+    return { avatar, displacedPublicId: null };
+  }
+  const sharesAsset = await tx.avatar.count({
+    where: {
+      id: { not: avatar.id },
+      OR: [{ url: rows[0].url }, { publicId: previous }],
+    },
+  });
+  return { avatar, displacedPublicId: sharesAsset > 0 ? null : previous };
 }
 
 @Injectable()

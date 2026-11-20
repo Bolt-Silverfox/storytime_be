@@ -2,10 +2,15 @@ import { retireAvatarIfUnreferenced } from './retire-avatar';
 
 describe('retireAvatarIfUnreferenced', () => {
   const build = (
-    row: { publicId: string | null; isSystemAvatar: boolean } | null,
+    row: {
+      publicId: string | null;
+      isSystemAvatar: boolean;
+      url?: string;
+    } | null,
     users: number,
     kids: number,
     deleted = 1,
+    sharing = 0,
   ) => {
     const calls: string[] = [];
     const tx = {
@@ -21,6 +26,7 @@ describe('retireAvatarIfUnreferenced', () => {
       },
       kid: { count: jest.fn(() => Promise.resolve(kids)) },
       avatar: {
+        count: jest.fn(() => Promise.resolve(sharing)),
         deleteMany: jest.fn(() => {
           calls.push('delete');
           return Promise.resolve({ count: deleted });
@@ -79,5 +85,23 @@ describe('retireAvatarIfUnreferenced', () => {
     const { tx } = build({ publicId: 'p2', isSystemAvatar: false }, 0, 0);
     await expect(retire(tx, 'p1')).resolves.toBeNull();
     expect(tx.avatar.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes the row but keeps the asset while another avatar shares its url or asset', async () => {
+    const { tx } = build(
+      { publicId: 'asset', isSystemAvatar: false, url: 'shared-url' },
+      0,
+      0,
+      1,
+      1,
+    );
+    await expect(retire(tx)).resolves.toBeNull();
+    expect(tx.avatar.deleteMany).toHaveBeenCalled();
+    expect(tx.avatar.count).toHaveBeenCalledWith({
+      where: {
+        id: { not: 'old' },
+        OR: [{ url: 'shared-url' }, { publicId: 'asset' }],
+      },
+    });
   });
 });

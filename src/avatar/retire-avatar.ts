@@ -6,8 +6,8 @@ export async function retireAvatarIfUnreferenced(
   expectedPublicId?: string,
 ): Promise<string | null> {
   const rows = await tx.$queryRaw<
-    { publicId: string | null; isSystemAvatar: boolean }[]
-  >`SELECT "publicId", "isSystemAvatar" FROM avatars WHERE id = ${avatarId} FOR UPDATE`;
+    { publicId: string | null; isSystemAvatar: boolean; url: string }[]
+  >`SELECT "publicId", "isSystemAvatar", url FROM avatars WHERE id = ${avatarId} FOR UPDATE`;
   const row = rows[0];
   if (!row || row.isSystemAvatar || !row.publicId) return null;
   if (expectedPublicId !== undefined && row.publicId !== expectedPublicId) {
@@ -23,5 +23,12 @@ export async function retireAvatarIfUnreferenced(
   const { count } = await tx.avatar.deleteMany({
     where: { id: avatarId, isSystemAvatar: false },
   });
-  return count === 1 ? row.publicId : null;
+  if (count !== 1) return null;
+  const sharesAsset = await tx.avatar.count({
+    where: {
+      id: { not: avatarId },
+      OR: [{ url: row.url }, { publicId: row.publicId }],
+    },
+  });
+  return sharesAsset > 0 ? null : row.publicId;
 }
