@@ -13,7 +13,7 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
     prisma.avatar.create({
       data: {
         name: `${tag}_${n++}`,
-        url: 'u',
+        url: `${tag}_url_${n}`,
         publicId: `${tag}_pid_${n}`,
         isSystemAvatar: false,
       },
@@ -32,6 +32,19 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
 
   const retire = (id: string) =>
     prisma.$transaction((tx) => retireAvatarIfUnreferenced(tx, id));
+
+  it('deletes the row but keeps the asset while a system avatar shares its url', async () => {
+    const a = await makeAvatar();
+    await prisma.avatar.create({
+      data: {
+        name: `${tag}_sys_${n++}`,
+        url: a.url,
+        isSystemAvatar: true,
+      },
+    });
+    await expect(retire(a.id)).resolves.toBeNull();
+    expect(await prisma.avatar.count({ where: { id: a.id } })).toBe(0);
+  });
 
   it('deletes an unreferenced avatar and returns its asset id', async () => {
     const a = await makeAvatar();
@@ -83,7 +96,7 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
     const repo = new PrismaAvatarRepository(prisma as never);
     const replace = (userId: string, name: string, publicId: string) =>
       repo.replaceAndAssignUserAvatar(userId, name, {
-        url: 'u',
+        url: `${tag}_url_${publicId}`,
         publicId,
         isSystemAvatar: false,
       });

@@ -35,6 +35,7 @@ describe('PrismaUserRepository.createAndAssignAvatar', () => {
       kid: { count: jest.fn().mockResolvedValue(kidsUsing) },
       avatar: {
         create: jest.fn().mockResolvedValue({ id: 'new' }),
+        count: jest.fn().mockResolvedValue(0),
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
