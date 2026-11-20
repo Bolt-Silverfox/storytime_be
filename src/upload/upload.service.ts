@@ -16,12 +16,23 @@ import {
 } from 'cloudinary';
 import toStream from 'buffer-to-stream';
 
-const STALE_RESERVATION_MS = 15 * 60_000;
+export const STALE_RESERVATION_MS = 15 * 60_000;
+export const PENDING_UPLOAD_TAG = 'st-upload-pending';
+export const USER_CONTEXT_KEY = 'st_user';
+export const RESERVATION_CONTEXT_KEY = 'st_reservation';
 export const UPLOAD_QUOTA_EXCEEDED = 'UPLOAD_QUOTA_EXCEEDED';
+
+export const describeError = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 export interface UploadOwner {
   userId: string;
   exempt?: boolean;
+}
+
+interface PendingMark {
+  tags: string[];
+  context: Record<string, string>;
 }
 
 export const uploadOwner = (auth: JwtPayload): UploadOwner => ({
@@ -39,7 +50,9 @@ export class UploadService {
     file: Express.Multer.File,
     owner?: UploadOwner,
   ): Promise<UploadApiResponse> {
-    return this.countedUpload(owner, file.size, () => this.putFile(file));
+    return this.countedUpload(owner, file.size, (mark) =>
+      this.putFile(file, mark),
+    );
   }
 
   async uploadImage(
@@ -47,15 +60,15 @@ export class UploadService {
     folder: string,
     owner?: UploadOwner,
   ): Promise<UploadApiResponse> {
-    return this.countedUpload(owner, file.size, () =>
-      this.putImage(file, folder),
+    return this.countedUpload(owner, file.size, (mark) =>
+      this.putImage(file, folder, mark),
     );
   }
 
   private async countedUpload(
     owner: UploadOwner | undefined,
     incomingBytes: number,
-    upload: () => Promise<UploadApiResponse>,
+    upload: (mark?: PendingMark) => Promise<UploadApiResponse>,
   ): Promise<UploadApiResponse> {
     if (!owner) return upload();
     const reservationId = await this.reserve(
@@ -65,7 +78,13 @@ export class UploadService {
     );
     let result: UploadApiResponse;
     try {
-      result = await upload();
+      result = await upload({
+        tags: [PENDING_UPLOAD_TAG],
+        context: {
+          [USER_CONTEXT_KEY]: owner.userId,
+          [RESERVATION_CONTEXT_KEY]: reservationId,
+        },
+      });
     } catch (error) {
       await this.releaseReservation(reservationId);
       throw error;
@@ -93,7 +112,23 @@ export class UploadService {
       }
       throw error;
     }
+    void this.clearPendingTag(result.public_id, result.resource_type);
     return result;
+  }
+
+  private async clearPendingTag(
+    publicId: string,
+    resourceType: string,
+  ): Promise<void> {
+    try {
+      await cloudinary.uploader.remove_tag(PENDING_UPLOAD_TAG, [publicId], {
+        resource_type: resourceType,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to clear the pending tag on asset "${publicId}": ${describeError(error)}`,
+      );
+    }
   }
 
   private async keepAsRecorded(
@@ -182,12 +217,16 @@ export class UploadService {
       );
   }
 
-  private putFile(file: Express.Multer.File): Promise<UploadApiResponse> {
+  private putFile(
+    file: Express.Multer.File,
+    mark?: PendingMark,
+  ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: 'storytime',
           resource_type: 'auto',
+          ...mark,
         },
         (error: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
@@ -215,6 +254,7 @@ export class UploadService {
   private putImage(
     file: Express.Multer.File,
     folder: string,
+    mark?: PendingMark,
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
@@ -226,6 +266,7 @@ export class UploadService {
             { quality: 'auto' },
             { format: 'webp' },
           ],
+          ...mark,
         },
         (error: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
@@ -319,6 +360,13 @@ export class UploadService {
     if (!row || (row.userId !== auth.userId && auth.userRole !== 'admin')) {
       throw new NotFoundException('Upload not found');
     }
+    if (await this.isInUse(publicId)) {
+      throw new ConflictException('This upload is still in use');
+    }
+    await this.deleteImage(publicId);
+  }
+
+  async isInUse(publicId: string): Promise<boolean> {
     const [avatars, voices, stories] = await Promise.all([
       this.prisma.avatar.count({
         where: {
@@ -330,10 +378,7 @@ export class UploadService {
         where: { coverImageUrl: { contains: publicId } },
       }),
     ]);
-    if (avatars + voices + stories > 0) {
-      throw new ConflictException('This upload is still in use');
-    }
-    await this.deleteImage(publicId);
+    return avatars + voices + stories > 0;
   }
 
   async deleteImage(publicId: string, resourceType?: string): Promise<void> {
