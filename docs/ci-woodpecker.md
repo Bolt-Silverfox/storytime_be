@@ -70,36 +70,37 @@ cached (spot agents start empty).
 ## Running a step locally
 
 Use the same image, from the repo root. The unit and e2e steps need Postgres
-and Redis; start them yourself on a Docker network named `wpnet`:
+and Redis; start them yourself on a private Docker network:
 
 ```sh
-run=wp-$$
-docker network create "$run"
-trap 'docker rm -f "$run-postgres" "$run-redis" >/dev/null 2>&1; docker network rm "$run" >/dev/null 2>&1' EXIT
-docker run -d --rm --name "$run-postgres" --network "$run" --network-alias postgres \
-  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=storytime_test postgres:16-alpine
-docker run -d --rm --name "$run-redis" --network "$run" --network-alias redis redis:7-alpine
+(
+  run="wp-$RANDOM$RANDOM"
+  docker network create "$run"
+  trap 'docker rm -f "$run-postgres" "$run-redis" >/dev/null 2>&1; docker network rm "$run" >/dev/null 2>&1' EXIT
+  docker run -d --rm --name "$run-postgres" --network "$run" --network-alias postgres \
+    -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=storytime_test postgres:16-alpine
+  docker run -d --rm --name "$run-redis" --network "$run" --network-alias redis redis:7-alpine
 
-docker run --rm --network "$run" --memory 3g -v "$PWD":/w -w /w \
-  --env-file ci/woodpecker/ci.env -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
-  -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
-  node:24.22.1-bookworm sh -c '
-    corepack enable && corepack prepare pnpm@10.15.1 --activate &&
-    pnpm install --frozen-lockfile --ignore-scripts && pnpm db:generate &&
-    node ci/woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379 &&
-    pnpm db:migrate:deploy &&
-    NODE_OPTIONS=--max-old-space-size=2048 pnpm test --maxWorkers=1
-    status=$?
-    chown -R "$HOST_UID:$HOST_GID" /w
-    exit $status'
+  docker run --rm --network "$run" --memory 3g -v "$PWD":/w -w /w \
+    --env-file ci/woodpecker/ci.env -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+    node:24.22.1-bookworm sh -c '
+      corepack enable && corepack prepare pnpm@10.15.1 --activate &&
+      pnpm install --frozen-lockfile --ignore-scripts && pnpm db:generate &&
+      node ci/woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379 &&
+      pnpm db:migrate:deploy &&
+      NODE_OPTIONS=--max-old-space-size=2048 pnpm test --maxWorkers=1
+      status=$?
+      chown -R "$HOST_UID:$HOST_GID" /w/node_modules
+      exit $status'
+)
 ```
 
-The containers and network carry a per-run name (`wp-<pid>`), so the `trap`
+The containers and network carry a per-run name (`wp-<random>`), so the `trap`
 removes only what this procedure created, on any exit, including after a failed
-test command (run the block in one shell session; if you run it line by line,
-remove the `$run-postgres` and `$run-redis` containers and the `$run` network
-yourself afterwards). The container runs as root, so it hands ownership of the
-checkout back to you before exiting, whether or not the tests passed. The
+test command (the block runs in a subshell so cleanup happens after each attempt). The container runs as root, so it hands ownership of the
+`node_modules` it created back to you before exiting, whether or not the tests
+passed; existing files keep their owner. The
 synthetic values are passed with `--env-file`, so an existing `.env` in your
 checkout is never overwritten. Lint the pipeline files themselves with
 `docker run --rm -v "$PWD":/w -w /w woodpeckerci/woodpecker-cli:v3.18.1 lint .woodpecker/`.
