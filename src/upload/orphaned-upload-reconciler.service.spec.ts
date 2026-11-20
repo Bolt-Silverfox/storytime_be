@@ -172,13 +172,15 @@ describe('OrphanedUploadReconciler', () => {
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
     prisma.userUpload.findFirst.mockRejectedValue(new Error('db down'));
+    prisma.userUpload.deleteMany.mockRejectedValue(new Error('db down'));
     tagged.push(asset('unknown', 45, 'res1'));
+    tagged.push(asset('untracked', 45));
 
     const summary = await reconciler.reconcile(NOW);
 
     expect(destroy).not.toHaveBeenCalled();
     expect(removeTag).not.toHaveBeenCalled();
-    expect(summary).toEqual({ destroyed: 0, cleared: 0, kept: 0, failed: 1 });
+    expect(summary).toEqual({ destroyed: 0, cleared: 0, kept: 0, failed: 2 });
     expect(error).toHaveBeenCalledWith(expect.stringContaining('unknown'));
   });
 
@@ -199,7 +201,6 @@ describe('OrphanedUploadReconciler', () => {
     const summary = await reconciler.reconcile(NOW);
 
     expect(destroy).not.toHaveBeenCalled();
-    expect(prisma.rows).toHaveLength(1);
     expect(summary).toEqual({ destroyed: 0, cleared: 0, kept: 1, failed: 0 });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('in-use'));
   });
@@ -221,21 +222,83 @@ describe('OrphanedUploadReconciler', () => {
     expect(summary).toEqual({ destroyed: 1, cleared: 0, kept: 0, failed: 0 });
   });
 
-  it('keeps the reservation when the destroy fails and carries on with the rest', async () => {
+  it('carries on with the remaining assets when one destroy fails', async () => {
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     destroy
       .mockRejectedValueOnce(new Error('cloudinary 500'))
       .mockResolvedValueOnce({ result: 'ok' });
-    prisma.rows.push(
-      { id: 'res1', userId: 'u1', publicId: null, bytes: 5, pending: true },
-      { id: 'res2', userId: 'u1', publicId: null, bytes: 5, pending: true },
-    );
     tagged.push(asset('stuck', 45, 'res1'), asset('orphan', 45, 'res2'));
 
     const summary = await reconciler.reconcile(NOW);
 
-    expect(prisma.rows.map((r) => r.id)).toEqual(['res1']);
+    expect(destroy).toHaveBeenCalledWith('orphan', { resource_type: 'image' });
     expect(summary).toEqual({ destroyed: 1, cleared: 0, kept: 0, failed: 1 });
+  });
+
+  it('releases the reservation before it looks for a record, so a late finalise cannot commit behind the lookup', async () => {
+    prisma.rows.push({
+      id: 'res1',
+      userId: 'u1',
+      publicId: null,
+      bytes: 5,
+      pending: true,
+    });
+    let reservationAtLookup: Row | undefined;
+    const lookup = prisma.userUpload.findFirst.getMockImplementation()!;
+    prisma.userUpload.findFirst.mockImplementation((args) => {
+      reservationAtLookup = prisma.rows.find((r) => r.id === 'res1');
+      return lookup(args);
+    });
+    tagged.push(asset('orphan', 45, 'res1'));
+
+    await reconciler.reconcile(NOW);
+
+    expect(prisma.userUpload.findFirst).toHaveBeenCalled();
+    expect(reservationAtLookup).toBeUndefined();
+  });
+
+  it('follows the listing cursor past a page of assets it keeps', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    prisma.avatar.count.mockResolvedValueOnce(1);
+    list.mockImplementation(((
+      _tag: string,
+      opts: { resource_type: string; next_cursor?: string },
+    ) => {
+      if (opts.resource_type !== 'image') {
+        return Promise.resolve({ resources: [] });
+      }
+      return Promise.resolve(
+        opts.next_cursor === 'page2'
+          ? { resources: [asset('orphan', 45)] }
+          : { resources: [asset('in-use', 45)], next_cursor: 'page2' },
+      );
+    }) as never);
+
+    const summary = await reconciler.reconcile(NOW);
+
+    expect(destroy).toHaveBeenCalledWith('orphan', { resource_type: 'image' });
+    expect(summary).toEqual({ destroyed: 1, cleared: 0, kept: 1, failed: 0 });
+  });
+
+  it('still reconciles the other resource types when one cannot be listed', async () => {
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    list.mockImplementation(((_tag: string, opts: { resource_type: string }) =>
+      opts.resource_type === 'image'
+        ? Promise.reject(new Error('rate limited'))
+        : Promise.resolve({
+            resources: tagged.filter(
+              (a) => a.resource_type === opts.resource_type,
+            ),
+          })) as never);
+    tagged.push(asset('clip', 45, undefined, 'video'));
+
+    const summary = await reconciler.reconcile(NOW);
+
+    expect(destroy).toHaveBeenCalledWith('clip', { resource_type: 'video' });
+    expect(summary).toEqual({ destroyed: 1, cleared: 0, kept: 0, failed: 0 });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('image'));
   });
 
   it('does not release a reservation that has since been recorded for another asset', async () => {

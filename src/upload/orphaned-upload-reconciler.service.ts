@@ -53,11 +53,16 @@ export class OrphanedUploadReconciler {
       failed: 0,
     };
     for (const resourceType of RESOURCE_TYPES) {
-      const { resources } = (await cloudinary.api.resources_by_tag(
-        PENDING_UPLOAD_TAG,
-        { resource_type: resourceType, context: true, max_results: PAGE_SIZE },
-      )) as { resources: TaggedAsset[] };
-      for (const asset of resources) {
+      let assets: TaggedAsset[];
+      try {
+        assets = await this.listPending(resourceType);
+      } catch (error) {
+        this.logger.error(
+          `Could not list pending ${resourceType} assets: ${describeError(error)}`,
+        );
+        continue;
+      }
+      for (const asset of assets) {
         if (now - Date.parse(asset.created_at) < MIN_ASSET_AGE_MS) continue;
         try {
           summary[await this.settle(asset)]++;
@@ -77,8 +82,30 @@ export class OrphanedUploadReconciler {
     return summary;
   }
 
+  private async listPending(resourceType: string): Promise<TaggedAsset[]> {
+    const assets: TaggedAsset[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = (await cloudinary.api.resources_by_tag(PENDING_UPLOAD_TAG, {
+        resource_type: resourceType,
+        context: true,
+        max_results: PAGE_SIZE,
+        next_cursor: cursor,
+      })) as { resources: TaggedAsset[]; next_cursor?: string };
+      assets.push(...page.resources);
+      cursor = page.next_cursor;
+    } while (cursor);
+    return assets;
+  }
+
   private async settle(asset: TaggedAsset): Promise<Outcome> {
     const publicId = asset.public_id;
+    const reservationId = asset.context?.custom?.[RESERVATION_CONTEXT_KEY];
+    if (reservationId) {
+      await this.prisma.userUpload.deleteMany({
+        where: { id: reservationId, pending: true },
+      });
+    }
     const recorded = await this.prisma.userUpload.findFirst({
       where: { publicId, pending: false },
       select: { id: true },
@@ -100,12 +127,6 @@ export class OrphanedUploadReconciler {
     })) as { result?: string };
     if (result !== 'ok' && result !== 'not found') {
       throw new Error(`Cloudinary answered "${result}" to the destroy`);
-    }
-    const reservationId = asset.context?.custom?.[RESERVATION_CONTEXT_KEY];
-    if (reservationId) {
-      await this.prisma.userUpload.deleteMany({
-        where: { id: reservationId, pending: true },
-      });
     }
     return 'destroyed';
   }
