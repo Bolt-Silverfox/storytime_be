@@ -94,6 +94,7 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
 
   describe('replaceAndAssignUserAvatar', () => {
     const repo = new PrismaAvatarRepository(prisma as never);
+    const pid = (name: string) => `${tag}_${name}`;
     const replace = (userId: string, name: string, publicId: string) =>
       repo.replaceAndAssignUserAvatar(userId, name, {
         url: `${tag}_url_${n++}`,
@@ -103,7 +104,7 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
 
     it('creates the row, assigns it and reports no displaced asset', async () => {
       const user = await makeUser();
-      const r = await replace(user.id, `${tag}_new_${n++}`, 'first');
+      const r = await replace(user.id, `${tag}_new_${n++}`, pid('first'));
       expect(r.displacedPublicId).toBeNull();
       expect(r.user.avatarId).toBe(r.avatar.id);
     });
@@ -111,18 +112,24 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
     it('reports the asset it overwrote, and none when unchanged', async () => {
       const user = await makeUser();
       const name = `${tag}_rep_${n++}`;
-      await replace(user.id, name, 'p1');
-      expect((await replace(user.id, name, 'p2')).displacedPublicId).toBe('p1');
-      expect((await replace(user.id, name, 'p2')).displacedPublicId).toBeNull();
+      await replace(user.id, name, pid('p1'));
+      expect((await replace(user.id, name, pid('p2'))).displacedPublicId).toBe(
+        pid('p1'),
+      );
+      expect(
+        (await replace(user.id, name, pid('p2'))).displacedPublicId,
+      ).toBeNull();
     });
 
     it('leaves the named row untouched when the assignment fails', async () => {
       const user = await makeUser();
       const name = `${tag}_roll_${n++}`;
-      const first = await replace(user.id, name, 'p1');
-      await expect(replace(`${tag}_missing`, name, 'p2')).rejects.toBeDefined();
+      const first = await replace(user.id, name, pid('p1'));
+      await expect(
+        replace(`${tag}_missing`, name, pid('p2')),
+      ).rejects.toBeDefined();
       const row = await prisma.avatar.findUnique({ where: { name } });
-      expect(row?.publicId).toBe('p1');
+      expect(row?.publicId).toBe(pid('p1'));
       const reloaded = await prisma.user.findUnique({
         where: { id: user.id },
       });
@@ -132,17 +139,17 @@ describeDb('retireAvatarIfUnreferenced (real Postgres)', () => {
     it('serialises concurrent replacements so every asset is reported exactly once', async () => {
       const user = await makeUser();
       const name = `${tag}_conc_${n++}`;
-      await replace(user.id, name, 'p0');
+      await replace(user.id, name, pid('p0'));
       const results = await Promise.all([
-        replace(user.id, name, 'p1'),
-        replace(user.id, name, 'p2'),
+        replace(user.id, name, pid('p1')),
+        replace(user.id, name, pid('p2')),
       ]);
       const displaced = results.map((r) => r.displacedPublicId).sort();
       const finalRow = await prisma.avatar.findUnique({ where: { name } });
       expect([...displaced, finalRow?.publicId].sort()).toEqual([
-        'p0',
-        'p1',
-        'p2',
+        pid('p0'),
+        pid('p1'),
+        pid('p2'),
       ]);
     });
   });
