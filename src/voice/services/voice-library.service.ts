@@ -1,8 +1,10 @@
 import {
+  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -19,6 +21,10 @@ import { VoiceResponseMapper } from './voice-response.mapper';
 import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 import { withResilience } from '@/shared/resilience';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
+import { UploadService } from '@/upload/upload.service';
+
+const VOICE_IN_USE =
+  'This voice is still selected. Choose another voice before deleting it.';
 
 /**
  * Owns a user's personal voice library: uploaded clones, registered ElevenLabs
@@ -38,6 +44,7 @@ export class VoiceLibraryService {
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     private readonly mapper: VoiceResponseMapper,
     private readonly cbService: CircuitBreakerService,
+    private readonly uploadService: UploadService,
   ) {}
 
   // --- Upload a new voice file ---
@@ -46,6 +53,7 @@ export class VoiceLibraryService {
     fileUrl: string,
     dto: UploadVoiceDto,
     fileBuffer?: Buffer,
+    publicId?: string,
   ): Promise<VoiceResponseDto> {
     let elevenLabsId = '';
 
@@ -70,9 +78,34 @@ export class VoiceLibraryService {
       name: dto.name,
       type: VoiceSourceType.UPLOADED,
       url: fileUrl,
+      publicId: publicId ?? null,
       elevenLabsVoiceId: elevenLabsId || null,
     });
     return this.mapper.toVoiceResponse(voice);
+  }
+
+  async deleteVoice(userId: string, voiceId: string): Promise<void> {
+    const voice = await this.voiceRepository.findFirstByIdNotDeleted(voiceId);
+    if (!voice || voice.userId !== userId) {
+      throw new NotFoundException('Voice not found');
+    }
+    if (await this.voiceRepository.isVoiceReferenced(voiceId)) {
+      throw new ConflictException(VOICE_IN_USE);
+    }
+    if (voice.publicId) {
+      await this.uploadService.releaseRecorded(voice.publicId, userId);
+    }
+    const deleted = await this.voiceRepository.softDeleteOwnedIfUnreferenced(
+      voiceId,
+      userId,
+    );
+    if (!deleted) {
+      const remaining =
+        await this.voiceRepository.findFirstByIdNotDeleted(voiceId);
+      throw remaining
+        ? new ConflictException(VOICE_IN_USE)
+        : new NotFoundException('Voice not found');
+    }
   }
 
   // --- Create a voice using ElevenLabs ID ---

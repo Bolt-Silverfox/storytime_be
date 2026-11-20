@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Headers,
@@ -153,6 +154,7 @@ export class VoiceController {
         uploadResult.secure_url,
         dto,
         file.buffer,
+        uploadResult.public_id,
       );
     } catch (error) {
       await this.uploadService
@@ -199,6 +201,23 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
   ): Promise<VoiceResponseDto[]> {
     return this.voiceService.listVoices(req.authUserData.userId);
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Delete one of your voices and free its uploaded sample',
+  })
+  @ApiResponse({ status: 200, description: 'Voice deleted' })
+  @ApiResponse({ status: 404, description: 'Voice not found' })
+  @ApiResponse({ status: 409, description: 'Voice is still selected' })
+  async deleteVoice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.voiceService.deleteVoice(req.authUserData.userId, id);
+    return { success: true };
   }
 
   // --- Set preferred voice ---

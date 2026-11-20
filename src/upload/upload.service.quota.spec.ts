@@ -544,6 +544,69 @@ describe('UploadService per-user upload cap', () => {
     });
   });
 
+  describe('releaseRecorded', () => {
+    it("destroys the owner's recorded asset with its resource type and frees the row", async () => {
+      seed({
+        userId: 'u1',
+        bytes: 25 * MB,
+        publicId: 'voice-1',
+        resourceType: 'video',
+      });
+      const destroy = jest
+        .spyOn(cloudinary.uploader, 'destroy')
+        .mockResolvedValue({ result: 'ok' });
+
+      await service.releaseRecorded('voice-1', 'u1');
+
+      expect(destroy).toHaveBeenCalledWith('voice-1', {
+        resource_type: 'video',
+      });
+      expect(prisma.rows).toHaveLength(0);
+    });
+
+    it('does nothing when the asset was already released', async () => {
+      const destroy = jest.spyOn(cloudinary.uploader, 'destroy');
+
+      await expect(
+        service.releaseRecorded('voice-1', 'u1'),
+      ).resolves.toBeUndefined();
+      expect(destroy).not.toHaveBeenCalled();
+    });
+
+    it("leaves another user's asset and row alone", async () => {
+      seed({ userId: 'u2', bytes: 25 * MB, publicId: 'voice-1' });
+      const destroy = jest.spyOn(cloudinary.uploader, 'destroy');
+
+      await service.releaseRecorded('voice-1', 'u1');
+
+      expect(destroy).not.toHaveBeenCalled();
+      expect(prisma.rows).toHaveLength(1);
+    });
+
+    it('keeps the row counted when Cloudinary refuses the delete', async () => {
+      seed({
+        userId: 'u1',
+        bytes: 25 * MB,
+        publicId: 'voice-1',
+        resourceType: 'video',
+      });
+      jest
+        .spyOn(cloudinary.uploader, 'destroy')
+        .mockResolvedValue({ result: 'error' });
+      jest
+        .spyOn(
+          (service as unknown as { logger: { error: () => void } }).logger,
+          'error',
+        )
+        .mockImplementation(() => undefined);
+
+      await expect(service.releaseRecorded('voice-1', 'u1')).rejects.toThrow(
+        'Delete failed',
+      );
+      expect(prisma.rows).toHaveLength(1);
+    });
+  });
+
   it('does not cap admin uploads but records them so they can be deleted', async () => {
     seed({ userId: 'admin', bytes: MAX_USER_UPLOAD_BYTES });
     cloudinaryReplies('p4', 5 * MB);
