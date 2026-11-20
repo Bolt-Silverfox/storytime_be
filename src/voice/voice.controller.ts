@@ -40,7 +40,7 @@ import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { GuestSessionService } from '@/guest/guest-session.service';
 import { StoryQuotaService } from '../story/story-quota.service';
 import { StoryService } from '../story/story.service';
-import { UploadService } from '../upload/upload.service';
+import { UploadService, uploadOwner } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { DEFAULT_VOICE } from './voice.constants';
 import { GuestStoryAudioService } from './guest-story-audio.service';
@@ -141,15 +141,29 @@ export class VoiceController {
     const { userId } = req.authUserData;
 
     // Upload file to Cloudinary
-    const uploadResult = await this.uploadService.uploadFile(file);
-
-    // Save voice record
-    const voice = await this.voiceService.uploadVoice(
-      userId,
-      uploadResult.secure_url,
-      dto,
-      file.buffer,
+    const uploadResult = await this.uploadService.uploadFile(
+      file,
+      uploadOwner(req.authUserData),
     );
+
+    let voice;
+    try {
+      voice = await this.voiceService.uploadVoice(
+        userId,
+        uploadResult.secure_url,
+        dto,
+        file.buffer,
+      );
+    } catch (error) {
+      await this.uploadService
+        .deleteImage(uploadResult.public_id, uploadResult.resource_type)
+        .catch((cleanupError: Error) => {
+          this.logger.warn(
+            `Failed to release voice upload "${uploadResult.public_id}": ${cleanupError.message}`,
+          );
+        });
+      throw error;
+    }
 
     return {
       message: 'Voice uploaded successfully',

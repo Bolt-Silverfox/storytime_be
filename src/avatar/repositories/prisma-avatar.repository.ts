@@ -1,7 +1,53 @@
 import { Injectable } from '@nestjs/common';
-import { Avatar, User, Kid } from '@prisma/client';
+import { Avatar, User, Kid, Prisma } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
-import { IAvatarRepository } from './avatar.repository.interface';
+import { retireAvatarIfUnreferenced } from '../retire-avatar';
+import {
+  IAvatarRepository,
+  ReplacementData,
+  ReplacedUserAvatar,
+  ReplacedKidAvatar,
+} from './avatar.repository.interface';
+
+async function replaceNamedRow(
+  tx: Prisma.TransactionClient,
+  name: string,
+  data: ReplacementData,
+): Promise<{ avatar: Avatar; displacedPublicId: string | null }> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${name}, 0))`;
+  const rows = await tx.$queryRaw<
+    { publicId: string | null; url: string }[]
+  >`SELECT "publicId", url FROM avatars WHERE name = ${name} FOR UPDATE`;
+  const avatar = await tx.avatar.upsert({
+    where: { name },
+    update: {
+      url: data.url,
+      publicId: data.publicId,
+      isSystemAvatar: data.isSystemAvatar,
+      isDeleted: false,
+      deletedAt: null,
+    },
+    create: {
+      name,
+      url: data.url,
+      publicId: data.publicId || null,
+      isSystemAvatar: data.isSystemAvatar,
+      isDeleted: false,
+      deletedAt: null,
+    },
+  });
+  const previous = rows[0]?.publicId ?? null;
+  if (!previous || previous === avatar.publicId) {
+    return { avatar, displacedPublicId: null };
+  }
+  const sharesAsset = await tx.avatar.count({
+    where: {
+      id: { not: avatar.id },
+      OR: [{ url: rows[0].url }, { publicId: previous }],
+    },
+  });
+  return { avatar, displacedPublicId: sharesAsset > 0 ? null : previous };
+}
 
 @Injectable()
 export class PrismaAvatarRepository implements IAvatarRepository {
@@ -118,6 +164,15 @@ export class PrismaAvatarRepository implements IAvatarRepository {
   }
 
   // Usage counts
+  retireAvatarIfUnreferenced(
+    avatarId: string,
+    expectedPublicId?: string,
+  ): Promise<string | null> {
+    return this.prisma.$transaction((tx) =>
+      retireAvatarIfUnreferenced(tx, avatarId, expectedPublicId),
+    );
+  }
+
   async countUsersUsingAvatar(avatarId: string): Promise<number> {
     return this.prisma.user.count({ where: { avatarId } });
   }
@@ -151,6 +206,27 @@ export class PrismaAvatarRepository implements IAvatarRepository {
     });
   }
 
+  replaceAndAssignUserAvatar(
+    userId: string,
+    name: string,
+    data: ReplacementData,
+  ): Promise<ReplacedUserAvatar> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId} FOR UPDATE`;
+      const current = await tx.user.findUnique({
+        where: { id: userId },
+        select: { avatar: true },
+      });
+      const replaced = await replaceNamedRow(tx, name, data);
+      const user = await tx.user.update({
+        where: { id: userId },
+        data: { avatarId: replaced.avatar.id },
+        include: { avatar: true },
+      });
+      return { ...replaced, user, previous: current?.avatar ?? null };
+    });
+  }
+
   // Kid avatar operations
   async findKidById(kidId: string): Promise<Kid | null> {
     return this.prisma.kid.findUnique({ where: { id: kidId } });
@@ -173,6 +249,27 @@ export class PrismaAvatarRepository implements IAvatarRepository {
       where: { id: kidId },
       data: { avatarId },
       include: { avatar: true },
+    });
+  }
+
+  replaceAndAssignKidAvatar(
+    kidId: string,
+    name: string,
+    data: ReplacementData,
+  ): Promise<ReplacedKidAvatar> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM kids WHERE id = ${kidId} FOR UPDATE`;
+      const current = await tx.kid.findUnique({
+        where: { id: kidId },
+        select: { avatar: true },
+      });
+      const replaced = await replaceNamedRow(tx, name, data);
+      const kid = await tx.kid.update({
+        where: { id: kidId },
+        data: { avatarId: replaced.avatar.id },
+        include: { avatar: true },
+      });
+      return { ...replaced, kid, previous: current?.avatar ?? null };
     });
   }
 }

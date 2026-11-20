@@ -25,6 +25,7 @@ import {
   ALLOWED_IMAGE_TYPES,
   MAX_IMAGE_SIZE,
 } from '@/shared/constants/upload.constants';
+import { uploadOwner } from '@/upload/upload.service';
 import { AvatarService } from './avatar.service';
 import { CreateAvatarDto, UpdateAvatarDto } from './dto/avatar.dto';
 import {
@@ -49,11 +50,12 @@ export class AvatarCoreController {
   }
 
   @Post()
+  @UseGuards(AdminGuard)
   @UseInterceptors(FileInterceptor('image'))
   @ApiOperation({
-    summary: 'Create avatar',
+    summary: 'Create system avatar',
     description:
-      'Create a new avatar. For non-admin users, avatars are created as custom avatars. For admin users, avatars are created as system avatars. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
+      'Create a new system avatar. Admin access required. Max file size: 5MB. Supported formats: PNG, JPEG, JPG, GIF, WebP.',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -80,16 +82,16 @@ export class AvatarCoreController {
   })
   @ApiResponse({
     status: 201,
-    description: 'Avatar created successfully',
+    description: 'System avatar created successfully',
     schema: {
       example: {
         statusCode: 201,
-        message: 'Avatar created successfully',
+        message: 'System avatar created successfully',
         data: {
           id: 'avatar-new-999',
-          name: 'New Custom Avatar',
+          name: 'New System Avatar',
           url: 'https://example.com/new-avatar.png',
-          isSystemAvatar: false,
+          isSystemAvatar: true,
           publicId: 'new_public_id_999',
           isDeleted: false,
           deletedAt: null,
@@ -121,6 +123,17 @@ export class AvatarCoreController {
       },
     },
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden',
+    schema: {
+      example: {
+        message: 'Admin access required',
+        statusCode: 403,
+        details: {},
+      },
+    },
+  })
   async createAvatar(
     @Req() req: AuthenticatedRequest,
     @UploadedFile(
@@ -135,22 +148,19 @@ export class AvatarCoreController {
     file: Express.Multer.File,
     @Body() createAvatarDto: CreateAvatarDto,
   ) {
-    const isAdmin = req.authUserData.userRole === 'admin';
-
-    // Determine isSystemAvatar based on user role
-    const isSystemAvatar = isAdmin;
-
     const avatar = await this.avatarService.createAvatar(
       createAvatarDto,
       file,
-      isSystemAvatar,
+      true,
+      undefined,
+      uploadOwner(req.authUserData),
     );
 
-    const message = isAdmin
-      ? 'System avatar created successfully'
-      : 'Avatar created successfully';
-
-    return new SuccessResponse(201, avatar, message);
+    return new SuccessResponse(
+      201,
+      avatar,
+      'System avatar created successfully',
+    );
   }
 
   @Put(':id')

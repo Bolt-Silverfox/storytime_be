@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, PayloadTooLargeException } from '@nestjs/common';
 import { VoiceController } from './voice.controller';
 import { VoiceService } from './voice.service';
 import {
@@ -19,12 +19,13 @@ import { GuestStoryAudioService } from './guest-story-audio.service';
 const mockVoiceService = {
   listVoices: jest.fn(),
   fetchAvailableVoices: jest.fn(),
+  uploadVoice: jest.fn(),
 };
 
 const mockStoryService = {
   getStoryById: jest.fn(),
 };
-const mockUploadService = {};
+const mockUploadService = { uploadFile: jest.fn(), deleteImage: jest.fn() };
 const mockTextToSpeechService = {
   batchTextToSpeechEager: jest.fn(),
 };
@@ -428,6 +429,79 @@ describe('VoiceController', () => {
         id,
         { allowSharedGuest: true },
       );
+    });
+  });
+
+  describe('uploadVoiceFile', () => {
+    const file = { buffer: Buffer.from('a'), size: 1 } as never;
+    const uploaded = {
+      secure_url: 'https://x/v.mp3',
+      public_id: 'v',
+      resource_type: 'video',
+    };
+
+    beforeEach(() => {
+      mockUploadService.uploadFile.mockReset();
+      mockUploadService.deleteImage.mockReset();
+      mockUploadService.uploadFile.mockResolvedValue(uploaded);
+      mockUploadService.deleteImage.mockResolvedValue(undefined);
+    });
+
+    it('charges the voice sample to the caller upload quota', async () => {
+      mockVoiceService.uploadVoice.mockResolvedValue({ id: 'voice-1' });
+      await controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest);
+      expect(mockUploadService.uploadFile).toHaveBeenCalledWith(file, {
+        userId: 'user-1',
+        exempt: false,
+      });
+      expect(mockUploadService.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('answers 413 at the cap without cloning or recording a voice', async () => {
+      mockUploadService.uploadFile.mockRejectedValue(
+        new PayloadTooLargeException({ error: 'UPLOAD_QUOTA_EXCEEDED' }),
+      );
+      mockVoiceService.uploadVoice.mockClear();
+      await expect(
+        controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest),
+      ).rejects.toBeInstanceOf(PayloadTooLargeException);
+      expect(mockVoiceService.uploadVoice).not.toHaveBeenCalled();
+      expect(mockUploadService.deleteImage).not.toHaveBeenCalled();
+    });
+
+    it('exempts an admin from the quota', async () => {
+      mockVoiceService.uploadVoice.mockResolvedValue({ id: 'voice-1' });
+      const admin = {
+        authUserData: { userId: 'a-1', userRole: 'admin' },
+      } as AuthenticatedRequest;
+      await controller.uploadVoiceFile(file, { name: 'Dad' }, admin);
+      expect(mockUploadService.uploadFile).toHaveBeenCalledWith(file, {
+        userId: 'a-1',
+        exempt: true,
+      });
+    });
+
+    it('destroys the asset and releases the quota row when cloning fails', async () => {
+      mockVoiceService.uploadVoice.mockRejectedValue(new Error('clone failed'));
+      await expect(
+        controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest),
+      ).rejects.toThrow('clone failed');
+      expect(mockUploadService.deleteImage).toHaveBeenCalledWith('v', 'video');
+    });
+
+    it('still reports the clone failure when the cleanup fails too', async () => {
+      mockVoiceService.uploadVoice.mockRejectedValue(new Error('clone failed'));
+      mockUploadService.deleteImage.mockRejectedValue(new Error('cdn down'));
+      const warn = jest
+        .spyOn(
+          (controller as unknown as { logger: { warn: () => void } }).logger,
+          'warn',
+        )
+        .mockImplementation(() => undefined);
+      await expect(
+        controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest),
+      ).rejects.toThrow('clone failed');
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('cdn down'));
     });
   });
 });

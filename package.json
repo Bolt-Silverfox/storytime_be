@@ -34,7 +34,7 @@
     "db:seed": "npx ts-node prisma/seeds/index.ts",
     "deploy:dev": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:dev",
     "deploy:staging": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:staging",
-    "deploy:prod": "pnpm db:generate && pnpm start:pm2:prod",
+    "deploy:prod": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:prod",
     "deploy:blue": "pnpm db:migrate:deploy && pnpm db:generate && pnpm start:pm2:blue"
   },
   "dependencies": {

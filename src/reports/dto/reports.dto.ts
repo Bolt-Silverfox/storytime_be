@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class KidOverviewStatsDto {
   @ApiProperty()
@@ -108,14 +109,20 @@ export class DailyLimitDto {
 }
 
 export class ScreenTimeSessionDto {
+  @IsString()
+  @IsNotEmpty()
   @ApiProperty()
   kidId: string;
 
-  @ApiProperty()
+  @IsOptional()
+  @IsString()
+  @ApiProperty({ required: false })
   sessionId?: string;
 }
 
 export class EndScreenTimeSessionDto {
+  @IsString()
+  @IsNotEmpty()
   @ApiProperty()
   sessionId: string;
 }

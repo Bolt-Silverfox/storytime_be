@@ -114,6 +114,7 @@ model User {
   userStoryProgress       UserStoryProgress[]
   questionAnswers         QuestionAnswer[]
   voices                  Voice[]
+  uploads                 UserUpload[]
   preferredVoiceId        String?
   preferredVoice          Voice?                   @relation("PreferredVoice", fields: [preferredVoiceId], references: [id])
   Reward                  Reward[]
@@ -1425,4 +1426,18 @@ model SourceFetchLease {
 
   @@id([sourceName, sourceId])
   @@map("source_fetch_lease")
+}
+
+model UserUpload {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  publicId     String?  @unique
+  resourceType String?
+  bytes        Int
+  pending      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@map("user_uploads")
 }
