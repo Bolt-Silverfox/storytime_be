@@ -53,16 +53,7 @@ export class OrphanedUploadReconciler {
       failed: 0,
     };
     for (const resourceType of RESOURCE_TYPES) {
-      let assets: TaggedAsset[];
-      try {
-        assets = await this.listPending(resourceType);
-      } catch (error) {
-        this.logger.error(
-          `Could not list pending ${resourceType} assets: ${describeError(error)}`,
-        );
-        continue;
-      }
-      for (const asset of assets) {
+      for (const asset of await this.listPending(resourceType)) {
         if (now - Date.parse(asset.created_at) < MIN_ASSET_AGE_MS) continue;
         try {
           summary[await this.settle(asset)]++;
@@ -85,16 +76,25 @@ export class OrphanedUploadReconciler {
   private async listPending(resourceType: string): Promise<TaggedAsset[]> {
     const assets: TaggedAsset[] = [];
     let cursor: string | undefined;
-    do {
-      const page = (await cloudinary.api.resources_by_tag(PENDING_UPLOAD_TAG, {
-        resource_type: resourceType,
-        context: true,
-        max_results: PAGE_SIZE,
-        next_cursor: cursor,
-      })) as { resources: TaggedAsset[]; next_cursor?: string };
-      assets.push(...page.resources);
-      cursor = page.next_cursor;
-    } while (cursor);
+    try {
+      do {
+        const page = (await cloudinary.api.resources_by_tag(
+          PENDING_UPLOAD_TAG,
+          {
+            resource_type: resourceType,
+            context: true,
+            max_results: PAGE_SIZE,
+            next_cursor: cursor,
+          },
+        )) as { resources: TaggedAsset[]; next_cursor?: string };
+        assets.push(...page.resources);
+        cursor = page.next_cursor;
+      } while (cursor);
+    } catch (error) {
+      this.logger.error(
+        `Could not list pending ${resourceType} assets: ${describeError(error)}`,
+      );
+    }
     return assets;
   }
 

@@ -280,6 +280,32 @@ describe('OrphanedUploadReconciler', () => {
     expect(summary).toEqual({ destroyed: 1, cleared: 0, kept: 1, failed: 0 });
   });
 
+  it('settles the pages it fetched when a later page cannot be listed', async () => {
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    list.mockImplementation(((
+      _tag: string,
+      opts: { resource_type: string; next_cursor?: string },
+    ) => {
+      if (opts.resource_type !== 'image') {
+        return Promise.resolve({ resources: [] });
+      }
+      return opts.next_cursor === 'page2'
+        ? Promise.reject(new Error('rate limited'))
+        : Promise.resolve({
+            resources: [asset('orphan', 45)],
+            next_cursor: 'page2',
+          });
+    }) as never);
+
+    const summary = await reconciler.reconcile(NOW);
+
+    expect(destroy).toHaveBeenCalledWith('orphan', { resource_type: 'image' });
+    expect(summary).toEqual({ destroyed: 1, cleared: 0, kept: 0, failed: 0 });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('image'));
+  });
+
   it('still reconciles the other resource types when one cannot be listed', async () => {
     const error = jest
       .spyOn(Logger.prototype, 'error')
