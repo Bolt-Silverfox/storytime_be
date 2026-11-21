@@ -76,7 +76,6 @@ steps:
     environment:
       <<: [*corepack_env, *db_env]
       NODE_OPTIONS: --max-old-space-size=2048
-      ELEVEN_LABS_KEY: ci-dummy
     commands:
       - *pnpm
       - cp ci/woodpecker/ci.env .env

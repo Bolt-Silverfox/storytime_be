@@ -89,7 +89,7 @@ and Redis; start them yourself on a private Docker network:
       pnpm install --frozen-lockfile --ignore-scripts && pnpm db:generate &&
       node ci/woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379 &&
       pnpm db:migrate:deploy &&
-      NODE_OPTIONS=--max-old-space-size=2048 pnpm test --maxWorkers=1
+      NODE_OPTIONS=--max-old-space-size=2048 env -u ELEVEN_LABS_KEY pnpm test --maxWorkers=1
       status=$?
       chown -R "$HOST_UID:$HOST_GID" /w/node_modules
       exit $status'
@@ -102,7 +102,10 @@ test command (the block runs in a subshell so cleanup happens after each attempt
 `node_modules` it created back to you before exiting, whether or not the tests
 passed; existing files keep their owner. The
 synthetic values are passed with `--env-file`, so an existing `.env` in your
-checkout is never overwritten. Lint the pipeline files themselves with
+checkout is never overwritten. `ELEVEN_LABS_KEY` is unset for jest because CI
+keeps it out of the jest process too: `test/app.e2e-spec.ts` runs only when it
+is set, and that suite is stale (it expects a `GET /` route the app no longer
+has, and leaves jest hanging on open handles). Lint the pipeline files themselves with
 `docker run --rm -v "$PWD":/w -w /w woodpeckerci/woodpecker-cli:v3.18.1 lint .woodpecker/`.
 
 ## Memory
