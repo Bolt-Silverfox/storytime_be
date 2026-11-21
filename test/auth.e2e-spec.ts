@@ -30,6 +30,7 @@ import { PushProcessor } from '../src/notification/queue/push.processor';
 import { EmailProvider } from '../src/notification/providers/email.provider';
 import { AuthThrottleGuard } from '../src/shared/guards/auth-throttle.guard';
 import { REDIS_CLIENT } from '../src/redis/redis.constants';
+import { RedisService } from '../src/redis/redis.service';
 
 // SharedModule's InfraMetricsService injects REDIS_CLIENT, which the app gets
 // from the @Global RedisModule. Tests don't have a Redis server, so provide an
@@ -42,8 +43,27 @@ import { REDIS_CLIENT } from '../src/redis/redis.constants';
       provide: REDIS_CLIENT,
       useValue: { status: 'end', info: jest.fn(), on: jest.fn() },
     },
+    {
+      provide: RedisService,
+      useValue: {
+        client: {
+          multi: jest.fn(() => ({
+            set: jest.fn().mockReturnThis(),
+            incr: jest.fn().mockReturnThis(),
+            ttl: jest.fn().mockReturnThis(),
+            exec: jest.fn().mockResolvedValue([
+              [null, 'OK'],
+              [null, 1],
+              [null, 3600],
+            ]),
+          })),
+          expire: jest.fn().mockResolvedValue(1),
+          del: jest.fn().mockResolvedValue(1),
+        },
+      },
+    },
   ],
-  exports: [REDIS_CLIENT],
+  exports: [REDIS_CLIENT, RedisService],
 })
 class MockRedisModule {}
 

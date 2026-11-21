@@ -5,7 +5,11 @@ import {
   UnauthorizedException,
   BadRequestException,
   Inject,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
+import { RedisService } from '@/redis/redis.service';
 import { TokenService } from './token.service';
 import { generateToken } from '@/shared/utils/generate-token';
 import {
@@ -20,6 +24,9 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserPasswordChangedEvent } from '@/shared/events';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 
+const RESET_MAX_FAILED_ATTEMPTS = 5;
+const RESET_ATTEMPT_WINDOW_SECONDS = 60 * 60;
+
 @Injectable()
 export class PasswordService {
   private readonly logger = new Logger(PasswordService.name);
@@ -29,7 +36,73 @@ export class PasswordService {
     private readonly authRepository: IAuthRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly tokenService: TokenService,
+    private readonly redis: RedisService,
   ) {}
+
+  private resetAttemptsKey(email: string): string {
+    const digest = createHash('sha256')
+      .update(email.toLowerCase().trim())
+      .digest('hex');
+    return `password-reset:failed:${digest}`;
+  }
+
+  private async recordFailedResetAttempt(email: string): Promise<number> {
+    const key = this.resetAttemptsKey(email);
+    const results = await this.redis.client
+      .multi()
+      .set(key, 0, 'EX', RESET_ATTEMPT_WINDOW_SECONDS, 'NX')
+      .incr(key)
+      .ttl(key)
+      .exec();
+    if (results?.[2]?.[1] === -1) {
+      await this.redis.client.expire(key, RESET_ATTEMPT_WINDOW_SECONDS);
+    }
+    return Number(results?.[1]?.[1]);
+  }
+
+  private async lockOutIfExceeded(email: string, attempts: number) {
+    if (attempts <= RESET_MAX_FAILED_ATTEMPTS) return;
+    const user = await this.authRepository.findUserByEmail(email);
+    if (user) {
+      await this.authRepository.deleteUserTokensByType(
+        user.id,
+        TokenType.PASSWORD_RESET,
+      );
+    }
+    throw new HttpException(
+      'Too many failed reset attempts. Try again later.',
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  private async consumeResetAttempt(token: string, email: string) {
+    const attempts = await this.recordFailedResetAttempt(email);
+    await this.lockOutIfExceeded(email, attempts);
+
+    const resetToken = await this.authRepository.findTokenByHashedToken(
+      this.tokenService.hashToken(token),
+      TokenType.PASSWORD_RESET,
+    );
+
+    if (!resetToken) {
+      throw new NotFoundException('Invalid reset token');
+    }
+
+    if (resetToken.user.email !== email) {
+      const ownerAttempts = await this.recordFailedResetAttempt(
+        resetToken.user.email,
+      );
+      await this.lockOutIfExceeded(resetToken.user.email, ownerAttempts);
+      throw new NotFoundException('Invalid reset token');
+    }
+
+    if (resetToken.expiresAt < new Date()) {
+      await this.authRepository.deleteToken(resetToken.id);
+      throw new UnauthorizedException('Reset token has expired');
+    }
+
+    return resetToken;
+  }
 
   /**
    * Request a password reset - sends reset email to user
@@ -110,24 +183,9 @@ export class PasswordService {
     email: string,
     data: ValidateResetTokenDto, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
-    const hashedToken = this.tokenService.hashToken(token);
-    const resetToken = await this.authRepository.findTokenByHashedToken(
-      hashedToken,
-      TokenType.PASSWORD_RESET,
-    );
+    await this.consumeResetAttempt(token, email);
 
-    if (!resetToken) {
-      throw new NotFoundException('Invalid reset token');
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await this.authRepository.deleteToken(resetToken.id);
-      throw new UnauthorizedException('Reset token has expired');
-    }
-
-    if (resetToken.user.email !== email) {
-      throw new UnauthorizedException('Invalid reset token');
-    }
+    await this.redis.client.del(this.resetAttemptsKey(email));
 
     return { message: 'Valid reset token' };
   }
@@ -144,20 +202,9 @@ export class PasswordService {
     ip?: string,
     userAgent?: string,
   ): Promise<{ message: string }> {
-    const hashedToken = this.tokenService.hashToken(token);
-    const resetToken = await this.authRepository.findTokenByHashedToken(
-      hashedToken,
-      TokenType.PASSWORD_RESET,
-    );
+    const resetToken = await this.consumeResetAttempt(token, email);
 
-    if (!resetToken) {
-      throw new NotFoundException('Invalid reset token');
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await this.authRepository.deleteToken(resetToken.id);
-      throw new UnauthorizedException('Reset token has expired');
-    }
+    await this.redis.client.del(this.resetAttemptsKey(email));
 
     // Hash new password and update user
     const hashedPassword = await bcrypt.hash(newPassword, 10);
