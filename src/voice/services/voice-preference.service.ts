@@ -59,16 +59,18 @@ export class VoicePreferenceService {
       voice = await this.voiceRepository.findFirstByIdNotDeleted(dto.voiceId);
     }
 
-    if (!voice) {
+    const result =
+      voice &&
+      (await this.userRepository.updatePreferredVoiceWithInclude(
+        userId,
+        voice.id,
+      ));
+
+    if (!result) {
       throw new NotFoundException(
         `Voice "${dto.voiceId}" not found. Please select a valid voice.`,
       );
     }
-
-    const result = await this.userRepository.updatePreferredVoiceWithInclude(
-      userId,
-      voice.id,
-    );
 
     if (!result.preferredVoice) {
       throw new InternalServerErrorException(

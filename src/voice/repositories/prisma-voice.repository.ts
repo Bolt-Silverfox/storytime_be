@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@/prisma/prisma.service';
 import type { IVoiceRepository } from './voice.repository.interface';
 import type { Voice, Prisma } from '@prisma/client';
+import { lockVoiceForDelete } from './voice-row-lock';
 
 @Injectable()
 export class PrismaVoiceRepository implements IVoiceRepository {
@@ -110,18 +111,22 @@ export class PrismaVoiceRepository implements IVoiceRepository {
     id: string,
     userId: string,
   ): Promise<boolean> {
-    const { count } = await this.prisma.voice.updateMany({
-      where: {
-        id,
-        userId,
-        isDeleted: false,
-        usersPreferring: { none: {} },
-        kidsPreferring: { none: {} },
-        usersWithAsSecond: { none: {} },
-      },
-      data: { isDeleted: true, deletedAt: new Date() },
+    return this.prisma.$transaction(async (tx) => {
+      // Postgres re-reads the references only in a statement that starts after this lock is granted.
+      await lockVoiceForDelete(tx, id);
+      const { count } = await tx.voice.updateMany({
+        where: {
+          id,
+          userId,
+          isDeleted: false,
+          usersPreferring: { none: {} },
+          kidsPreferring: { none: {} },
+          usersWithAsSecond: { none: {} },
+        },
+        data: { isDeleted: true, deletedAt: new Date() },
+      });
+      return count > 0;
     });
-    return count > 0;
   }
 
   async clearElevenLabsVoiceId(id: string, userId: string): Promise<void> {
