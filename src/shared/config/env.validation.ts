@@ -1,7 +1,18 @@
 import { z } from 'zod';
 import { Logger } from '@nestjs/common';
 
-export const envSchema = z
+export const isPeriodic = (value: string): boolean => {
+  for (let period = 1; period <= value.length / 2; period++) {
+    let periodic = true;
+    for (let i = period; i < value.length && periodic; i++) {
+      periodic = value[i] === value[i - period];
+    }
+    if (periodic) return true;
+  }
+  return false;
+};
+
+const envSchema = z
   .object({
     // Unset must be strict: nonProdThrottleMultiplier relaxes rate limits for
     // development/staging, so an absent NODE_ENV defaults to 'production'.
@@ -106,6 +117,17 @@ export const envSchema = z
     SENTRY_DSN: z.string().url().optional(),
     SENTRY_RELEASE: z.string().optional(),
     SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).optional(),
+    PASSWORDLESS_LOGIN_ENABLED: z.preprocess(
+      (v) =>
+        typeof v === 'string'
+          ? ['true', '1'].includes(v.trim().toLowerCase())
+          : v,
+      z.boolean().default(false),
+    ),
+    PASSWORDLESS_PEPPER: z.preprocess(
+      (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+      z.string().optional(),
+    ),
   })
   .refine(
     (data) => {
@@ -121,7 +143,29 @@ export const envSchema = z
       message:
         'Firebase credentials must be either all provided or all omitted (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY)',
     },
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (!data.PASSWORDLESS_LOGIN_ENABLED) return;
+    const pepper = data.PASSWORDLESS_PEPPER;
+    const issue = (message: string) =>
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message,
+        path: ['PASSWORDLESS_PEPPER'],
+      });
+    if (!pepper) {
+      issue(
+        'PASSWORDLESS_PEPPER is required when PASSWORDLESS_LOGIN_ENABLED is true',
+      );
+    } else if (pepper.length < 32) {
+      issue('PASSWORDLESS_PEPPER must be at least 32 characters');
+    } else if (
+      /change.?me|replace|placeholder|your[-_ ]/i.test(pepper) ||
+      isPeriodic(pepper)
+    ) {
+      issue('PASSWORDLESS_PEPPER looks like a placeholder or repeating value');
+    }
+  });
 
 export type EnvConfig = z.infer<typeof envSchema>;
 

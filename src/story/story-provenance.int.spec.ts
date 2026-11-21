@@ -1,11 +1,14 @@
 import { PrismaClient } from '@prisma/client';
+import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Real-Postgres checks for the provenance columns/indexes added by migration
  * 20261031000001_add_story_provenance_and_source_cache. Skipped w/o DATABASE_URL.
  */
-const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
+const describeDb = isThrowawayDatabaseUrl(process.env.DATABASE_URL)
+  ? describe
+  : describe.skip;
 
 describeDb('story provenance schema (real Postgres)', () => {
   const prisma = new PrismaClient();

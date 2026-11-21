@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OAuthService } from './oauth.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import {
@@ -13,6 +13,11 @@ import { NotificationPreferenceService } from '@/notification/services/notificat
 import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
+import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
+import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
+import appleSigninAuth from 'apple-signin-auth';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents } from '@/shared/events/app-events';
 
 // Mock google-auth-library
 jest.mock('google-auth-library', () => ({
@@ -33,7 +38,9 @@ describe('OAuthService', () => {
   let service: OAuthService;
   let authRepository: jest.Mocked<IAuthRepository>;
   let tokenService: jest.Mocked<TokenService>;
+  let passwordService: jest.Mocked<PasswordService>;
   let googleClient: { verifyIdToken: jest.Mock };
+  let eventEmitter: { emit: jest.Mock };
 
   const mockUser: UserWithProfileAndAvatar = {
     ...makeUser({
@@ -49,8 +56,14 @@ describe('OAuthService', () => {
     const mockAuthRepository = {
       findUserByGoogleId: jest.fn(),
       findUserByAppleId: jest.fn(),
-      findUserByEmail: jest.fn(),
+      findUserByEmailInsensitive: jest.fn(),
       updateUser: jest.fn(),
+      updateUserWithRelations: jest.fn(),
+      takeOverUnverifiedAccount: jest.fn(),
+      findUserById: jest.fn(),
+      findUserByIdWithProfile: jest.fn().mockResolvedValue(null),
+      linkGoogleAccountIfUnset: jest.fn().mockResolvedValue({ count: 1 }),
+      linkAppleAccountIfUnset: jest.fn().mockResolvedValue({ count: 1 }),
       createUser: jest.fn(),
       findAvatarByUrl: jest.fn(),
       createAvatar: jest.fn(),
@@ -69,6 +82,7 @@ describe('OAuthService', () => {
       seedDefaultPreferences: jest.fn(),
     };
 
+    eventEmitter = { emit: jest.fn() };
     googleClient = { verifyIdToken: jest.fn() };
     (OAuth2Client as unknown as jest.Mock).mockImplementation(
       () => googleClient,
@@ -90,6 +104,7 @@ describe('OAuthService', () => {
         { provide: TokenService, useValue: mockTokenService },
         { provide: PasswordService, useValue: mockPasswordService },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: EventEmitter2, useValue: eventEmitter },
         {
           provide: NotificationPreferenceService,
           useValue: mockNotificationPreferenceService,
@@ -100,6 +115,7 @@ describe('OAuthService', () => {
     service = module.get<OAuthService>(OAuthService);
     authRepository = module.get(AUTH_REPOSITORY);
     tokenService = module.get(TokenService);
+    passwordService = module.get(PasswordService);
   });
 
   describe('loginWithGoogleIdToken', () => {
@@ -132,6 +148,346 @@ describe('OAuthService', () => {
       expect(authRepository.findUserByGoogleId).toHaveBeenCalledWith(
         'google-123',
       );
+    });
+
+    describe('pre-registered unverified account', () => {
+      const attackerOwned = {
+        ...mockUser,
+        id: 'victim-account',
+        email: 'victim@example.com',
+        isEmailVerified: false,
+        googleId: null,
+        passwordHash: 'attacker-chosen-hash',
+      };
+
+      beforeEach(() => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'google-victim',
+            email: 'victim@example.com',
+            email_verified: true,
+          }),
+        });
+        authRepository.findUserByGoogleId.mockResolvedValue(null);
+        authRepository.findUserByEmailInsensitive.mockResolvedValue(
+          attackerOwned,
+        );
+        authRepository.takeOverUnverifiedAccount.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
+        authRepository.updateUserWithRelations.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
+        authRepository.countKidsByParentId.mockResolvedValue(0);
+        passwordService.hashPassword.mockResolvedValue('rotated-hash');
+        tokenService.createTokenPair.mockResolvedValue({
+          jwt: 'j',
+          refreshToken: 'r',
+        });
+      });
+
+      it('revokes sessions, device tokens and credentials in one repository call, hashing the password first', async () => {
+        await service.loginWithGoogleIdToken('valid-token');
+
+        const call = authRepository.takeOverUnverifiedAccount.mock.calls[0];
+        expect(call[0]).toBe('victim-account');
+        expect(call[1]).toMatchObject({
+          isEmailVerified: true,
+          hasLocalPassword: false,
+          passwordHash: 'rotated-hash',
+          googleId: 'google-victim',
+          appleId: null,
+          pinHash: null,
+          biometricsEnabled: false,
+          onboardingStatus: 'email_verified',
+        });
+        expect(
+          passwordService.hashPassword.mock.invocationCallOrder[0],
+        ).toBeLessThan(
+          authRepository.takeOverUnverifiedAccount.mock.invocationCallOrder[0],
+        );
+      });
+
+      it('falls back to a plain verified sign-in when the account was verified between the read and the takeover', async () => {
+        const verifiedNow = {
+          ...attackerOwned,
+          isEmailVerified: true,
+          googleId: 'owner-google',
+        };
+        authRepository.takeOverUnverifiedAccount.mockRejectedValue(
+          new AccountAlreadyVerifiedError(),
+        );
+        authRepository.findUserById.mockResolvedValue(verifiedNow);
+        authRepository.updateUserWithRelations.mockResolvedValue(verifiedNow);
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).resolves.toBeDefined();
+
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+        expect(authRepository.linkGoogleAccountIfUnset).toHaveBeenCalledWith(
+          verifiedNow.id,
+          'google-victim',
+        );
+      });
+
+      it('emits the email-verified event when the takeover verifies the account', async () => {
+        await service.loginWithGoogleIdToken('valid-token');
+
+        expect(eventEmitter.emit).toHaveBeenCalledWith(
+          AppEvents.USER_EMAIL_VERIFIED,
+          expect.objectContaining({
+            userId: 'victim-account',
+            email: 'victim@example.com',
+          }),
+        );
+      });
+
+      it('does not emit the email-verified event for an already verified account', async () => {
+        authRepository.findUserByEmailInsensitive.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
+        await service.loginWithGoogleIdToken('valid-token');
+
+        expect(eventEmitter.emit).not.toHaveBeenCalledWith(
+          AppEvents.USER_EMAIL_VERIFIED,
+          expect.anything(),
+        );
+      });
+
+      it('drops ids the attacker linked earlier when the owner arrives through Google', async () => {
+        authRepository.findUserByEmailInsensitive.mockResolvedValue({
+          ...attackerOwned,
+          googleId: 'attacker-google-sub',
+          appleId: 'attacker-apple-sub',
+        });
+        await service.loginWithGoogleIdToken('valid-token');
+
+        const data = authRepository.takeOverUnverifiedAccount.mock.calls[0][1];
+        expect(data.googleId).toBe('google-victim');
+        expect(data.appleId).toBeNull();
+      });
+
+      it('leaves sessions and password alone for an already verified account', async () => {
+        authRepository.findUserByEmailInsensitive.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
+        await service.loginWithGoogleIdToken('valid-token');
+
+        expect(authRepository.takeOverUnverifiedAccount).not.toHaveBeenCalled();
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('inactive accounts', () => {
+      it.each([
+        ['suspended', { isSuspended: true }],
+        ['deleted', { isDeleted: true }],
+      ])(
+        'refuses a %s account matched by email without issuing tokens or saying the email is unverified',
+        async (_label, flag) => {
+          googleClient.verifyIdToken.mockResolvedValue({
+            getPayload: () => ({
+              sub: 'g-sub',
+              email: 'owner@example.com',
+              email_verified: true,
+            }),
+          });
+          authRepository.findUserByGoogleId.mockResolvedValue(null);
+          authRepository.findUserByEmailInsensitive.mockResolvedValue({
+            ...mockUser,
+            isEmailVerified: false,
+            ...flag,
+          });
+
+          const err = await service
+            .loginWithGoogleIdToken('valid-token')
+            .catch((e: Error) => e);
+
+          expect(err).toBeInstanceOf(UnauthorizedException);
+          expect((err as Error).message).not.toMatch(/verified/i);
+          expect(
+            authRepository.takeOverUnverifiedAccount,
+          ).not.toHaveBeenCalled();
+          expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+        },
+      );
+
+      it('refuses a suspended account matched by provider id', async () => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'g-sub',
+            email: 'owner@example.com',
+            email_verified: true,
+          }),
+        });
+        authRepository.findUserByGoogleId.mockResolvedValue({
+          ...mockUser,
+          isSuspended: true,
+        });
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      });
+    });
+
+    it('matches the stored email case-insensitively', async () => {
+      googleClient.verifyIdToken.mockResolvedValue({
+        getPayload: () => ({
+          sub: 'g-sub',
+          email: 'mixed@example.com',
+          email_verified: true,
+        }),
+      });
+      authRepository.findUserByGoogleId.mockResolvedValue(null);
+      authRepository.findUserByEmailInsensitive.mockResolvedValue({
+        ...mockUser,
+        email: 'Mixed@Example.com',
+        isEmailVerified: true,
+      });
+      authRepository.updateUserWithRelations.mockResolvedValue({
+        ...mockUser,
+        isEmailVerified: true,
+      });
+      authRepository.countKidsByParentId.mockResolvedValue(0);
+      tokenService.createTokenPair.mockResolvedValue({
+        jwt: 'j',
+        refreshToken: 'r',
+      });
+
+      await service.loginWithGoogleIdToken('valid-token');
+
+      expect(authRepository.findUserByEmailInsensitive).toHaveBeenCalledWith(
+        'mixed@example.com',
+      );
+      expect(authRepository.createUser).not.toHaveBeenCalled();
+    });
+
+    it('refuses without linking or issuing tokens when several verified accounts match the email', async () => {
+      googleClient.verifyIdToken.mockResolvedValue({
+        getPayload: () => ({
+          sub: 'g-sub',
+          email: 'Mixed@example.com',
+          email_verified: true,
+        }),
+      });
+      authRepository.findUserByGoogleId.mockResolvedValue(null);
+      authRepository.findUserByEmailInsensitive.mockRejectedValue(
+        new AmbiguousEmailAccountError(),
+      );
+
+      await expect(
+        service.loginWithGoogleIdToken('valid-token'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(authRepository.linkGoogleAccountIfUnset).not.toHaveBeenCalled();
+      expect(authRepository.createUser).not.toHaveBeenCalled();
+      expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+    });
+
+    describe('provider reports the email as unverified', () => {
+      const existing = {
+        ...mockUser,
+        id: 'verified-owner',
+        email: 'owner@example.com',
+        isEmailVerified: true,
+        googleId: 'owner-google-sub',
+      };
+
+      beforeEach(() => {
+        authRepository.findUserByGoogleId.mockResolvedValue(null);
+        authRepository.findUserByAppleId.mockResolvedValue(null);
+        authRepository.findUserByEmailInsensitive.mockResolvedValue(existing);
+      });
+
+      const expectUntouched = () => {
+        expect(
+          authRepository.findUserByEmailInsensitive,
+        ).not.toHaveBeenCalled();
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+        expect(authRepository.takeOverUnverifiedAccount).not.toHaveBeenCalled();
+        expect(authRepository.createUser).not.toHaveBeenCalled();
+        expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      };
+
+      it('refuses Google without matching, linking or issuing tokens', async () => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'attacker-sub',
+            email: 'owner@example.com',
+            email_verified: false,
+          }),
+        });
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+        expectUntouched();
+      });
+
+      it.each(['false', false, undefined])(
+        'refuses Apple when email_verified is %p',
+        async (flag) => {
+          (appleSigninAuth.verifyIdToken as jest.Mock).mockResolvedValue({
+            sub: 'attacker-apple',
+            email: 'owner@example.com',
+            email_verified: flag,
+          });
+
+          await expect(
+            service.loginWithAppleIdToken('valid-token'),
+          ).rejects.toBeInstanceOf(BadRequestException);
+          expectUntouched();
+        },
+      );
+
+      it('writes nothing, not even an avatar, for an unverified account found by provider id', async () => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'known-sub',
+            email: 'owner@example.com',
+            email_verified: true,
+            picture: 'https://img.example/a.png',
+          }),
+        });
+        authRepository.findUserByGoogleId.mockResolvedValue({
+          ...existing,
+          isEmailVerified: false,
+          avatarId: null,
+        });
+        authRepository.findAvatarByUrl.mockResolvedValue(null);
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toBeInstanceOf(BadRequestException);
+
+        expect(authRepository.createAvatar).not.toHaveBeenCalled();
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+      });
+
+      it('still accepts Apple when email_verified is the string true', async () => {
+        (appleSigninAuth.verifyIdToken as jest.Mock).mockResolvedValue({
+          sub: 'owner-apple',
+          email: 'owner@example.com',
+          email_verified: 'true',
+        });
+        authRepository.updateUserWithRelations.mockResolvedValue(existing);
+        authRepository.countKidsByParentId.mockResolvedValue(0);
+        tokenService.createTokenPair.mockResolvedValue({
+          jwt: 'j',
+          refreshToken: 'r',
+        });
+
+        await expect(
+          service.loginWithAppleIdToken('valid-token'),
+        ).resolves.toBeDefined();
+      });
     });
   });
 });

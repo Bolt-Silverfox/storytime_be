@@ -1,6 +1,7 @@
 import { render } from '@react-email/render';
 import { EmailVerificationTemplate } from './templates/email-verification';
 import { PasswordResetTemplate } from './templates/password-reset';
+import { PasswordlessLoginTemplate } from './templates/passwordless-login';
 import { PasswordResetAlertTemplate } from './templates/password-reset-alert';
 import { PasswordChangedTemplate } from './templates/password-changed';
 import { PinResetTemplate } from './templates/pin-reset';
@@ -12,6 +13,7 @@ import { NotificationCategory } from '@prisma/client';
 export type Notifications =
   | 'EmailVerification'
   | 'PasswordReset'
+  | 'PasswordlessLogin'
   | 'PasswordResetAlert'
   | 'PasswordChanged'
   | 'PinReset'
@@ -76,6 +78,26 @@ export const NotificationRegistry: Record<
         PasswordResetTemplate({
           resetToken: data.resetToken as string,
           email: data.email as string,
+        }),
+      );
+      return emailHtml;
+    },
+  },
+  PasswordlessLogin: {
+    medium: 'email',
+    category: NotificationCategory.NEW_LOGIN,
+    subject: 'Your Storytime sign-in link and code',
+    validate: (data) => {
+      if (!data.email) return 'Email is required';
+      if (!data.code) return 'Code is required';
+      if (!data.linkUrl) return 'Link URL is required';
+      return null;
+    },
+    getTemplate: async (data) => {
+      const emailHtml = render(
+        PasswordlessLoginTemplate({
+          code: data.code as string,
+          linkUrl: data.linkUrl as string,
         }),
       );
       return emailHtml;

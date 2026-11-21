@@ -57,6 +57,7 @@ describe('TokenService', () => {
 
     const mockAuthRepository: Partial<jest.Mocked<IAuthRepository>> = {
       createSession: jest.fn(),
+      createSessionForUnverifiedUser: jest.fn(),
       recordLastLogin: jest.fn().mockResolvedValue(undefined),
       findSessionByToken: jest.fn(),
       findSessionById: jest.fn(),
@@ -79,6 +80,17 @@ describe('TokenService', () => {
   });
 
   describe('createTokenPair', () => {
+    it('creates the session through the unverified-only path when asked', async () => {
+      authRepository.createSessionForUnverifiedUser.mockResolvedValue(
+        mockSession,
+      );
+
+      await service.createTokenPair(mockUser, { requireUnverified: true });
+
+      expect(authRepository.createSessionForUnverifiedUser).toHaveBeenCalled();
+      expect(authRepository.createSession).not.toHaveBeenCalled();
+    });
+
     it('should create a session and return jwt + refresh token pair', async () => {
       // Arrange
       authRepository.createSession.mockResolvedValue(mockSession);

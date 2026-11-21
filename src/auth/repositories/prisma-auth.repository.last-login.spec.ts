@@ -1,10 +1,11 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaAuthRepository } from './prisma-auth.repository';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 
 /** Scratch-DB spec; opt in with LAST_LOGIN_SCRATCH_DATABASE_URL (skipped otherwise). */
 const url = process.env.LAST_LOGIN_SCRATCH_DATABASE_URL;
-const d = url ? describe : describe.skip;
+const d = isThrowawayDatabaseUrl(url) ? describe : describe.skip;
 
 d('PrismaAuthRepository.recordLastLogin (scratch DB)', () => {
   let prisma: PrismaClient;

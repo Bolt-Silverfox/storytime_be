@@ -6,6 +6,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AgeModule } from './age/age.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AuthModule } from './auth/auth.module';
+import { PasswordlessModule } from './auth/passwordless.module';
 import { AvatarModule } from './avatar/avatar.module';
 import { SharedModule } from './shared/shared.module';
 import { validateEnv, EnvConfig } from './shared/config/env.validation';
@@ -128,6 +129,7 @@ import { BullBoardConfigModule } from './admin/bull-board.module';
     }),
     SharedModule,
     AuthModule,
+    PasswordlessModule,
     UserModule,
     KidModule,
     VoiceModule,
