@@ -457,6 +457,18 @@ describe('VoiceController', () => {
       expect(mockUploadService.deleteImage).not.toHaveBeenCalled();
     });
 
+    it('records the asset public id with the voice so it can be freed later', async () => {
+      mockVoiceService.uploadVoice.mockResolvedValue({ id: 'voice-1' });
+      await controller.uploadVoiceFile(file, { name: 'Dad' }, mockRequest);
+      expect(mockVoiceService.uploadVoice).toHaveBeenCalledWith(
+        'user-1',
+        'https://x/v.mp3',
+        { name: 'Dad' },
+        expect.anything(),
+        'v',
+      );
+    });
+
     it('answers 413 at the cap without cloning or recording a voice', async () => {
       mockUploadService.uploadFile.mockRejectedValue(
         new PayloadTooLargeException({ error: 'UPLOAD_QUOTA_EXCEEDED' }),

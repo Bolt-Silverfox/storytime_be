@@ -767,6 +767,7 @@ model Voice {
   name              String
   type              String
   url               String?
+  publicId          String?
   elevenLabsVoiceId String?
   voiceAvatar       String?
   createdAt         DateTime  @default(now())

@@ -101,4 +101,33 @@ export class PrismaVoiceRepository implements IVoiceRepository {
       select: { elevenLabsVoiceId: true },
     });
   }
+
+  async findByIdAndUser(id: string, userId: string): Promise<Voice | null> {
+    return this.prisma.voice.findFirst({ where: { id, userId } });
+  }
+
+  async softDeleteOwnedIfUnreferenced(
+    id: string,
+    userId: string,
+  ): Promise<boolean> {
+    const { count } = await this.prisma.voice.updateMany({
+      where: {
+        id,
+        userId,
+        isDeleted: false,
+        usersPreferring: { none: {} },
+        kidsPreferring: { none: {} },
+        usersWithAsSecond: { none: {} },
+      },
+      data: { isDeleted: true, deletedAt: new Date() },
+    });
+    return count > 0;
+  }
+
+  async clearElevenLabsVoiceId(id: string, userId: string): Promise<void> {
+    await this.prisma.voice.updateMany({
+      where: { id, userId },
+      data: { elevenLabsVoiceId: null },
+    });
+  }
 }

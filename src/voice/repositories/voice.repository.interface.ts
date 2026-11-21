@@ -49,6 +49,12 @@ export interface IVoiceRepository {
   findElevenLabsIdById(
     id: string,
   ): Promise<{ elevenLabsVoiceId: string | null } | null>;
+
+  findByIdAndUser(id: string, userId: string): Promise<Voice | null>;
+
+  softDeleteOwnedIfUnreferenced(id: string, userId: string): Promise<boolean>;
+
+  clearElevenLabsVoiceId(id: string, userId: string): Promise<void>;
 }
 
 export const VOICE_REPOSITORY = Symbol('VOICE_REPOSITORY');

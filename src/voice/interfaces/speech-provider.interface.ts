@@ -23,4 +23,5 @@ export interface ITextToSpeechProvider {
 
 export interface IVoiceCloningProvider {
   addVoice(name: string, fileBuffer: Buffer): Promise<string>;
+  deleteVoice(voiceId: string): Promise<void>;
 }
