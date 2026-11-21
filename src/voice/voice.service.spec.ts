@@ -38,6 +38,7 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   findByIdAndUser: jest.fn(),
   softDeleteOwnedIfUnreferenced: jest.fn(),
   clearElevenLabsVoiceId: jest.fn(),
+  isElevenLabsIdUsedByAnotherVoice: jest.fn(),
 };
 
 const mockVoiceUserRepository: Record<keyof IVoiceUserRepository, jest.Mock> = {

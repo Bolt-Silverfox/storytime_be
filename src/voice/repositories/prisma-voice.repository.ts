@@ -130,4 +130,19 @@ export class PrismaVoiceRepository implements IVoiceRepository {
       data: { elevenLabsVoiceId: null },
     });
   }
+
+  async isElevenLabsIdUsedByAnotherVoice(
+    elevenLabsVoiceId: string,
+    excludedVoiceId: string,
+  ): Promise<boolean> {
+    const other = await this.prisma.voice.findFirst({
+      where: {
+        elevenLabsVoiceId,
+        isDeleted: false,
+        id: { not: excludedVoiceId },
+      },
+      select: { id: true },
+    });
+    return other !== null;
+  }
 }

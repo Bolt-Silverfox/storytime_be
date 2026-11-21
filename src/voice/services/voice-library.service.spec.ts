@@ -31,6 +31,7 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   findByIdAndUser: jest.fn(),
   softDeleteOwnedIfUnreferenced: jest.fn(),
   clearElevenLabsVoiceId: jest.fn(),
+  isElevenLabsIdUsedByAnotherVoice: jest.fn(),
 };
 
 const mockUploadService = { releaseRecorded: jest.fn() };
@@ -210,8 +211,8 @@ describe('VoiceLibraryService', () => {
           ),
       );
       mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(null);
-      mockVoiceRepository.findSystemVoiceIdByElevenLabsId.mockResolvedValue(
-        null,
+      mockVoiceRepository.isElevenLabsIdUsedByAnotherVoice.mockResolvedValue(
+        false,
       );
       mockElevenLabsProvider.deleteVoice.mockImplementation(() => {
         steps.push('deleteClone');
@@ -452,10 +453,10 @@ describe('VoiceLibraryService', () => {
         expect(steps).toEqual(['softDelete']);
       });
 
-      it('never deletes an ElevenLabs id that belongs to a system voice row', async () => {
-        mockVoiceRepository.findSystemVoiceIdByElevenLabsId.mockImplementation(
-          (id: string) =>
-            Promise.resolve(id === CLONE_ID ? { id: 'system-voice' } : null),
+      it('never deletes an ElevenLabs id that another live voice row still uses', async () => {
+        mockVoiceRepository.isElevenLabsIdUsedByAnotherVoice.mockImplementation(
+          (cloneId: string, voiceId: string) =>
+            Promise.resolve(cloneId === CLONE_ID && voiceId === VOICE_ID),
         );
 
         await service.deleteVoice('user-1', VOICE_ID);

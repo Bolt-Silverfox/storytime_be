@@ -55,6 +55,11 @@ export interface IVoiceRepository {
   softDeleteOwnedIfUnreferenced(id: string, userId: string): Promise<boolean>;
 
   clearElevenLabsVoiceId(id: string, userId: string): Promise<void>;
+
+  isElevenLabsIdUsedByAnotherVoice(
+    elevenLabsVoiceId: string,
+    excludedVoiceId: string,
+  ): Promise<boolean>;
 }
 
 export const VOICE_REPOSITORY = Symbol('VOICE_REPOSITORY');

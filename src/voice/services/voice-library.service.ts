@@ -115,7 +115,10 @@ export class VoiceLibraryService {
       !cloneId ||
       voice.type !== (VoiceSourceType.UPLOADED as string) ||
       this.mapper.findVoiceConfig(cloneId) ||
-      (await this.voiceRepository.findSystemVoiceIdByElevenLabsId(cloneId))
+      (await this.voiceRepository.isElevenLabsIdUsedByAnotherVoice(
+        cloneId,
+        voice.id,
+      ))
     ) {
       return false;
     }

@@ -122,6 +122,66 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
     expect(await isDeleted()).toBe(false);
   });
 
+  describe('an ElevenLabs id shared with another voice row', () => {
+    const CLONE = `${tag}_clone`;
+    const setClone = () =>
+      raw.voice.update({
+        where: { id: voiceId },
+        data: { elevenLabsVoiceId: CLONE },
+      });
+
+    afterEach(async () => {
+      await raw.voice.deleteMany({ where: { elevenLabsVoiceId: CLONE } });
+    });
+
+    it('is not shared when only the voice itself carries it', async () => {
+      await setClone();
+      expect(await repo.isElevenLabsIdUsedByAnotherVoice(CLONE, voiceId)).toBe(
+        false,
+      );
+    });
+
+    it("is shared with another user's registered voice", async () => {
+      await setClone();
+      await repo.createVoice({
+        userId: await newUser(),
+        name: 'Registered',
+        type: 'elevenlabs',
+        elevenLabsVoiceId: CLONE,
+      });
+      expect(await repo.isElevenLabsIdUsedByAnotherVoice(CLONE, voiceId)).toBe(
+        true,
+      );
+    });
+
+    it('is shared with a system voice', async () => {
+      await setClone();
+      await repo.createVoice({
+        userId: null,
+        name: 'System',
+        type: 'elevenlabs',
+        elevenLabsVoiceId: CLONE,
+      });
+      expect(await repo.isElevenLabsIdUsedByAnotherVoice(CLONE, voiceId)).toBe(
+        true,
+      );
+    });
+
+    it('is not shared with a deleted voice', async () => {
+      await setClone();
+      await repo.createVoice({
+        userId: await newUser(),
+        name: 'Gone',
+        type: 'elevenlabs',
+        elevenLabsVoiceId: CLONE,
+        isDeleted: true,
+      });
+      expect(await repo.isElevenLabsIdUsedByAnotherVoice(CLONE, voiceId)).toBe(
+        false,
+      );
+    });
+  });
+
   it("forgets a voice's ElevenLabs id for its owner", async () => {
     await raw.voice.update({
       where: { id: voiceId },
