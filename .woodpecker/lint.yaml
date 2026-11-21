@@ -1,0 +1,64 @@
+# Format check + ESLint (the GitHub "Code Quality" job, minus the audit, which
+# is security.yaml). Status check: ci/woodpecker/{push,pr}/lint
+#
+# HEAVY lane, not light: type-aware ESLint on this tree OOMs at a 1.5 GB heap
+# and needs --max-old-space-size=2048 (measured: peak about 2.6 GB RSS in a
+# container). That cannot fit the light agent's 768 MiB step limit.
+#
+# The Prisma client is generated first: without it every Prisma model is an
+# `error` type and type-aware ESLint reports ~800 phantom errors.
+#
+# `pnpm run lint` is `eslint ... --fix`, exactly as on GitHub: fixable problems
+# are fixed in the CI checkout and do not fail the run; only unfixable errors do.
+# PRs run once (as pull_request); pushes run only on the long-lived branches,
+# where there is no PR to cover them. Halves spot usage per PR commit.
+when:
+  - event: pull_request
+  - event: push
+    branch: [main, "develop-v*", "release-v*"]
+
+labels:
+  lane: heavy
+
+variables:
+  - &node_image node:24.22.1-bookworm
+  - &pnpm "corepack enable && corepack prepare pnpm@10.15.1 --activate"
+  # The pnpm store goes beside the checkout, on the same workspace volume
+  # (/woodpecker is the Docker backend's workspace base), so installs can
+  # hardlink and the store is shared by the workflow's steps. Left to default,
+  # pnpm would create .pnpm-store INSIDE the checkout (the step's home is on
+  # another filesystem), where a bare `eslint` would lint it.
+  - &corepack_env
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    npm_config_store_dir: /woodpecker/.pnpm-store
+
+steps:
+  - name: install
+    image: *node_image
+    environment: *corepack_env
+    commands:
+      - *pnpm
+      - pnpm install --frozen-lockfile --ignore-scripts
+
+  - name: generate
+    image: *node_image
+    environment: *corepack_env
+    commands:
+      - *pnpm
+      - pnpm db:generate
+
+  - name: format
+    image: *node_image
+    environment: *corepack_env
+    commands:
+      - *pnpm
+      - npx prettier --check "src/**/*.ts" "test/**/*.ts"
+
+  - name: eslint
+    image: *node_image
+    environment:
+      <<: *corepack_env
+      NODE_OPTIONS: --max-old-space-size=2048
+    commands:
+      - *pnpm
+      - pnpm run lint
