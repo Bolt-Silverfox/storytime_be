@@ -36,6 +36,7 @@ export type SourceFetcher = (
 
 export interface CacheOptions {
   now?: Date;
+  force?: boolean;
   ttlMs?: number;
   notFoundTtlMs?: number;
   fetchedBy?: string;
@@ -241,7 +242,6 @@ export class SourceCacheService {
 
   private readonly logger = new Logger(SourceCacheService.name);
   private readonly lease: FetchLease;
-  private readonly owner = randomUUID();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -379,7 +379,7 @@ export class SourceCacheService {
     fetcher: SourceFetcher,
     options: CacheOptions = {},
   ): Promise<GetOrFetchResult> {
-    const key = `${sourceName}\u0000${sourceId}`;
+    const key = `${sourceName}\u0000${sourceId}\u0000${options.force ? 'force' : 'plain'}`;
     const running = this.inFlight.get(key);
     // Joiners share the result but did not run the fetcher themselves.
     if (running) return running.then((r) => ({ ...r, fetched: false }));
@@ -399,10 +399,11 @@ export class SourceCacheService {
   ): Promise<GetOrFetchResult> {
     const nowFn = () => options.now ?? new Date();
     const hit = await this.get(sourceName, sourceId);
-    if (hit && this.isFresh(hit, nowFn()))
+    if (hit && !options.force && this.isFresh(hit, nowFn()))
       return { entry: hit, fetched: false };
 
     const key: LeaseKey = `${sourceName}\u0000${sourceId}`;
+    const owner = randomUUID();
     const leaseMs = options.leaseMs ?? DEFAULT_LEASE_MS;
     const deadline =
       Date.now() + (options.waitTimeoutMs ?? DEFAULT_WAIT_TIMEOUT_MS);
@@ -410,14 +411,14 @@ export class SourceCacheService {
 
     // Claim the lease; while someone else holds it, poll the cache (no
     // connection is held between polls) and take their result if it lands.
-    while (!(await this.lease.claim(key, this.owner, leaseMs))) {
+    while (!(await this.lease.claim(key, owner, leaseMs))) {
       if (Date.now() >= deadline) {
         throw new SourceCacheLeaseTimeoutError(sourceName, sourceId);
       }
       await sleep(poll);
       poll = Math.min(poll * 2, MAX_POLL_MS);
       const landed = await this.get(sourceName, sourceId);
-      if (landed && this.isFresh(landed, nowFn())) {
+      if (landed && !options.force && this.isFresh(landed, nowFn())) {
         return { entry: landed, fetched: false };
       }
     }
@@ -437,7 +438,7 @@ export class SourceCacheService {
         if (renewing || lost) return;
         renewing = true;
         this.lease
-          .renew(key, this.owner, leaseMs)
+          .renew(key, owner, leaseMs)
           .then((ok) => {
             if (ok) lastRenewOk = Date.now();
             else markLost('renew reported another holder');
@@ -477,7 +478,7 @@ export class SourceCacheService {
     try {
       // Re-check under the lease: the previous holder may just have finished.
       const current = await this.get(sourceName, sourceId);
-      if (current && this.isFresh(current, nowFn())) {
+      if (current && !options.force && this.isFresh(current, nowFn())) {
         return { entry: current, fetched: false };
       }
       const timeout = new Promise<never>((_, reject) => {
@@ -524,7 +525,7 @@ export class SourceCacheService {
       // lost it must not overwrite a newer fetch with a stale result.
       const written = lost
         ? ({ held: false } as const)
-        : await this.lease.fenced(key, this.owner, (db) =>
+        : await this.lease.fenced(key, owner, (db) =>
             this.put(
               { sourceName, sourceId, result, ...options, now: nowFn() },
               db,
@@ -535,7 +536,7 @@ export class SourceCacheService {
     } finally {
       clearInterval(beat);
       if (timer) clearTimeout(timer);
-      await this.lease.release(key, this.owner).catch((e: unknown) => {
+      await this.lease.release(key, owner).catch((e: unknown) => {
         this.logger.warn(
           `Lease release failed for ${sourceName}/${sourceId}: ${String(e)}`,
         );
