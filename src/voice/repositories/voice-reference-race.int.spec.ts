@@ -67,8 +67,13 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
     (await raw.kid.findUniqueOrThrow({ where: { id: kidId } }))
       .preferredVoiceId;
 
-  const untilDeleteWaitsOnALock = async () => {
-    for (;;) {
+  const untilWaitingOnALockOrSettled = async (deletion: Promise<boolean>) => {
+    let settled = false;
+    const markSettled = () => {
+      settled = true;
+    };
+    deletion.then(markSettled, markSettled);
+    while (!settled) {
       const [{ waiting }] = await raw.$queryRaw<{ waiting: bigint }[]>`
         SELECT count(*) AS waiting FROM pg_locks l
         JOIN pg_stat_activity a ON a.pid = l.pid
@@ -121,7 +126,7 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
         data: { preferredVoiceId: voiceId },
       });
       deleted = softDelete(voiceId);
-      await untilDeleteWaitsOnALock();
+      await untilWaitingOnALockOrSettled(deleted);
     });
 
     expect(await deleted).toBe(false);
