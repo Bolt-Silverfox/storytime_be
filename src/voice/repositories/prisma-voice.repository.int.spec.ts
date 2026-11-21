@@ -121,4 +121,29 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
     );
     expect(await isDeleted()).toBe(false);
   });
+
+  it("forgets a voice's ElevenLabs id for its owner", async () => {
+    await raw.voice.update({
+      where: { id: voiceId },
+      data: { elevenLabsVoiceId: 'clone-1' },
+    });
+
+    await repo.clearElevenLabsVoiceId(voiceId, userId);
+
+    const voice = await raw.voice.findUniqueOrThrow({ where: { id: voiceId } });
+    expect(voice.elevenLabsVoiceId).toBeNull();
+  });
+
+  it("leaves another user's ElevenLabs id alone", async () => {
+    const other = await newUser();
+    await raw.voice.update({
+      where: { id: voiceId },
+      data: { elevenLabsVoiceId: 'clone-1' },
+    });
+
+    await repo.clearElevenLabsVoiceId(voiceId, other);
+
+    const voice = await raw.voice.findUniqueOrThrow({ where: { id: voiceId } });
+    expect(voice.elevenLabsVoiceId).toBe('clone-1');
+  });
 });

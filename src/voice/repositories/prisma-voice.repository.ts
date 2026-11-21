@@ -123,4 +123,11 @@ export class PrismaVoiceRepository implements IVoiceRepository {
     });
     return count > 0;
   }
+
+  async clearElevenLabsVoiceId(id: string, userId: string): Promise<void> {
+    await this.prisma.voice.updateMany({
+      where: { id, userId },
+      data: { elevenLabsVoiceId: null },
+    });
+  }
 }

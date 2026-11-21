@@ -22,6 +22,7 @@ import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 import { withResilience } from '@/shared/resilience';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 import { UploadService } from '@/upload/upload.service';
+import type { Voice } from '@prisma/client';
 
 /**
  * Owns a user's personal voice library: uploaded clones, registered ElevenLabs
@@ -102,9 +103,35 @@ export class VoiceLibraryService {
     const released =
       !!voice.publicId &&
       (await this.uploadService.releaseRecorded(voice.publicId, userId));
-    if (!wasActive && !released) {
+    const cloneDeleted = await this.deleteClone(voice, userId);
+    if (!wasActive && !released && !cloneDeleted) {
       throw new NotFoundException('Voice not found');
     }
+  }
+
+  private async deleteClone(voice: Voice, userId: string): Promise<boolean> {
+    const cloneId = voice.elevenLabsVoiceId;
+    if (
+      !cloneId ||
+      voice.type !== (VoiceSourceType.UPLOADED as string) ||
+      this.mapper.findVoiceConfig(cloneId) ||
+      (await this.voiceRepository.findSystemVoiceIdByElevenLabsId(cloneId))
+    ) {
+      return false;
+    }
+    try {
+      await this.elevenLabsProvider.deleteVoice(cloneId);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Voice ${voice.id} is deleted but its ElevenLabs clone ${cloneId} is not: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        'Voice deletion could not be completed. Please try again.',
+      );
+    }
+    await this.voiceRepository.clearElevenLabsVoiceId(voice.id, userId);
+    return true;
   }
 
   // --- Create a voice using ElevenLabs ID ---

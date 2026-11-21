@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
@@ -9,6 +13,8 @@ import { ElevenLabsTTSProvider } from '../providers/eleven-labs-tts.provider';
 import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 import { UploadService } from '@/upload/upload.service';
+import { VOICE_CONFIG } from '../voice.constants';
+import { VoiceType } from '../dto/voice.dto';
 
 const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   createVoice: jest.fn(),
@@ -24,6 +30,7 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   findElevenLabsIdById: jest.fn(),
   findByIdAndUser: jest.fn(),
   softDeleteOwnedIfUnreferenced: jest.fn(),
+  clearElevenLabsVoiceId: jest.fn(),
 };
 
 const mockUploadService = { releaseRecorded: jest.fn() };
@@ -38,6 +45,7 @@ const mockHttpService = {
 
 const mockElevenLabsProvider = {
   addVoice: jest.fn(),
+  deleteVoice: jest.fn(),
   getVoices: jest.fn(),
 };
 
@@ -202,6 +210,17 @@ describe('VoiceLibraryService', () => {
           ),
       );
       mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(null);
+      mockVoiceRepository.findSystemVoiceIdByElevenLabsId.mockResolvedValue(
+        null,
+      );
+      mockElevenLabsProvider.deleteVoice.mockImplementation(() => {
+        steps.push('deleteClone');
+        return Promise.resolve();
+      });
+      mockVoiceRepository.clearElevenLabsVoiceId.mockImplementation(() => {
+        steps.push('clearCloneId');
+        return Promise.resolve();
+      });
       mockUploadService.releaseRecorded.mockImplementation(() => {
         steps.push('release');
         return Promise.resolve(true);
@@ -323,6 +342,138 @@ describe('VoiceLibraryService', () => {
         'storytime/v',
         'user-1',
       );
+    });
+
+    describe('ElevenLabs clone', () => {
+      const CLONE_ID = 'clone-abc';
+      const cloned = (over: Record<string, unknown> = {}) =>
+        owned({ type: 'uploaded', elevenLabsVoiceId: CLONE_ID, ...over });
+
+      beforeEach(() => {
+        mockVoiceRepository.findByIdAndUser.mockResolvedValue(cloned());
+      });
+
+      const expectCloneUntouched = () => {
+        expect(mockElevenLabsProvider.deleteVoice).not.toHaveBeenCalled();
+        expect(
+          mockVoiceRepository.clearElevenLabsVoiceId,
+        ).not.toHaveBeenCalled();
+      };
+
+      it('deletes the clone made from the sample and forgets its id', async () => {
+        await service.deleteVoice('user-1', VOICE_ID);
+
+        expect(mockElevenLabsProvider.deleteVoice).toHaveBeenCalledWith(
+          CLONE_ID,
+        );
+        expect(mockVoiceRepository.clearElevenLabsVoiceId).toHaveBeenCalledWith(
+          VOICE_ID,
+          'user-1',
+        );
+        expect(steps).toEqual([
+          'softDelete',
+          'release',
+          'deleteClone',
+          'clearCloneId',
+        ]);
+      });
+
+      it('fails the delete and keeps the clone id when ElevenLabs fails', async () => {
+        mockElevenLabsProvider.deleteVoice.mockRejectedValue(
+          new Error('Status code: 500'),
+        );
+
+        await expect(
+          service.deleteVoice('user-1', VOICE_ID),
+        ).rejects.toBeInstanceOf(InternalServerErrorException);
+        expect(
+          mockVoiceRepository.clearElevenLabsVoiceId,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('does not echo the ElevenLabs error to the caller', async () => {
+        mockElevenLabsProvider.deleteVoice.mockRejectedValue(
+          new Error('Status code: 401 xi-api-key sk_secret'),
+        );
+
+        await expect(service.deleteVoice('user-1', VOICE_ID)).rejects.toThrow(
+          'Voice deletion could not be completed. Please try again.',
+        );
+      });
+
+      it('deletes the clone on a retry after the voice and sample are already gone', async () => {
+        mockVoiceRepository.findByIdAndUser.mockResolvedValue(
+          cloned({ isDeleted: true }),
+        );
+        mockUploadService.releaseRecorded.mockResolvedValue(false);
+
+        await service.deleteVoice('user-1', VOICE_ID);
+
+        expect(mockElevenLabsProvider.deleteVoice).toHaveBeenCalledWith(
+          CLONE_ID,
+        );
+        expect(mockVoiceRepository.clearElevenLabsVoiceId).toHaveBeenCalledWith(
+          VOICE_ID,
+          'user-1',
+        );
+      });
+
+      it('answers not found once the voice, sample and clone are all gone', async () => {
+        mockVoiceRepository.findByIdAndUser.mockResolvedValue(
+          cloned({ isDeleted: true, elevenLabsVoiceId: null }),
+        );
+        mockUploadService.releaseRecorded.mockResolvedValue(false);
+
+        await expect(
+          service.deleteVoice('user-1', VOICE_ID),
+        ).rejects.toBeInstanceOf(NotFoundException);
+        expectCloneUntouched();
+      });
+
+      it('keeps the clone when the voice is still selected', async () => {
+        mockVoiceRepository.softDeleteOwnedIfUnreferenced.mockResolvedValue(
+          false,
+        );
+        mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(cloned());
+
+        await expect(
+          service.deleteVoice('user-1', VOICE_ID),
+        ).rejects.toBeInstanceOf(ConflictException);
+        expectCloneUntouched();
+      });
+
+      it('never deletes an ElevenLabs voice the user only registered', async () => {
+        mockVoiceRepository.findByIdAndUser.mockResolvedValue(
+          cloned({ type: 'elevenlabs', publicId: null }),
+        );
+
+        await service.deleteVoice('user-1', VOICE_ID);
+
+        expect(steps).toEqual(['softDelete']);
+      });
+
+      it('never deletes an ElevenLabs id that belongs to a system voice row', async () => {
+        mockVoiceRepository.findSystemVoiceIdByElevenLabsId.mockImplementation(
+          (id: string) =>
+            Promise.resolve(id === CLONE_ID ? { id: 'system-voice' } : null),
+        );
+
+        await service.deleteVoice('user-1', VOICE_ID);
+
+        expect(steps).toEqual(['softDelete', 'release']);
+      });
+
+      it('never deletes an ElevenLabs id of a built-in voice', async () => {
+        mockVoiceRepository.findByIdAndUser.mockResolvedValue(
+          cloned({
+            elevenLabsVoiceId: VOICE_CONFIG[VoiceType.MILO].elevenLabsId,
+          }),
+        );
+
+        await service.deleteVoice('user-1', VOICE_ID);
+
+        expect(steps).toEqual(['softDelete', 'release']);
+      });
     });
   });
 });
