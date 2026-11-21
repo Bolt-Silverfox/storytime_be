@@ -39,6 +39,7 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   softDeleteOwnedIfUnreferenced: jest.fn(),
   clearElevenLabsVoiceId: jest.fn(),
   isElevenLabsIdUsedByAnotherVoice: jest.fn(),
+  isElevenLabsIdOfUploadedVoice: jest.fn(),
 };
 
 const mockVoiceUserRepository: Record<keyof IVoiceUserRepository, jest.Mock> = {

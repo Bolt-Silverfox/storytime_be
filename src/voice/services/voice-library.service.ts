@@ -137,11 +137,26 @@ export class VoiceLibraryService {
     return true;
   }
 
+  private async assertNotAnUploadedVoicesClone(
+    elevenLabsVoiceId: string,
+  ): Promise<void> {
+    if (
+      await this.voiceRepository.isElevenLabsIdOfUploadedVoice(
+        elevenLabsVoiceId,
+      )
+    ) {
+      throw new ConflictException(
+        'This ElevenLabs voice belongs to an uploaded voice and cannot be registered.',
+      );
+    }
+  }
+
   // --- Create a voice using ElevenLabs ID ---
   async createElevenLabsVoice(
     userId: string,
     dto: CreateElevenLabsVoiceDto,
   ): Promise<VoiceResponseDto> {
+    await this.assertNotAnUploadedVoicesClone(dto.elevenLabsVoiceId);
     const voice = await this.voiceRepository.createVoice({
       userId,
       name: dto.name,
@@ -170,6 +185,8 @@ export class VoiceLibraryService {
     if (existing) {
       return { id: existing.id };
     }
+
+    await this.assertNotAnUploadedVoicesClone(elevenLabsId);
 
     // 2. Fetch details from ElevenLabs to get Name AND Preview URL
     let voiceName = 'Imported ElevenLabs Voice';

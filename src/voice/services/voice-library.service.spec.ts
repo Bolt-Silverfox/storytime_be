@@ -32,6 +32,7 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
   softDeleteOwnedIfUnreferenced: jest.fn(),
   clearElevenLabsVoiceId: jest.fn(),
   isElevenLabsIdUsedByAnotherVoice: jest.fn(),
+  isElevenLabsIdOfUploadedVoice: jest.fn(),
 };
 
 const mockUploadService = { releaseRecorded: jest.fn() };
@@ -68,6 +69,7 @@ describe('VoiceLibraryService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     mockBreaker.canExecute.mockReturnValue(true);
+    mockVoiceRepository.isElevenLabsIdOfUploadedVoice.mockResolvedValue(false);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -161,6 +163,119 @@ describe('VoiceLibraryService', () => {
         }),
       );
       expect(result).toEqual({ id: 'new-voice-id' });
+    });
+  });
+
+  describe('registering an ElevenLabs id', () => {
+    const USER_ID = 'user-1';
+    const CLONE_ID = 'clone-of-an-uploaded-voice';
+    const SYSTEM_ID = VOICE_CONFIG[VoiceType.MILO].elevenLabsId;
+    const idIsOfAnUploadedVoice = (id: string) =>
+      mockVoiceRepository.isElevenLabsIdOfUploadedVoice.mockImplementation(
+        (candidate: string) => Promise.resolve(candidate === id),
+      );
+
+    beforeEach(() => {
+      mockVoiceRepository.findFirstByUserAndElevenLabsId.mockResolvedValue(
+        null,
+      );
+      mockVoiceRepository.createVoice.mockImplementation(
+        (data: { name: string; type: string; elevenLabsVoiceId: string }) =>
+          Promise.resolve({ id: 'new-voice-id', ...data }),
+      );
+      mockHttpService.get.mockReturnValue(
+        of({ status: 200, data: { name: 'Harry', preview_url: null } }),
+      );
+    });
+
+    describe('by hand', () => {
+      it("refuses an uploaded voice's clone id and creates nothing", async () => {
+        idIsOfAnUploadedVoice(CLONE_ID);
+
+        await expect(
+          service.createElevenLabsVoice(USER_ID, {
+            name: 'Mine now',
+            elevenLabsVoiceId: CLONE_ID,
+          }),
+        ).rejects.toThrow(ConflictException);
+        expect(mockVoiceRepository.createVoice).not.toHaveBeenCalled();
+      });
+
+      it('registers an id no uploaded voice carries', async () => {
+        idIsOfAnUploadedVoice(CLONE_ID);
+
+        const voice = await service.createElevenLabsVoice(USER_ID, {
+          name: 'Robot',
+          elevenLabsVoiceId: 'fresh-id',
+        });
+
+        expect(voice).toMatchObject({
+          id: 'new-voice-id',
+          name: 'Robot',
+          type: 'elevenlabs',
+          elevenLabsVoiceId: 'fresh-id',
+        });
+        expect(mockVoiceRepository.createVoice).toHaveBeenCalledWith({
+          userId: USER_ID,
+          name: 'Robot',
+          type: 'elevenlabs',
+          elevenLabsVoiceId: 'fresh-id',
+        });
+      });
+
+      it('registers a built-in voice id as before', async () => {
+        idIsOfAnUploadedVoice(CLONE_ID);
+
+        const voice = await service.createElevenLabsVoice(USER_ID, {
+          name: 'Lily',
+          elevenLabsVoiceId: SYSTEM_ID,
+        });
+
+        expect(voice.elevenLabsVoiceId).toBe(SYSTEM_ID);
+      });
+    });
+
+    describe('through a kid update', () => {
+      it("refuses an uploaded voice's clone id without asking ElevenLabs about it", async () => {
+        idIsOfAnUploadedVoice(CLONE_ID);
+
+        await expect(
+          service.findOrCreateElevenLabsVoice(CLONE_ID, USER_ID),
+        ).rejects.toThrow(ConflictException);
+        expect(mockHttpService.get).not.toHaveBeenCalled();
+        expect(mockVoiceRepository.createVoice).not.toHaveBeenCalled();
+      });
+
+      it("returns the user's own live voice that carries the id", async () => {
+        idIsOfAnUploadedVoice(CLONE_ID);
+        mockVoiceRepository.findFirstByUserAndElevenLabsId.mockResolvedValue({
+          id: 'own-uploaded-voice',
+        });
+
+        expect(
+          await service.findOrCreateElevenLabsVoice(CLONE_ID, USER_ID),
+        ).toEqual({ id: 'own-uploaded-voice' });
+        expect(mockVoiceRepository.createVoice).not.toHaveBeenCalled();
+      });
+
+      it('registers an id no uploaded voice carries', async () => {
+        idIsOfAnUploadedVoice(CLONE_ID);
+
+        expect(
+          await service.findOrCreateElevenLabsVoice('fresh-id', USER_ID),
+        ).toEqual({ id: 'new-voice-id' });
+      });
+
+      it('registers a built-in voice id as before', async () => {
+        idIsOfAnUploadedVoice(CLONE_ID);
+
+        expect(
+          await service.findOrCreateElevenLabsVoice(SYSTEM_ID, USER_ID),
+        ).toEqual({ id: 'new-voice-id' });
+        expect(mockVoiceRepository.createVoice).toHaveBeenCalledWith(
+          expect.objectContaining({ elevenLabsVoiceId: SYSTEM_ID }),
+        );
+      });
     });
   });
 

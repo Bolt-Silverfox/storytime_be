@@ -182,6 +182,52 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
     });
   });
 
+  describe('an ElevenLabs id of an uploaded voice', () => {
+    const CLONE = `${tag}_uploaded_clone`;
+    const setClone = () =>
+      raw.voice.update({
+        where: { id: voiceId },
+        data: { elevenLabsVoiceId: CLONE },
+      });
+
+    afterEach(async () => {
+      await raw.voice.deleteMany({ where: { elevenLabsVoiceId: CLONE } });
+    });
+
+    it('is one while a live uploaded voice carries it', async () => {
+      await setClone();
+      expect(await repo.isElevenLabsIdOfUploadedVoice(CLONE)).toBe(true);
+    });
+
+    it('is still one after the uploaded voice is soft-deleted', async () => {
+      await setClone();
+      await repo.softDeleteOwnedIfUnreferenced(voiceId, userId);
+      expect(await repo.isElevenLabsIdOfUploadedVoice(CLONE)).toBe(true);
+    });
+
+    it('is not one once the uploaded voice has forgotten it', async () => {
+      await setClone();
+      await repo.clearElevenLabsVoiceId(voiceId, userId);
+      expect(await repo.isElevenLabsIdOfUploadedVoice(CLONE)).toBe(false);
+    });
+
+    it('is not one when only registered and system voices carry it', async () => {
+      await repo.createVoice({
+        userId: await newUser(),
+        name: 'Registered',
+        type: 'elevenlabs',
+        elevenLabsVoiceId: CLONE,
+      });
+      await repo.createVoice({
+        userId: null,
+        name: 'System',
+        type: 'elevenlabs',
+        elevenLabsVoiceId: CLONE,
+      });
+      expect(await repo.isElevenLabsIdOfUploadedVoice(CLONE)).toBe(false);
+    });
+  });
+
   it("forgets a voice's ElevenLabs id for its owner", async () => {
     await raw.voice.update({
       where: { id: voiceId },

@@ -3,6 +3,7 @@ import { PrismaService } from '@/prisma/prisma.service';
 import type { IVoiceRepository } from './voice.repository.interface';
 import type { Voice, Prisma } from '@prisma/client';
 import { lockVoiceForDelete } from './voice-row-lock';
+import { VoiceSourceType } from '../dto/voice.dto';
 
 @Injectable()
 export class PrismaVoiceRepository implements IVoiceRepository {
@@ -149,5 +150,15 @@ export class PrismaVoiceRepository implements IVoiceRepository {
       select: { id: true },
     });
     return other !== null;
+  }
+
+  async isElevenLabsIdOfUploadedVoice(
+    elevenLabsVoiceId: string,
+  ): Promise<boolean> {
+    const uploaded = await this.prisma.voice.findFirst({
+      where: { elevenLabsVoiceId, type: VoiceSourceType.UPLOADED },
+      select: { id: true },
+    });
+    return uploaded !== null;
   }
 }

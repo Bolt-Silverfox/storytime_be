@@ -60,6 +60,8 @@ export interface IVoiceRepository {
     elevenLabsVoiceId: string,
     excludedVoiceId: string,
   ): Promise<boolean>;
+
+  isElevenLabsIdOfUploadedVoice(elevenLabsVoiceId: string): Promise<boolean>;
 }
 
 export const VOICE_REPOSITORY = Symbol('VOICE_REPOSITORY');
