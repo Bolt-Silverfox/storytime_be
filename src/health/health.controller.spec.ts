@@ -3,6 +3,7 @@ import { Test } from '@nestjs/testing';
 import { HealthIndicatorService, TerminusModule } from '@nestjs/terminus';
 import request from 'supertest';
 import { HealthController } from './health.controller';
+import { HealthChecks } from './health-checks';
 import {
   CircuitBreakerHealthIndicator,
   PrismaHealthIndicator,
@@ -16,7 +17,8 @@ import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service
 /**
  * Exercises the real terminus 12 HealthCheckService through HTTP, so the
  * response contract consumed by the container HEALTHCHECK and probes
- * (status code + `{ status, info, error, details }` body) is pinned.
+ * (status code + `{ status, checks }` body, before the app-level envelope)
+ * is pinned.
  */
 describe('HealthController (HTTP contract)', () => {
   let app: INestApplication;
@@ -29,6 +31,7 @@ describe('HealthController (HTTP contract)', () => {
       imports: [TerminusModule],
       controllers: [HealthController],
       providers: [
+        HealthChecks,
         { provide: CircuitBreakerService, useValue: cbService },
         CircuitBreakerHealthIndicator,
         TTSCircuitBreakerHealthIndicator,
@@ -79,43 +82,31 @@ describe('HealthController (HTTP contract)', () => {
   it('GET /health returns 200 with status ok', async () => {
     const res = await request(server()).get('/health').expect(200);
 
-    expect(res.body).toEqual({
-      status: 'ok',
-      info: {},
-      error: {},
-      details: {},
-    });
+    expect(res.body).toEqual({ status: 'ok', checks: {} });
   });
 
   it('GET /health/ready returns 200 with every indicator up', async () => {
     const res = await request(server()).get('/health/ready').expect(200);
 
     expect(res.body.status).toBe('ok');
-    expect(Object.keys(res.body.info as object).sort()).toEqual([
+    expect(Object.keys(res.body.checks as object).sort()).toEqual([
       'circuit_breakers',
       'database',
       'email-queue',
       'redis',
       'tts-providers',
     ]);
-    expect(res.body.error).toEqual({});
-    expect(res.body.info.redis).toEqual({ status: 'up', response: 'PONG' });
+    expect(res.body.checks.redis).toEqual({ status: 'up' });
   });
 
-  it('GET /health/ready returns 503 and the down indicator under `error`', async () => {
+  it('GET /health/ready returns 503 and marks the down indicator', async () => {
     redisDown = true;
 
     const res = await request(server()).get('/health/ready').expect(503);
 
     expect(res.body.status).toBe('error');
-    expect(res.body.error).toEqual({
-      redis: { status: 'down', error: 'ECONNREFUSED' },
-    });
-    expect(res.body.info.database).toEqual({
-      status: 'up',
-      connection: 'established',
-    });
-    expect(Object.keys(res.body.details as object)).toContain('redis');
+    expect(res.body.checks.redis).toEqual({ status: 'down' });
+    expect(res.body.checks.database).toEqual({ status: 'up' });
   });
 
   it('GET /health/tts returns 503 when a TTS circuit breaker is OPEN', async () => {
@@ -126,9 +117,6 @@ describe('HealthController (HTTP contract)', () => {
     const res = await request(server()).get('/health/tts').expect(503);
 
     expect(res.body.status).toBe('error');
-    expect(res.body.error['tts-providers']).toMatchObject({
-      status: 'down',
-      elevenlabs: { state: 'OPEN' },
-    });
+    expect(res.body.checks['tts-providers']).toEqual({ status: 'down' });
   });
 });

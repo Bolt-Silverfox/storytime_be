@@ -122,6 +122,8 @@ scrape_configs:
       - targets: ['host.docker.internal:9464']  # Prometheus exporter in your NestJS app
 ```
 
+The exporter binds to 127.0.0.1 by default, which a container cannot reach. When Prometheus runs in Docker, start the app with `OTEL_EXPORTER_PROMETHEUS_HOST=0.0.0.0` and keep port 9464 closed to the public.
+
 ## Running the Stack
 
 ```bash

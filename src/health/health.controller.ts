@@ -1,185 +1,118 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import {
   HealthCheck,
+  HealthCheckResult,
   HealthCheckService,
-  MemoryHealthIndicator,
-  DiskHealthIndicator,
 } from '@nestjs/terminus';
-import {
-  PrismaHealthIndicator,
-  RedisHealthIndicator,
-  SmtpHealthIndicator,
-  QueueHealthIndicator,
-  TTSCircuitBreakerHealthIndicator,
-  CircuitBreakerHealthIndicator,
-} from './indicators';
+import { HealthChecks, HealthRoute } from './health-checks';
 
-const TTS_HEALTH_KEY = 'tts-providers';
-const CIRCUIT_BREAKER_HEALTH_KEY = 'circuit_breakers';
+type PublicHealth = {
+  status: 'ok' | 'error';
+  checks: Record<string, { status: 'up' | 'down' }>;
+};
+
+const toPublic = (result: HealthCheckResult): PublicHealth => ({
+  status: result.status === 'ok' ? 'ok' : 'error',
+  checks: Object.fromEntries(
+    Object.entries(result.details ?? {}).map(([key, detail]) => [
+      key,
+      { status: detail.status === 'up' ? 'up' : 'down' },
+    ]),
+  ),
+});
 
 @ApiTags('Health')
 @Controller('health')
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
-    private readonly prismaHealth: PrismaHealthIndicator,
-    private readonly redisHealth: RedisHealthIndicator,
-    private readonly smtpHealth: SmtpHealthIndicator,
-    private readonly queueHealth: QueueHealthIndicator,
-    private readonly memory: MemoryHealthIndicator,
-    private readonly disk: DiskHealthIndicator,
-    private readonly ttsHealth: TTSCircuitBreakerHealthIndicator,
-    private readonly circuitBreakerHealth: CircuitBreakerHealthIndicator,
+    private readonly checks: HealthChecks,
   ) {}
 
-  /**
-   * Basic liveness check - is the service running?
-   * Use for Kubernetes liveness probes
-   */
+  private async run(route: HealthRoute | null): Promise<PublicHealth> {
+    try {
+      return toPublic(
+        await this.health.check(route ? this.checks.for(route, false) : []),
+      );
+    } catch (error) {
+      if (error instanceof ServiceUnavailableException) {
+        throw new ServiceUnavailableException(
+          toPublic(error.getResponse() as HealthCheckResult),
+        );
+      }
+      throw error;
+    }
+  }
+
   @Get()
   @ApiOperation({ summary: 'Basic liveness check' })
   @ApiResponse({ status: 200, description: 'Service is alive' })
   @HealthCheck()
-  async check() {
-    return this.health.check([]);
+  check() {
+    return this.run(null);
   }
 
-  /**
-   * Full readiness check - are all dependencies healthy?
-   * Use for Kubernetes readiness probes
-   */
   @Get('ready')
-  @ApiOperation({ summary: 'Readiness check (all dependencies)' })
+  @ApiOperation({ summary: 'Readiness check (all dependencies), status only' })
   @ApiResponse({ status: 200, description: 'All dependencies are healthy' })
   @ApiResponse({
     status: 503,
     description: 'One or more dependencies are unhealthy',
   })
   @HealthCheck()
-  async checkReady() {
-    return this.health.check([
-      () => this.prismaHealth.isHealthy('database'),
-      () => this.redisHealth.isHealthy('redis'),
-      () => this.queueHealth.isHealthy('email-queue'),
-      () => this.ttsHealth.isHealthy(TTS_HEALTH_KEY),
-      () => this.circuitBreakerHealth.isHealthy(CIRCUIT_BREAKER_HEALTH_KEY),
-    ]);
+  checkReady() {
+    return this.run('ready');
   }
 
-  /**
-   * Database health check
-   */
   @Get('db')
-  @ApiOperation({ summary: 'Database (Prisma) health check' })
-  @ApiResponse({ status: 200, description: 'Database is healthy' })
-  @ApiResponse({ status: 503, description: 'Database is unhealthy' })
+  @ApiOperation({ summary: 'Database health, status only' })
   @HealthCheck()
-  async checkDatabase() {
-    return this.health.check([() => this.prismaHealth.isHealthy('database')]);
+  checkDatabase() {
+    return this.run('db');
   }
 
-  /**
-   * Redis health check
-   */
   @Get('redis')
-  @ApiOperation({ summary: 'Redis health check' })
-  @ApiResponse({ status: 200, description: 'Redis is healthy' })
-  @ApiResponse({ status: 503, description: 'Redis is unhealthy' })
+  @ApiOperation({ summary: 'Redis health, status only' })
   @HealthCheck()
-  async checkRedis() {
-    return this.health.check([() => this.redisHealth.isHealthy('redis')]);
+  checkRedis() {
+    return this.run('redis');
   }
 
-  /**
-   * SMTP health check
-   */
   @Get('smtp')
-  @ApiOperation({ summary: 'SMTP/Email health check' })
-  @ApiResponse({ status: 200, description: 'SMTP is healthy' })
-  @ApiResponse({ status: 503, description: 'SMTP is unhealthy' })
+  @ApiOperation({ summary: 'Last known SMTP health, status only' })
   @HealthCheck()
-  async checkSmtp() {
-    return this.health.check([() => this.smtpHealth.isHealthy('smtp')]);
+  checkSmtp() {
+    return this.run('smtp');
   }
 
-  /**
-   * Queue health check
-   */
   @Get('queue')
-  @ApiOperation({ summary: 'Email queue health check' })
-  @ApiResponse({ status: 200, description: 'Queue is healthy' })
-  @ApiResponse({ status: 503, description: 'Queue is unhealthy' })
+  @ApiOperation({ summary: 'Email queue health, status only' })
   @HealthCheck()
-  async checkQueue() {
-    return this.health.check([() => this.queueHealth.isHealthy('email-queue')]);
+  checkQueue() {
+    return this.run('queue');
   }
 
-  /**
-   * System resources check (memory + disk)
-   */
   @Get('system')
-  @ApiOperation({ summary: 'System resources health check' })
-  @ApiResponse({ status: 200, description: 'System resources are healthy' })
-  @ApiResponse({ status: 503, description: 'System resources are unhealthy' })
+  @ApiOperation({ summary: 'System resources health, status only' })
   @HealthCheck()
-  async checkSystem() {
-    return this.health.check([
-      // Memory: heap should not exceed 500MB
-      () => this.memory.checkHeap('memory_heap', 500 * 1024 * 1024),
-      // Memory: RSS should not exceed 1GB
-      () => this.memory.checkRSS('memory_rss', 1024 * 1024 * 1024),
-      // Disk: should have at least 10% free space
-      () =>
-        this.disk.checkStorage('disk', {
-          path: '/',
-          thresholdPercent: 0.9,
-        }),
-    ]);
+  checkSystem() {
+    return this.run('system');
   }
 
-  /**
-   * Complete health check - all indicators
-   * Use for monitoring dashboards
-   */
   @Get('full')
-  @ApiOperation({ summary: 'Complete health check (all indicators)' })
+  @ApiOperation({ summary: 'Complete health check, status only' })
   @ApiResponse({ status: 200, description: 'All systems healthy' })
   @ApiResponse({ status: 503, description: 'One or more systems unhealthy' })
   @HealthCheck()
-  async checkFull() {
-    return this.health.check([
-      () => this.prismaHealth.isHealthy('database'),
-      () => this.redisHealth.isHealthy('redis'),
-      () => this.smtpHealth.isHealthy('smtp'),
-      () => this.queueHealth.isHealthy('email-queue'),
-      () => this.memory.checkHeap('memory_heap', 500 * 1024 * 1024),
-      () => this.memory.checkRSS('memory_rss', 1024 * 1024 * 1024),
-      () =>
-        this.disk.checkStorage('disk', {
-          path: '/',
-          thresholdPercent: 0.9,
-        }),
-      () => this.ttsHealth.isHealthy(TTS_HEALTH_KEY),
-      () => this.circuitBreakerHealth.isHealthy(CIRCUIT_BREAKER_HEALTH_KEY),
-    ]);
+  checkFull() {
+    return this.run('full');
   }
 
-  /**
-   * TTS providers circuit breaker status
-   */
   @Get('tts')
-  @ApiOperation({ summary: 'TTS providers circuit breaker health check' })
-  @ApiResponse({
-    status: 200,
-    description: 'All TTS circuit breakers are closed',
-  })
-  @ApiResponse({
-    status: 503,
-    description: 'One or more TTS circuit breakers are open',
-  })
+  @ApiOperation({ summary: 'TTS providers health, status only' })
   @HealthCheck()
-  async checkTts() {
-    return this.health.check([() => this.ttsHealth.isHealthy(TTS_HEALTH_KEY)]);
+  checkTts() {
+    return this.run('tts');
   }
 }
