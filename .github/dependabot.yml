@@ -1,4 +1,9 @@
 version: 2
+
+# Dependabot opens PRs against the repository DEFAULT branch (no `target-branch`
+# is set on purpose) and reads this file from it. The default branch MUST
+# therefore be moved to each new release line (currently develop-v1.7.0) when it
+# is cut. See docs/dependency-policy.md.
 updates:
   - package-ecosystem: 'npm'
     directory: '/'
@@ -8,10 +13,73 @@ updates:
     labels:
       - 'dependencies'
     groups:
+      # @sentry/node and @sentry/opentelemetry (and the other @sentry/* packages)
+      # must resolve to ONE @sentry/core version: Sentry's global carrier is keyed
+      # by SDK version, so a split install silently drops spans/error context
+      # with CI still green. Likewise the OTel packages must move together.
+      sentry:
+        patterns:
+          - '@sentry/*'
+      otel:
+        patterns:
+          - '@opentelemetry/*'
       minor-and-patch:
         update-types:
           - 'minor'
           - 'patch'
+        # OpenTelemetry and Sentry have their own groups above (OTel JS 3.0 +
+        # Sentry 11 must move together). Keep them out of this group so a "minor"
+        # bump (0.223 -> 0.300 is breaking for 0.x packages) cannot be hidden in it.
+        exclude-patterns:
+          - '@opentelemetry/*'
+          - '@sentry/*'
+    ignore:
+      # Pending joint OTel 3.0 + Sentry 11 migration; see docs/dependency-policy.md.
+      - dependency-name: '@opentelemetry/*'
+        update-types:
+          - 'version-update:semver-major'
+      # Minors are ignored only for the 0.x packages tied to the OTel JS 0.223
+      # SDK line, where a minor bump is breaking (0.223 -> 0.300 is the 3.0
+      # jump). Stable packages (@opentelemetry/api, resources, sdk-metrics,
+      # semantic-conventions) keep receiving minor and patch updates.
+      # @opentelemetry/instrumentation-express is also frozen: src/otel-setup.ts
+      # loads it through auto-instrumentations-node, which pins ^0.71.0, so a
+      # direct 0.72 bump would not change the running instrumentation but would
+      # install OTel 3.0 dependencies. Patches still arrive.
+      # New 0.x @opentelemetry/* dependencies must be added here.
+      - dependency-name: '@opentelemetry/auto-instrumentations-node'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/exporter-logs-otlp-http'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/exporter-metrics-otlp-http'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/exporter-prometheus'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/exporter-trace-otlp-http'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/instrumentation-express'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/instrumentation-http'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/sdk-logs'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/sdk-node'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@opentelemetry/winston-transport'
+        update-types:
+          - 'version-update:semver-minor'
+      - dependency-name: '@sentry/*'
+        update-types:
+          - 'version-update:semver-major'
 
   - package-ecosystem: 'github-actions'
     directory: '/'
