@@ -1,9 +1,10 @@
 import { NotFoundException } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '@/prisma/prisma.service';
 import { PrismaKidRepository } from '@/kid/repositories/prisma-kid.repository';
 import { PrismaVoiceRepository } from './prisma-voice.repository';
 import { PrismaVoiceUserRepository } from './prisma-user.repository';
+import { PrismaUserUsageRepository } from './prisma-user-usage.repository';
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
@@ -13,6 +14,7 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
   const voices = new PrismaVoiceRepository(prisma);
   const users = new PrismaVoiceUserRepository(prisma);
   const kids = new PrismaKidRepository(prisma);
+  const usages = new PrismaUserUsageRepository(prisma);
   const tag = `vrace_${Date.now()}`;
   let counter = 0;
   let userId: string;
@@ -38,6 +40,7 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
     kidId = (await raw.kid.create({ data: { parentId: userId, name: 'Kid' } }))
       .id;
     voiceId = await newVoice();
+    await raw.userUsage.create({ data: { userId, currentMonth: '2026-11' } });
   });
 
   afterEach(async () => {
@@ -66,20 +69,49 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
   const kidPreference = async () =>
     (await raw.kid.findUniqueOrThrow({ where: { id: kidId } }))
       .preferredVoiceId;
+  const freeTierLock = async () =>
+    (await raw.userUsage.findUniqueOrThrow({ where: { userId } }))
+      .selectedSecondVoiceId;
 
-  const untilWaitingOnALockOrSettled = async (deletion: Promise<boolean>) => {
+  const BLOCKED_WAIT_LIMIT_MS = 5000;
+
+  const untilBlockedByOrSettled = async (
+    lockHolderPid: number,
+    deletion: Promise<boolean>,
+  ) => {
     let settled = false;
     const markSettled = () => {
       settled = true;
     };
     deletion.then(markSettled, markSettled);
+    const deadline = Date.now() + BLOCKED_WAIT_LIMIT_MS;
     while (!settled) {
-      const [{ waiting }] = await raw.$queryRaw<{ waiting: bigint }[]>`
-        SELECT count(*) AS waiting FROM pg_locks l
-        JOIN pg_stat_activity a ON a.pid = l.pid
-        WHERE NOT l.granted AND a.query ILIKE '%voices%'`;
-      if (waiting > 0n) return;
+      const [{ blocked }] = await raw.$queryRaw<{ blocked: bigint }[]>`
+        SELECT count(*) AS blocked FROM pg_stat_activity
+        WHERE ${lockHolderPid}::int = ANY(pg_blocking_pids(pid))`;
+      if (blocked > 0n) return;
+      if (Date.now() > deadline) {
+        throw new Error(
+          `the delete neither settled nor waited on backend ${lockHolderPid} within ${BLOCKED_WAIT_LIMIT_MS}ms`,
+        );
+      }
     }
+  };
+
+  const deleteWhileHoldingAReferenceLock = async (
+    writeReference: (tx: Prisma.TransactionClient) => Promise<unknown>,
+  ) => {
+    let deleted: Promise<boolean> | undefined;
+    await raw.$transaction(async (tx) => {
+      const [{ pid }] = await tx.$queryRaw<
+        { pid: number }[]
+      >`SELECT pg_backend_pid() AS pid`;
+      await tx.$queryRaw`SELECT id FROM voices WHERE id = ${voiceId} FOR SHARE`;
+      await writeReference(tx);
+      deleted = softDelete(voiceId);
+      await untilBlockedByOrSettled(pid, deleted);
+    });
+    return deleted;
   };
 
   it("sets a live voice as the user's preferred voice", async () => {
@@ -116,29 +148,57 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
     ).toBe('Kid');
   });
 
-  it('keeps a voice whose reference is written while the delete is in flight', async () => {
-    let deleted: Promise<boolean> | undefined;
+  it("locks a live voice as a free user's voice", async () => {
+    expect(await usages.lockSecondVoiceIfNull(userId, voiceId)).toEqual({
+      count: 1,
+    });
+    expect(await freeTierLock()).toBe(voiceId);
+  });
 
-    await raw.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM voices WHERE id = ${voiceId} FOR SHARE`;
-      await tx.user.update({
+  it('does not lock a free user to a voice deleted after it was resolved', async () => {
+    await softDelete(voiceId);
+
+    expect(await usages.lockSecondVoiceIfNull(userId, voiceId)).toEqual({
+      count: 0,
+    });
+    expect(await freeTierLock()).toBeNull();
+  });
+
+  it('keeps a voice whose reference is written while the delete is in flight', async () => {
+    const deleted = await deleteWhileHoldingAReferenceLock((tx) =>
+      tx.user.update({
         where: { id: userId },
         data: { preferredVoiceId: voiceId },
-      });
-      deleted = softDelete(voiceId);
-      await untilWaitingOnALockOrSettled(deleted);
-    });
+      }),
+    );
 
-    expect(await deleted).toBe(false);
+    expect(deleted).toBe(false);
     expect(await isDeleted(voiceId)).toBe(false);
   });
 
-  it('never leaves a preference pointing at a deleted voice under concurrent writes and deletes', async () => {
+  it('keeps a voice whose free-tier lock is written while the delete is in flight', async () => {
+    const deleted = await deleteWhileHoldingAReferenceLock((tx) =>
+      tx.userUsage.update({
+        where: { userId },
+        data: { selectedSecondVoiceId: voiceId },
+      }),
+    );
+
+    expect(deleted).toBe(false);
+    expect(await isDeleted(voiceId)).toBe(false);
+  });
+
+  it('never leaves a reference pointing at a deleted voice under concurrent writes and deletes', async () => {
     for (let round = 0; round < 5; round++) {
       const id = await newVoice();
+      await raw.userUsage.update({
+        where: { userId },
+        data: { selectedSecondVoiceId: null },
+      });
 
       await Promise.all([
         softDelete(id),
+        usages.lockSecondVoiceIfNull(userId, id),
         users.updatePreferredVoiceWithInclude(userId, id),
         kids.update(kidId, { preferredVoiceId: id }).catch((error: unknown) => {
           if (!(error instanceof NotFoundException)) throw error;
@@ -146,7 +206,9 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
       ]);
 
       const referenced =
-        (await userPreference()) === id || (await kidPreference()) === id;
+        (await userPreference()) === id ||
+        (await kidPreference()) === id ||
+        (await freeTierLock()) === id;
       expect({ round, deleted: await isDeleted(id), referenced }).not.toEqual({
         round,
         deleted: true,
