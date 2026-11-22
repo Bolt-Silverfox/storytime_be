@@ -111,6 +111,7 @@ export class PrismaVoiceRepository implements IVoiceRepository {
   async softDeleteOwnedIfUnreferenced(
     id: string,
     userId: string,
+    options?: { releaseOwnersFreeTierLock: boolean },
   ): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
       // Postgres re-reads the references only in a statement that starts after this lock is granted.
@@ -122,11 +123,24 @@ export class PrismaVoiceRepository implements IVoiceRepository {
           isDeleted: false,
           usersPreferring: { none: {} },
           kidsPreferring: { none: {} },
-          usersWithAsSecond: { none: {} },
+          usersWithAsSecond: {
+            none: options?.releaseOwnersFreeTierLock
+              ? { userId: { not: userId } }
+              : {},
+          },
         },
         data: { isDeleted: true, deletedAt: new Date() },
       });
-      return count > 0;
+      if (count === 0) {
+        return false;
+      }
+      if (options?.releaseOwnersFreeTierLock) {
+        await tx.userUsage.updateMany({
+          where: { userId, selectedSecondVoiceId: id },
+          data: { selectedSecondVoiceId: null },
+        });
+      }
+      return true;
     });
   }
 

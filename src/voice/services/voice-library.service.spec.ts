@@ -13,6 +13,7 @@ import { ElevenLabsTTSProvider } from '../providers/eleven-labs-tts.provider';
 import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 import { UploadService } from '@/upload/upload.service';
+import { SubscriptionService } from '@/subscription/subscription.service';
 import { VOICE_CONFIG } from '../voice.constants';
 import { VoiceType } from '../dto/voice.dto';
 
@@ -36,6 +37,8 @@ const mockVoiceRepository: Record<keyof IVoiceRepository, jest.Mock> = {
 };
 
 const mockUploadService = { releaseRecorded: jest.fn() };
+
+const mockSubscriptionService = { isPremiumUser: jest.fn() };
 
 const mockConfigService = {
   get: jest.fn(),
@@ -81,6 +84,7 @@ describe('VoiceLibraryService', () => {
         { provide: ElevenLabsTTSProvider, useValue: mockElevenLabsProvider },
         { provide: CircuitBreakerService, useValue: mockCbService },
         { provide: UploadService, useValue: mockUploadService },
+        { provide: SubscriptionService, useValue: mockSubscriptionService },
       ],
     }).compile();
 
@@ -326,6 +330,7 @@ describe('VoiceLibraryService', () => {
           ),
       );
       mockVoiceRepository.findFirstByIdNotDeleted.mockResolvedValue(null);
+      mockSubscriptionService.isPremiumUser.mockResolvedValue(false);
       mockVoiceRepository.isElevenLabsIdUsedByAnotherVoice.mockResolvedValue(
         false,
       );
@@ -361,12 +366,29 @@ describe('VoiceLibraryService', () => {
 
       expect(
         mockVoiceRepository.softDeleteOwnedIfUnreferenced,
-      ).toHaveBeenCalledWith(VOICE_ID, 'user-1');
+      ).toHaveBeenCalledWith(VOICE_ID, 'user-1', {
+        releaseOwnersFreeTierLock: false,
+      });
       expect(mockUploadService.releaseRecorded).toHaveBeenCalledWith(
         'storytime/v',
         'user-1',
       );
       expect(steps).toEqual(['softDelete', 'release']);
+    });
+
+    it("releases a paid owner's leftover free-tier lock on the voice", async () => {
+      mockSubscriptionService.isPremiumUser.mockResolvedValue(true);
+
+      await service.deleteVoice('user-1', VOICE_ID);
+
+      expect(mockSubscriptionService.isPremiumUser).toHaveBeenCalledWith(
+        'user-1',
+      );
+      expect(
+        mockVoiceRepository.softDeleteOwnedIfUnreferenced,
+      ).toHaveBeenCalledWith(VOICE_ID, 'user-1', {
+        releaseOwnersFreeTierLock: true,
+      });
     });
 
     it('soft-deletes a voice that has no recorded sample without touching storage', async () => {

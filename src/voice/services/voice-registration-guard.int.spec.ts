@@ -10,6 +10,7 @@ import { ElevenLabsTTSProvider } from '../providers/eleven-labs-tts.provider';
 import { PrismaVoiceRepository } from '../repositories/prisma-voice.repository';
 import { VOICE_CONFIG } from '../voice.constants';
 import { VoiceType } from '../dto/voice.dto';
+import { SubscriptionService } from '@/subscription/subscription.service';
 import { VoiceLibraryService } from './voice-library.service';
 import { VoiceResponseMapper } from './voice-response.mapper';
 
@@ -38,6 +39,7 @@ describeDb('registering an ElevenLabs id (real Postgres)', () => {
     new VoiceResponseMapper(),
     { getBreaker: () => breaker } as unknown as CircuitBreakerService,
     {} as UploadService,
+    {} as SubscriptionService,
   );
   let counter = 0;
   let uploaderId: string;

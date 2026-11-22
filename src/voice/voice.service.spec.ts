@@ -15,6 +15,7 @@ import {
   IVoiceUserRepository,
 } from './repositories';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
+import { SubscriptionService } from '@/subscription/subscription.service';
 import { UploadService } from '@/upload/upload.service';
 
 const mockCacheManager = {
@@ -80,6 +81,10 @@ describe('VoiceService', () => {
         { provide: ElevenLabsTTSProvider, useValue: mockElevenLabsProvider },
         { provide: CACHE_MANAGER, useValue: mockCacheManager },
         { provide: UploadService, useValue: { releaseRecorded: jest.fn() } },
+        {
+          provide: SubscriptionService,
+          useValue: { isPremiumUser: jest.fn() },
+        },
         {
           provide: CircuitBreakerService,
           useValue: {

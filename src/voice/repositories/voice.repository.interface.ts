@@ -52,7 +52,11 @@ export interface IVoiceRepository {
 
   findByIdAndUser(id: string, userId: string): Promise<Voice | null>;
 
-  softDeleteOwnedIfUnreferenced(id: string, userId: string): Promise<boolean>;
+  softDeleteOwnedIfUnreferenced(
+    id: string,
+    userId: string,
+    options?: { releaseOwnersFreeTierLock: boolean },
+  ): Promise<boolean>;
 
   clearElevenLabsVoiceId(id: string, userId: string): Promise<void>;
 

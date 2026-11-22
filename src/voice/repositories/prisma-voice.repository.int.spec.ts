@@ -122,6 +122,57 @@ describeDb('PrismaVoiceRepository voice deletion (real Postgres)', () => {
     expect(await isDeleted()).toBe(false);
   });
 
+  describe('when the owner is paid, so a free-tier lock no longer binds them', () => {
+    const lockTo = (lockHolderId: string) =>
+      raw.userUsage.create({
+        data: {
+          userId: lockHolderId,
+          currentMonth: '2026-11',
+          selectedSecondVoiceId: voiceId,
+        },
+      });
+    const freeTierLock = async (lockHolderId: string) =>
+      (
+        await raw.userUsage.findUniqueOrThrow({
+          where: { userId: lockHolderId },
+        })
+      ).selectedSecondVoiceId;
+    const deleteAsPaidOwner = () =>
+      repo.softDeleteOwnedIfUnreferenced(voiceId, userId, {
+        releaseOwnersFreeTierLock: true,
+      });
+
+    it("deletes a voice held only by the owner's leftover free-tier lock and clears that lock", async () => {
+      await lockTo(userId);
+
+      expect(await deleteAsPaidOwner()).toBe(true);
+      expect(await isDeleted()).toBe(true);
+      expect(await freeTierLock(userId)).toBeNull();
+    });
+
+    it("keeps a voice that another user's free-tier lock holds, leaving both locks", async () => {
+      const other = await newUser();
+      await lockTo(userId);
+      await lockTo(other);
+
+      expect(await deleteAsPaidOwner()).toBe(false);
+      expect(await isDeleted()).toBe(false);
+      expect(await freeTierLock(userId)).toBe(voiceId);
+      expect(await freeTierLock(other)).toBe(voiceId);
+    });
+
+    it("keeps a voice that is the owner's preferred voice", async () => {
+      await raw.user.update({
+        where: { id: userId },
+        data: { preferredVoiceId: voiceId },
+      });
+      await lockTo(userId);
+
+      expect(await deleteAsPaidOwner()).toBe(false);
+      expect(await freeTierLock(userId)).toBe(voiceId);
+    });
+  });
+
   describe('an ElevenLabs id shared with another voice row', () => {
     const CLONE = `${tag}_clone`;
     const setClone = () =>

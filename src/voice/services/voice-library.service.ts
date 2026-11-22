@@ -22,6 +22,7 @@ import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 import { withResilience } from '@/shared/resilience';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
 import { UploadService } from '@/upload/upload.service';
+import { SubscriptionService } from '@/subscription/subscription.service';
 import type { Voice } from '@prisma/client';
 
 /**
@@ -43,6 +44,7 @@ export class VoiceLibraryService {
     private readonly mapper: VoiceResponseMapper,
     private readonly cbService: CircuitBreakerService,
     private readonly uploadService: UploadService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
   // --- Upload a new voice file ---
@@ -93,6 +95,10 @@ export class VoiceLibraryService {
       !(await this.voiceRepository.softDeleteOwnedIfUnreferenced(
         voiceId,
         userId,
+        {
+          releaseOwnersFreeTierLock:
+            await this.subscriptionService.isPremiumUser(userId),
+        },
       )) &&
       (await this.voiceRepository.findFirstByIdNotDeleted(voiceId))
     ) {
