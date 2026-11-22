@@ -288,6 +288,40 @@ export class ElevenLabsTTSProvider
     }
   }
 
+  async deleteVoice(voiceId: string): Promise<void> {
+    if (!this.client) {
+      throw new Error('ElevenLabs client is not initialized');
+    }
+
+    try {
+      await this.client.voices.delete(voiceId);
+    } catch (error) {
+      if (this.isVoiceGoneError(error)) {
+        return;
+      }
+      this.logger.error(
+        `ElevenLabs voice deletion failed: ${(error as Error).message}`,
+      );
+      throw error;
+    }
+  }
+
+  private isVoiceGoneError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+    const err = error as Record<string, unknown>;
+    if (err.status === 404 || err.statusCode === 404) {
+      return true;
+    }
+    const detail = (err.body as { detail?: unknown } | undefined)?.detail;
+    const status =
+      detail && typeof detail === 'object'
+        ? (detail as Record<string, unknown>).status
+        : undefined;
+    return status === 'voice_does_not_exist' || status === 'voice_not_found';
+  }
+
   async getSubscriptionInfo(): Promise<any> {
     if (!this.client) {
       throw new Error('ElevenLabs client is not initialized');
