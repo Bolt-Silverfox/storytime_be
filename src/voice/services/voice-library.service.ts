@@ -1,8 +1,10 @@
 import {
+  ConflictException,
   Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -19,6 +21,9 @@ import { VoiceResponseMapper } from './voice-response.mapper';
 import { VOICE_REPOSITORY, IVoiceRepository } from '../repositories';
 import { withResilience } from '@/shared/resilience';
 import { CircuitBreakerService } from '@/shared/services/circuit-breaker.service';
+import { UploadService } from '@/upload/upload.service';
+import { SubscriptionService } from '@/subscription/subscription.service';
+import type { Voice } from '@prisma/client';
 
 /**
  * Owns a user's personal voice library: uploaded clones, registered ElevenLabs
@@ -38,6 +43,8 @@ export class VoiceLibraryService {
     private readonly elevenLabsProvider: ElevenLabsTTSProvider,
     private readonly mapper: VoiceResponseMapper,
     private readonly cbService: CircuitBreakerService,
+    private readonly uploadService: UploadService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
   // --- Upload a new voice file ---
@@ -46,6 +53,7 @@ export class VoiceLibraryService {
     fileUrl: string,
     dto: UploadVoiceDto,
     fileBuffer?: Buffer,
+    publicId?: string,
   ): Promise<VoiceResponseDto> {
     let elevenLabsId = '';
 
@@ -70,9 +78,83 @@ export class VoiceLibraryService {
       name: dto.name,
       type: VoiceSourceType.UPLOADED,
       url: fileUrl,
+      publicId: publicId ?? null,
       elevenLabsVoiceId: elevenLabsId || null,
     });
     return this.mapper.toVoiceResponse(voice);
+  }
+
+  async deleteVoice(userId: string, voiceId: string): Promise<void> {
+    const voice = await this.voiceRepository.findByIdAndUser(voiceId, userId);
+    if (!voice) {
+      throw new NotFoundException('Voice not found');
+    }
+    const wasActive = !voice.isDeleted;
+    if (
+      wasActive &&
+      !(await this.voiceRepository.softDeleteOwnedIfUnreferenced(
+        voiceId,
+        userId,
+        {
+          releaseOwnersFreeTierLock:
+            await this.subscriptionService.isPremiumUser(userId),
+        },
+      )) &&
+      (await this.voiceRepository.findFirstByIdNotDeleted(voiceId))
+    ) {
+      throw new ConflictException(
+        'This voice is still selected. Choose another voice before deleting it.',
+      );
+    }
+    const released =
+      !!voice.publicId &&
+      (await this.uploadService.releaseRecorded(voice.publicId, userId));
+    const cloneDeleted = await this.deleteClone(voice, userId);
+    if (!wasActive && !released && !cloneDeleted) {
+      throw new NotFoundException('Voice not found');
+    }
+  }
+
+  private async deleteClone(voice: Voice, userId: string): Promise<boolean> {
+    const cloneId = voice.elevenLabsVoiceId;
+    if (
+      !cloneId ||
+      voice.type !== (VoiceSourceType.UPLOADED as string) ||
+      this.mapper.findVoiceConfig(cloneId) ||
+      (await this.voiceRepository.isElevenLabsIdUsedByAnotherVoice(
+        cloneId,
+        voice.id,
+      ))
+    ) {
+      return false;
+    }
+    try {
+      await this.elevenLabsProvider.deleteVoice(cloneId);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `Voice ${voice.id} is deleted but its ElevenLabs clone ${cloneId} is not: ${msg}`,
+      );
+      throw new InternalServerErrorException(
+        'Voice deletion could not be completed. Please try again.',
+      );
+    }
+    await this.voiceRepository.clearElevenLabsVoiceId(voice.id, userId);
+    return true;
+  }
+
+  private async assertNotAnUploadedVoicesClone(
+    elevenLabsVoiceId: string,
+  ): Promise<void> {
+    if (
+      await this.voiceRepository.isElevenLabsIdOfUploadedVoice(
+        elevenLabsVoiceId,
+      )
+    ) {
+      throw new ConflictException(
+        'This ElevenLabs voice belongs to an uploaded voice and cannot be registered.',
+      );
+    }
   }
 
   // --- Create a voice using ElevenLabs ID ---
@@ -80,6 +162,7 @@ export class VoiceLibraryService {
     userId: string,
     dto: CreateElevenLabsVoiceDto,
   ): Promise<VoiceResponseDto> {
+    await this.assertNotAnUploadedVoicesClone(dto.elevenLabsVoiceId);
     const voice = await this.voiceRepository.createVoice({
       userId,
       name: dto.name,
@@ -108,6 +191,8 @@ export class VoiceLibraryService {
     if (existing) {
       return { id: existing.id };
     }
+
+    await this.assertNotAnUploadedVoicesClone(elevenLabsId);
 
     // 2. Fetch details from ElevenLabs to get Name AND Preview URL
     let voiceName = 'Imported ElevenLabs Voice';
