@@ -381,6 +381,16 @@ export class UploadService {
     return avatars + voices + stories > 0;
   }
 
+  async releaseRecorded(publicId: string, userId: string): Promise<boolean> {
+    const recorded = await this.prisma.userUpload.findFirst({
+      where: { publicId, userId },
+      select: { resourceType: true },
+    });
+    if (!recorded) return false;
+    await this.deleteImage(publicId, recorded.resourceType ?? undefined);
+    return true;
+  }
+
   async deleteImage(publicId: string, resourceType?: string): Promise<void> {
     try {
       const recorded = await this.prisma.userUpload.findFirst({
