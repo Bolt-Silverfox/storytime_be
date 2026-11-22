@@ -5,6 +5,10 @@ import { PrismaKidRepository } from '@/kid/repositories/prisma-kid.repository';
 import { PrismaVoiceRepository } from './prisma-voice.repository';
 import { PrismaVoiceUserRepository } from './prisma-user.repository';
 import { PrismaUserUsageRepository } from './prisma-user-usage.repository';
+import {
+  lockLiveVoiceForReference,
+  lockVoiceForDelete,
+} from './voice-row-lock';
 
 const describeDb = process.env.DATABASE_URL ? describe : describe.skip;
 
@@ -77,13 +81,13 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
 
   const untilBlockedByOrSettled = async (
     lockHolderPid: number,
-    deletion: Promise<boolean>,
+    contender: Promise<unknown>,
   ) => {
     let settled = false;
     const markSettled = () => {
       settled = true;
     };
-    deletion.then(markSettled, markSettled);
+    contender.then(markSettled, markSettled);
     const deadline = Date.now() + BLOCKED_WAIT_LIMIT_MS;
     while (!settled) {
       const [{ blocked }] = await raw.$queryRaw<{ blocked: bigint }[]>`
@@ -92,27 +96,49 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
       if (blocked > 0n) return;
       if (Date.now() > deadline) {
         throw new Error(
-          `the delete neither settled nor waited on backend ${lockHolderPid} within ${BLOCKED_WAIT_LIMIT_MS}ms`,
+          `the contender neither settled nor waited on backend ${lockHolderPid} within ${BLOCKED_WAIT_LIMIT_MS}ms`,
         );
       }
     }
   };
 
-  const deleteWhileHoldingAReferenceLock = async (
-    writeReference: (tx: Prisma.TransactionClient) => Promise<unknown>,
-  ) => {
-    let deleted: Promise<boolean> | undefined;
+  const contendWhileHolding = async <T>(
+    lockAndWrite: (tx: Prisma.TransactionClient) => Promise<unknown>,
+    contend: () => Promise<T>,
+  ): Promise<T> => {
+    let contender: Promise<T> | undefined;
     await raw.$transaction(async (tx) => {
       const [{ pid }] = await tx.$queryRaw<
         { pid: number }[]
       >`SELECT pg_backend_pid() AS pid`;
-      await tx.$queryRaw`SELECT id FROM voices WHERE id = ${voiceId} FOR SHARE`;
-      await writeReference(tx);
-      deleted = softDelete(voiceId);
-      await untilBlockedByOrSettled(pid, deleted);
+      await lockAndWrite(tx);
+      contender = contend();
+      await untilBlockedByOrSettled(pid, contender);
     });
-    return deleted;
+    return contender as Promise<T>;
   };
+
+  const deleteWhileHoldingAReferenceLock = (
+    writeReference: (tx: Prisma.TransactionClient) => Promise<unknown>,
+  ) =>
+    contendWhileHolding(
+      async (tx) => {
+        expect(await lockLiveVoiceForReference(tx, voiceId)).toBe(true);
+        await writeReference(tx);
+      },
+      () => softDelete(voiceId),
+    );
+
+  const referenceWhileADeleteIsInFlight = <T>(
+    writeReference: () => Promise<T>,
+  ) =>
+    contendWhileHolding(async (tx) => {
+      await lockVoiceForDelete(tx, voiceId);
+      await tx.voice.update({
+        where: { id: voiceId },
+        data: { isDeleted: true, deletedAt: new Date() },
+      });
+    }, writeReference);
 
   it("sets a live voice as the user's preferred voice", async () => {
     const user = await users.updatePreferredVoiceWithInclude(userId, voiceId);
@@ -186,6 +212,24 @@ describeDb('voice references racing a voice delete (real Postgres)', () => {
 
     expect(deleted).toBe(false);
     expect(await isDeleted(voiceId)).toBe(false);
+  });
+
+  it('does not lock a free user to a voice whose delete commits while the write waits', async () => {
+    const locked = await referenceWhileADeleteIsInFlight(() =>
+      usages.lockSecondVoiceIfNull(userId, voiceId),
+    );
+
+    expect(locked).toEqual({ count: 0 });
+    expect(await freeTierLock()).toBeNull();
+  });
+
+  it("does not point a user's preference at a voice whose delete commits while the write waits", async () => {
+    const user = await referenceWhileADeleteIsInFlight(() =>
+      users.updatePreferredVoiceWithInclude(userId, voiceId),
+    );
+
+    expect(user).toBeNull();
+    expect(await userPreference()).toBeNull();
   });
 
   it('never leaves a reference pointing at a deleted voice under concurrent writes and deletes', async () => {
