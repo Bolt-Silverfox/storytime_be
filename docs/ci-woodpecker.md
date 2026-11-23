@@ -74,8 +74,8 @@ and Redis; start them yourself on a private Docker network:
 
 ```sh
 (
-  run="wp-$RANDOM$RANDOM"
-  docker network create "$run"
+  run="wp-$(date +%s)-$$"
+  docker network create "$run" || exit 1
   trap 'docker rm -f "$run-postgres" "$run-redis" >/dev/null 2>&1; docker network rm "$run" >/dev/null 2>&1' EXIT
   docker run -d --rm --name "$run-postgres" --network "$run" --network-alias postgres \
     -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=storytime_test postgres:16-alpine
