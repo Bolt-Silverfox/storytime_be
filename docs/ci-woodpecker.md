@@ -91,16 +91,16 @@ and Redis; start them yourself on a private Docker network:
       pnpm db:migrate:deploy &&
       NODE_OPTIONS=--max-old-space-size=2048 env -u ELEVEN_LABS_KEY pnpm test --maxWorkers=1
       status=$?
-      chown -R "$HOST_UID:$HOST_GID" /w/node_modules
+      find /w/node_modules -user 0 -exec chown -h "$HOST_UID:$HOST_GID" {} +
       exit $status'
 )
 ```
 
-The containers and network carry a per-run name (`wp-<random>`), so the `trap`
+The containers and network carry a per-run name (`wp-<time>-<pid>`), so the `trap`
 removes only what this procedure created, on any exit, including after a failed
 test command (the block runs in a subshell so cleanup happens after each attempt). The container runs as root, so it hands ownership of the
 `node_modules` it created back to you before exiting, whether or not the tests
-passed; existing files keep their owner. The
+passed; only root-owned files are handed back, so existing files keep their owner. The
 synthetic values are passed with `--env-file`, so an existing `.env` in your
 checkout is never overwritten. `ELEVEN_LABS_KEY` is unset for jest because CI
 keeps it out of the jest process too: `test/app.e2e-spec.ts` runs only when it
