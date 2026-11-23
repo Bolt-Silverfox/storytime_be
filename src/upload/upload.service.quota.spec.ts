@@ -5,7 +5,12 @@ import {
 } from '@nestjs/common';
 import { PassThrough } from 'stream';
 import { v2 as cloudinary } from 'cloudinary';
-import { UploadService } from './upload.service';
+import {
+  PENDING_UPLOAD_TAG,
+  RESERVATION_CONTEXT_KEY,
+  USER_CONTEXT_KEY,
+  UploadService,
+} from './upload.service';
 import { MAX_USER_UPLOAD_BYTES } from '@/shared/constants/upload.constants';
 
 jest.mock('@/shared/constants/upload.constants', () => ({
@@ -120,6 +125,7 @@ describe('UploadService per-user upload cap', () => {
   let service: UploadService;
   let uploads: jest.SpyInstance;
   let openTxDuringUpload: number[];
+  let removeTag: jest.SpyInstance;
 
   const seed = (r: Partial<Row> & { userId: string; bytes: number }) =>
     prisma.rows.push({
@@ -158,6 +164,9 @@ describe('UploadService per-user upload cap', () => {
     service = new UploadService(prisma as never);
     uploads = jest.spyOn(cloudinary.uploader, 'upload_stream');
     openTxDuringUpload = [];
+    removeTag = jest
+      .spyOn(cloudinary.uploader, 'remove_tag')
+      .mockResolvedValue({});
   });
 
   afterEach(() => jest.restoreAllMocks());
@@ -639,6 +648,86 @@ describe('UploadService per-user upload cap', () => {
     await service.uploadImage(file(5 * MB), 'categories');
     expect(prisma.rows).toHaveLength(0);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  describe('pending tag', () => {
+    const sentOptions = () =>
+      uploads.mock.calls[0][0] as {
+        tags?: string[];
+        context?: Record<string, string>;
+      };
+
+    it('marks a counted image upload as pending with its user and reservation', async () => {
+      cloudinaryReplies('p1', MB);
+      await service.uploadImage(file(MB), 'avatars', { userId: 'u1' });
+      expect(sentOptions().tags).toEqual([PENDING_UPLOAD_TAG]);
+      expect(sentOptions().context).toEqual({
+        [USER_CONTEXT_KEY]: 'u1',
+        [RESERVATION_CONTEXT_KEY]: prisma.rows[0].id,
+      });
+    });
+
+    it('marks a counted file upload as pending with its user and reservation', async () => {
+      cloudinaryReplies('p1', MB, 'video');
+      await service.uploadFile(file(MB), { userId: 'u1' });
+      expect(sentOptions().tags).toEqual([PENDING_UPLOAD_TAG]);
+      expect(sentOptions().context).toEqual({
+        [USER_CONTEXT_KEY]: 'u1',
+        [RESERVATION_CONTEXT_KEY]: prisma.rows[0].id,
+      });
+    });
+
+    it('clears the pending tag once the upload is recorded', async () => {
+      cloudinaryReplies('p1', MB, 'video');
+      await service.uploadFile(file(MB), { userId: 'u1' });
+      expect(removeTag).toHaveBeenCalledWith(PENDING_UPLOAD_TAG, ['p1'], {
+        resource_type: 'video',
+      });
+    });
+
+    it('does not mark an upload with no owner', async () => {
+      cloudinaryReplies('p5', MB);
+      await service.uploadImage(file(MB), 'categories');
+      expect(sentOptions().tags).toBeUndefined();
+      expect(sentOptions().context).toBeUndefined();
+      expect(removeTag).not.toHaveBeenCalled();
+    });
+
+    it('leaves the pending tag on an asset it could neither record nor destroy', async () => {
+      cloudinaryReplies('p12', MB);
+      prisma.userUpload.update.mockRejectedValue(new Error('db down'));
+      jest
+        .spyOn(cloudinary.uploader, 'destroy')
+        .mockRejectedValue(new Error('cdn down'));
+      jest
+        .spyOn(
+          (service as unknown as { logger: { warn: () => void } }).logger,
+          'warn',
+        )
+        .mockImplementation(() => undefined);
+      await expect(
+        service.uploadImage(file(MB), 'avatars', { userId: 'u1' }),
+      ).rejects.toThrow('db down');
+      expect(removeTag).not.toHaveBeenCalled();
+    });
+
+    it('still answers with the upload when clearing the pending tag fails', async () => {
+      cloudinaryReplies('p13', MB);
+      removeTag.mockRejectedValue(new Error('cdn down'));
+      const warn = jest
+        .spyOn(
+          (service as unknown as { logger: { warn: () => void } }).logger,
+          'warn',
+        )
+        .mockImplementation(() => undefined);
+      const result = await service.uploadImage(file(MB), 'avatars', {
+        userId: 'u1',
+      });
+      await new Promise(setImmediate);
+      expect(result.public_id).toBe('p13');
+      expect(prisma.rows).toMatchObject([{ publicId: 'p13', pending: false }]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('p13'));
+    });
   });
 
   it('applies the cap to uploadFile as well', async () => {
