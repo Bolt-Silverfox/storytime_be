@@ -1,0 +1,82 @@
+# End-to-end suite: jest with test/jest-e2e.json, payment specs excluded.
+# Status check: ci/woodpecker/{push,pr}/e2e
+#
+# Same services and synthetic env as test.yaml, but its own workflow (and so its
+# own postgres) so it never shares a database with the unit run. HEAVY lane,
+# --maxWorkers=1: every spec boots the whole Nest app, and --maxWorkers=2 is
+# OOM-killed in 3 GiB (measured; 1 worker: 6 suites / 113 tests in about 30 s,
+# peak about 2.6 GiB). Note `pnpm test` (test.yaml) already matches
+# test/*.e2e-spec.ts through jest.config.js; this workflow runs them again
+# under test/jest-e2e.json, as requested, minus the payment specs.
+#
+# PRs run once (as pull_request); pushes run only on the long-lived branches,
+# where there is no PR to cover them. Halves spot usage per PR commit.
+when:
+  - event: pull_request
+  - event: push
+    branch: [main, "develop-v*", "release-v*"]
+
+labels:
+  lane: heavy
+
+variables:
+  - &node_image node:24.22.1-bookworm
+  - &pnpm "corepack enable && corepack prepare pnpm@10.15.1 --activate"
+  # The pnpm store goes beside the checkout, on the same workspace volume
+  # (/woodpecker is the Docker backend's workspace base), so installs can
+  # hardlink and the store is shared by the workflow's steps. Left to default,
+  # pnpm would create .pnpm-store INSIDE the checkout (the step's home is on
+  # another filesystem), where a bare `eslint` would lint it.
+  - &corepack_env
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+    npm_config_store_dir: /woodpecker/.pnpm-store
+  - &db_env
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/storytime_test
+    REDIS_URL: redis://redis:6379
+
+services:
+  - name: postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: storytime_test
+
+  - name: redis
+    image: redis:7-alpine
+
+steps:
+  - name: install
+    image: *node_image
+    environment: *corepack_env
+    commands:
+      - *pnpm
+      - pnpm install --frozen-lockfile --ignore-scripts
+
+  - name: generate
+    image: *node_image
+    environment:
+      <<: [*corepack_env, *db_env]
+    commands:
+      - *pnpm
+      - pnpm db:generate
+
+  - name: migrate
+    image: *node_image
+    environment:
+      <<: [*corepack_env, *db_env]
+    commands:
+      - *pnpm
+      - cp ci/woodpecker/ci.env .env
+      - node ci/woodpecker/scripts/wait-for.mjs postgres:5432 redis:6379
+      - pnpm db:migrate:deploy
+
+  - name: jest-e2e
+    image: *node_image
+    environment:
+      <<: [*corepack_env, *db_env]
+      NODE_OPTIONS: --max-old-space-size=2048
+    commands:
+      - *pnpm
+      - cp ci/woodpecker/ci.env .env
+      - pnpm exec jest --config test/jest-e2e.json --testPathIgnorePatterns payment --maxWorkers=1
