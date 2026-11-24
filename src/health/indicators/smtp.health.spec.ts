@@ -215,6 +215,54 @@ describe('SmtpHealthIndicator', () => {
       expect(verify).toHaveBeenCalledTimes(5);
     });
 
+    it('returns to the five-minute interval after an admin probe succeeds during a thirty-minute backoff', async () => {
+      verify.mockRejectedValue(new Error('down'));
+      bg.onModuleInit();
+      await jest.advanceTimersByTimeAsync(0);
+      for (let i = 0; i < 8; i++) {
+        const before = verify.mock.calls.length;
+        while (verify.mock.calls.length === before) {
+          await jest.advanceTimersByTimeAsync(60_000);
+        }
+      }
+
+      verify.mockResolvedValueOnce(true);
+      await bg.isHealthy('smtp');
+      expect(bg.cachedHealth('smtp').smtp.status).toBe('up');
+      const probesAfterAdmin = verify.mock.calls.length;
+
+      await jest.advanceTimersByTimeAsync(FIVE_MIN);
+
+      expect(verify).toHaveBeenCalledTimes(probesAfterAdmin + 1);
+      expect(bg.cachedHealth('smtp').smtp.status).toBe('down');
+      expect(jest.getTimerCount()).toBe(1);
+    });
+
+    it('keeps a single refresh timer when an admin probe completes', async () => {
+      verify.mockResolvedValue(true);
+      bg.onModuleInit();
+      await jest.advanceTimersByTimeAsync(0);
+
+      await bg.isHealthy('smtp');
+
+      expect(jest.getTimerCount()).toBe(1);
+    });
+
+    it('starts the backoff at 30 seconds after an admin probe fails while healthy', async () => {
+      verify.mockResolvedValue(true);
+      bg.onModuleInit();
+      await jest.advanceTimersByTimeAsync(0);
+
+      verify.mockRejectedValue(new Error('down'));
+      await bg.isHealthy('smtp');
+      const probesAfterAdmin = verify.mock.calls.length;
+
+      await jest.advanceTimersByTimeAsync(29_000);
+      expect(verify).toHaveBeenCalledTimes(probesAfterAdmin);
+      await jest.advanceTimersByTimeAsync(1_000);
+      expect(verify).toHaveBeenCalledTimes(probesAfterAdmin + 1);
+    });
+
     it('does not keep the process alive for the next probe', async () => {
       verify.mockResolvedValue(true);
       const setTimeoutSpy = jest.spyOn(global, 'setTimeout');

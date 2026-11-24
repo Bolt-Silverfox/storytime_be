@@ -34,7 +34,7 @@ export class SmtpHealthIndicator implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit(): void {
-    void this.refreshAndSchedule();
+    void this.probe();
   }
 
   onModuleDestroy(): void {
@@ -68,8 +68,7 @@ export class SmtpHealthIndicator implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async refreshAndSchedule(): Promise<void> {
-    const result = await this.probe();
+  private scheduleNextRefresh(result: ProbeResult): void {
     if (this.destroyed) return;
 
     this.consecutiveFailures = result.up ? 0 : this.consecutiveFailures + 1;
@@ -79,16 +78,22 @@ export class SmtpHealthIndicator implements OnModuleInit, OnModuleDestroy {
           BACKOFF_BASE_MS * 2 ** (this.consecutiveFailures - 1),
           BACKOFF_MAX_MS,
         );
+    if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
-      void this.refreshAndSchedule();
+      void this.probe();
     }, delay);
     this.timer.unref();
   }
 
   private probe(): Promise<ProbeResult> {
-    this.inFlight ??= this.verify().finally(() => {
-      this.inFlight = null;
-    });
+    this.inFlight ??= this.verify()
+      .then((result) => {
+        this.scheduleNextRefresh(result);
+        return result;
+      })
+      .finally(() => {
+        this.inFlight = null;
+      });
     return this.inFlight;
   }
 
