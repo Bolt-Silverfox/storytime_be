@@ -17,12 +17,12 @@ PROMETHEUS_PORT=9464
 # Grafana Tempo (Distributed Tracing)
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
 
-# Grafana Loki (Logs)
-OTEL_EXPORTER_LOGS_ENDPOINT=http://localhost:4318/v1/logs
+# Grafana Loki (Logs, Loki's native OTLP endpoint; Tempo on :4318 accepts traces only)
+OTEL_EXPORTER_LOGS_ENDPOINT=http://localhost:3100/otlp/v1/logs
 
 # Grafana Cloud (Optional - for managed service)
 # GRAFANA_CLOUD_INSTANCE_ID=your-instance-id
-# GRAFANA_CLOUD_API_KEY=your-api-key
+# GRAFANA_CLOUD_API_TOKEN=your-access-policy-token
 
 # Winston Logging
 LOG_LEVEL=info  # debug, info, warn, error
@@ -33,8 +33,6 @@ LOG_LEVEL=info  # debug, info, warn, error
 Create `docker-compose.observability.yml`:
 
 ```yaml
-version: '3.8'
-
 services:
   # Grafana Tempo - Distributed Tracing
   tempo:
@@ -65,6 +63,8 @@ services:
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus-data:/prometheus
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'   # needed on Linux Docker Engine
     ports:
       - '9090:9090'   # Prometheus UI
 
@@ -97,7 +97,9 @@ distributor:
     otlp:
       protocols:
         http:
+          endpoint: 0.0.0.0:4318
         grpc:
+          endpoint: 0.0.0.0:4317
 
 storage:
   trace:
@@ -122,18 +124,29 @@ scrape_configs:
       - targets: ['host.docker.internal:9464']  # Prometheus exporter in your NestJS app
 ```
 
-With `NODE_ENV=development` (or `NODE_ENV` unset) the app prints metrics to the console every 60s and never opens port 9464, whatever `OTEL_METRICS_EXPORTER` says. The Prometheus exporter only starts when `NODE_ENV` is `staging` or `production` and `OTEL_METRICS_EXPORTER` is `prometheus` (the default). For this local stack use `NODE_ENV=staging`, which also sends logs to the OTLP endpoint instead of the console and scopes Bull queues and push topics to `staging`.
+The app picks its metrics exporter in this order:
 
-The exporter binds to 127.0.0.1 by default, which a container cannot reach. When Prometheus runs in Docker, start the app with `OTEL_EXPORTER_PROMETHEUS_HOST=0.0.0.0` and keep port 9464 closed to the public.
+1. `OTEL_METRICS_EXPORTER=otlp`: metrics are pushed to `OTEL_EXPORTER_METRICS_ENDPOINT` in every environment, development included, and port 9464 never opens.
+2. Otherwise, with `NODE_ENV=development` (or `NODE_ENV` unset): metrics are printed to the console every 60s and port 9464 never opens.
+3. Otherwise (`NODE_ENV` is `staging` or `production`): the Prometheus exporter serves `/metrics` on `PROMETHEUS_PORT` (default 9464).
+
+For this local stack use `NODE_ENV=staging` and `OTEL_METRICS_EXPORTER=prometheus`. `NODE_ENV=staging` also sends logs to the OTLP logs endpoint instead of the console and scopes Bull queues and push topics to `staging`. Values set in the shell win over `.env`, so put both on the start command rather than relying on `.env`.
+
+The exporter binds to 127.0.0.1 by default, which a container cannot reach. When Prometheus runs in Docker, start the app with `OTEL_EXPORTER_PROMETHEUS_HOST=0.0.0.0` and keep port 9464 closed to the public. On Linux Docker Engine `host.docker.internal` only resolves because of the `extra_hosts` entry on the `prometheus` service above; Docker Desktop provides it without that entry.
 
 ## Running the Stack
 
 ```bash
 # Start Grafana Stack
-docker-compose -f docker-compose.observability.yml up -d
+docker compose -f docker-compose.observability.yml up -d
 
-# Start your NestJS API with the Prometheus exporter on :9464
-NODE_ENV=staging OTEL_EXPORTER_PROMETHEUS_HOST=0.0.0.0 pnpm start:dev
+# Start your NestJS API with the Prometheus exporter on :9464 and traces/logs going to the local stack
+NODE_ENV=staging \
+OTEL_METRICS_EXPORTER=prometheus \
+OTEL_EXPORTER_PROMETHEUS_HOST=0.0.0.0 \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces \
+OTEL_EXPORTER_LOGS_ENDPOINT=http://localhost:3100/otlp/v1/logs \
+pnpm start:dev
 
 # Access dashboards
 # - Grafana: http://localhost:3001
@@ -167,9 +180,11 @@ Grafana Cloud is the managed option: the app **pushes** all three signals
 No self-hosted Tempo/Loki/Prometheus and no scraper are required.
 
 Everything below is **env-driven and optional**. With none of these vars set, the
-app behaves as in the local stack above (Prometheus pull on `:9464` outside
-`NODE_ENV=development`, console metrics in development, OTLP to
-`localhost:4318`, Sentry disabled) — boot is unaffected.
+app uses its defaults: Prometheus pull on `127.0.0.1:9464` outside
+`NODE_ENV=development` and console metrics in development, traces to
+`http://localhost:4318/v1/traces`, logs to `http://localhost:4318/v1/logs`
+outside development and to the console in development, Sentry disabled. Boot is
+unaffected.
 
 ### 1. Obtain credentials
 
@@ -214,8 +229,9 @@ SENTRY_DSN=https://<key>@o<org>.ingest.sentry.io/<project>
 ```
 
 > `OTEL_METRICS_EXPORTER` defaults to `prometheus`, so metrics only switch to
-> OTLP push when you explicitly set `otlp`. When `otlp` is selected the Prometheus
-> `:9464` HTTP server is **not** started.
+> OTLP push when you explicitly set `otlp`. `otlp` is checked before `NODE_ENV`:
+> it pushes metrics in every environment, development included, and the
+> Prometheus `:9464` HTTP server is **not** started.
 
 ### 3. Import the bundled dashboard into Grafana Cloud
 
@@ -228,22 +244,22 @@ The repo ships `monitoring/grafana/dashboards/storytime-api.json` (uid
    (the hosted metrics store) and click **Import**.
 
 Because metrics now arrive via OTLP, the panels query the same metric names
-listed under **Custom Metrics** above (e.g.
+listed under **Custom Metrics** below (e.g.
 `http_client_request_duration_seconds_bucket`, `cache_hit_ratio`).
 
-### Legacy self-hosted endpoints
+### Self-hosted Tempo/Loki
 
-If instead you point at self-hosted Tempo/Loki, the older native endpoints still
-work (the app only cares about the OTLP URLs and headers):
+The exporters speak OTLP/HTTP only, so point them at the OTLP receivers, not at
+Loki's `/loki/api/v1/push` or Tempo's native APIs:
 
 ```bash
-OTEL_EXPORTER_OTLP_ENDPOINT=https://tempo-prod-us-central-0.grafana.net/tempo
-OTEL_EXPORTER_LOGS_ENDPOINT=https://logs-prod-us-central1.grafana.net/loki/api/v1/push
+OTEL_EXPORTER_OTLP_ENDPOINT=http://<tempo-host>:4318/v1/traces
+OTEL_EXPORTER_LOGS_ENDPOINT=http://<loki-host>:3100/otlp/v1/logs
 ```
 
 ## Verifying the Setup
 
-1. **Metrics**: With the app started as in **Running the Stack** (`NODE_ENV=staging`), visit `http://localhost:9464/metrics`. Under `NODE_ENV=development` nothing listens there; metrics appear in the app console instead
+1. **Metrics**: With the app started as in **Running the Stack** (`NODE_ENV=staging OTEL_METRICS_EXPORTER=prometheus`), visit `http://localhost:9464/metrics`. Nothing listens there when `OTEL_METRICS_EXPORTER=otlp` (metrics are pushed) or under `NODE_ENV=development` (metrics appear in the app console)
 2. **Logs**: Check Grafana → Explore → Loki for structured logs
 3. **Traces**: Check Grafana → Explore → Tempo for distributed traces
 4. **Health**: Visit `http://localhost:3000/api/v1/health` to verify API health
@@ -275,9 +291,10 @@ Import pre-built community dashboards in Grafana by ID:
 
 ### Custom Metrics (Storytime API)
 
-Outside `NODE_ENV=development`, the API exposes custom Prometheus metrics at
-`http://localhost:9464/metrics` (port configurable via `PROMETHEUS_PORT`). Actual metric names emitted by the
-code:
+With `OTEL_METRICS_EXPORTER=prometheus` (the default) outside `NODE_ENV=development`,
+the API exposes custom Prometheus metrics at `http://localhost:9464/metrics` (port
+configurable via `PROMETHEUS_PORT`, bind address via `OTEL_EXPORTER_PROMETHEUS_HOST`,
+default `127.0.0.1`). Actual metric names emitted by the code:
 
 | Metric | Type | Source |
 |--------|------|--------|
@@ -308,5 +325,8 @@ Prometheus containers:
 - Grafana dashboard provider: `monitoring/grafana/provisioning/dashboards/dashboards.yml`
   (mount `monitoring/grafana/dashboards/` at `/etc/grafana/provisioning/dashboards/storytime`)
 - Prometheus scrape job: merge `monitoring/prometheus/scrape.storytime.yml` into
-  your `prometheus.yml` `scrape_configs:` (targets the API on `:9464`).
+  your `prometheus.yml` `scrape_configs:`. Its target `storytime-api:9464` only
+  resolves when the API runs as a Compose service named `storytime-api` on the
+  same network as Prometheus; for an API running on the host, use
+  `host.docker.internal:9464` as in the `prometheus.yml` above.
 4. **Queue Dashboard**: Job throughput, processing times, failure rates
