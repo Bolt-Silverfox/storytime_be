@@ -50,6 +50,14 @@ describe('admin health endpoints', () => {
         {
           provide: PrismaService,
           useValue: {
+            user: {
+              findUnique: () =>
+                Promise.resolve({
+                  role: 'admin',
+                  isSuspended: false,
+                  isDeleted: false,
+                }),
+            },
             session: {
               findUnique: () =>
                 Promise.resolve({
