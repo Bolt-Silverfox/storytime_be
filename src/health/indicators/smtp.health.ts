@@ -11,9 +11,11 @@ import {
 } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
+import * as net from 'node:net';
 import * as nodemailer from 'nodemailer';
 import { withHealthTimeout } from './health-timeout';
 
+const CONNECT_TIMEOUT_MS = 5 * 1000;
 const PROBE_DEADLINE_MS = 15 * 1000;
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const BACKOFF_BASE_MS = 30 * 1000;
@@ -101,19 +103,36 @@ export class SmtpHealthIndicator implements OnModuleInit, OnModuleDestroy {
 
   private async verify(): Promise<ProbeResult> {
     const startTime = Date.now();
+    const host = this.configService.get('SMTP_HOST');
+    const port = this.configService.get('SMTP_PORT') || 587;
+    let socket: net.Socket | undefined;
 
     try {
       const transporter = nodemailer.createTransport({
-        host: this.configService.get('SMTP_HOST'),
-        port: this.configService.get('SMTP_PORT') || 587,
+        host,
+        port,
         secure: this.configService.get('SMTP_SECURE'),
         auth: {
           user: this.configService.get('SMTP_USER'),
           pass: this.configService.get('SMTP_PASS'),
         },
-        connectionTimeout: 5000,
+        connectionTimeout: CONNECT_TIMEOUT_MS,
         greetingTimeout: 5000,
         socketTimeout: 10000,
+        getSocket: (_options, callback) => {
+          const connecting = net.connect({ host, port });
+          socket = connecting;
+          const fail = (error: Error) => callback(error);
+          connecting.once('error', fail);
+          connecting.setTimeout(CONNECT_TIMEOUT_MS, () =>
+            connecting.destroy(new Error('Connection timeout')),
+          );
+          connecting.once('connect', () => {
+            connecting.off('error', fail);
+            connecting.setTimeout(0);
+            callback(null, { connection: connecting });
+          });
+        },
       });
 
       await withHealthTimeout(transporter.verify(), PROBE_DEADLINE_MS);
@@ -121,6 +140,7 @@ export class SmtpHealthIndicator implements OnModuleInit, OnModuleDestroy {
       this.lastKnownUp = true;
       return { up: true, duration: Date.now() - startTime };
     } catch (error) {
+      socket?.destroy();
       const errorMessage = ErrorHandler.extractMessage(error);
       this.logger.warn(`SMTP health check failed: ${errorMessage}`);
       this.lastKnownUp = false;
