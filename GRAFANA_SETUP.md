@@ -122,6 +122,8 @@ scrape_configs:
       - targets: ['host.docker.internal:9464']  # Prometheus exporter in your NestJS app
 ```
 
+With `NODE_ENV=development` (or `NODE_ENV` unset) the app prints metrics to the console every 60s and never opens port 9464, whatever `OTEL_METRICS_EXPORTER` says. The Prometheus exporter only starts when `NODE_ENV` is `staging` or `production` and `OTEL_METRICS_EXPORTER` is `prometheus` (the default). For this local stack use `NODE_ENV=staging`, which also sends logs to the OTLP endpoint instead of the console and scopes Bull queues and push topics to `staging`.
+
 The exporter binds to 127.0.0.1 by default, which a container cannot reach. When Prometheus runs in Docker, start the app with `OTEL_EXPORTER_PROMETHEUS_HOST=0.0.0.0` and keep port 9464 closed to the public.
 
 ## Running the Stack
@@ -130,8 +132,8 @@ The exporter binds to 127.0.0.1 by default, which a container cannot reach. When
 # Start Grafana Stack
 docker-compose -f docker-compose.observability.yml up -d
 
-# Start your NestJS API
-pnpm start:dev
+# Start your NestJS API with the Prometheus exporter on :9464
+NODE_ENV=staging OTEL_EXPORTER_PROMETHEUS_HOST=0.0.0.0 pnpm start:dev
 
 # Access dashboards
 # - Grafana: http://localhost:3001
@@ -165,7 +167,8 @@ Grafana Cloud is the managed option: the app **pushes** all three signals
 No self-hosted Tempo/Loki/Prometheus and no scraper are required.
 
 Everything below is **env-driven and optional**. With none of these vars set, the
-app behaves exactly as in local dev (Prometheus pull on `:9464`, OTLP to
+app behaves as in the local stack above (Prometheus pull on `:9464` outside
+`NODE_ENV=development`, console metrics in development, OTLP to
 `localhost:4318`, Sentry disabled) — boot is unaffected.
 
 ### 1. Obtain credentials
@@ -240,7 +243,7 @@ OTEL_EXPORTER_LOGS_ENDPOINT=https://logs-prod-us-central1.grafana.net/loki/api/v
 
 ## Verifying the Setup
 
-1. **Metrics**: Visit `http://localhost:9464/metrics` to see Prometheus metrics
+1. **Metrics**: With the app started as in **Running the Stack** (`NODE_ENV=staging`), visit `http://localhost:9464/metrics`. Under `NODE_ENV=development` nothing listens there; metrics appear in the app console instead
 2. **Logs**: Check Grafana → Explore → Loki for structured logs
 3. **Traces**: Check Grafana → Explore → Tempo for distributed traces
 4. **Health**: Visit `http://localhost:3000/api/v1/health` to verify API health
@@ -272,8 +275,8 @@ Import pre-built community dashboards in Grafana by ID:
 
 ### Custom Metrics (Storytime API)
 
-The API exposes custom Prometheus metrics at `http://localhost:9464/metrics`
-(port configurable via `PROMETHEUS_PORT`). Actual metric names emitted by the
+Outside `NODE_ENV=development`, the API exposes custom Prometheus metrics at
+`http://localhost:9464/metrics` (port configurable via `PROMETHEUS_PORT`). Actual metric names emitted by the
 code:
 
 | Metric | Type | Source |
