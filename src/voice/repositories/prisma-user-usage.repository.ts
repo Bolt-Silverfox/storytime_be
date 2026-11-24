@@ -5,6 +5,7 @@ import type {
   UsageCounterField,
 } from './user-usage.repository.interface';
 import type { UserUsage } from '@prisma/client';
+import { lockLiveVoiceForReference } from './voice-row-lock';
 
 @Injectable()
 export class PrismaUserUsageRepository implements IUserUsageRepository {
@@ -60,9 +61,14 @@ export class PrismaUserUsageRepository implements IUserUsageRepository {
     userId: string,
     voiceUuid: string,
   ): Promise<{ count: number }> {
-    return this.prisma.userUsage.updateMany({
-      where: { userId, selectedSecondVoiceId: null },
-      data: { selectedSecondVoiceId: voiceUuid },
+    return this.prisma.$transaction(async (tx) => {
+      if (!(await lockLiveVoiceForReference(tx, voiceUuid))) {
+        return { count: 0 };
+      }
+      return tx.userUsage.updateMany({
+        where: { userId, selectedSecondVoiceId: null },
+        data: { selectedSecondVoiceId: voiceUuid },
+      });
     });
   }
 

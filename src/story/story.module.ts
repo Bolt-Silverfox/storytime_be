@@ -1,3 +1,4 @@
+import { AccessControlModule } from '@/shared/access/access-control.module';
 import { HttpModule } from '@nestjs/axios';
 import { Module, forwardRef } from '@nestjs/common';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -64,6 +65,7 @@ import { PrismaStoryRecommendationRepository } from './repositories/prisma-story
 @Module({
   imports: [
     HttpModule,
+    AccessControlModule,
     ScheduleModule.forRoot(),
     AuthModule,
     SubscriptionModule,
