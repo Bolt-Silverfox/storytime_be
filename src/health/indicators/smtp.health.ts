@@ -12,7 +12,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { EnvConfig } from '@/shared/config/env.validation';
 import * as nodemailer from 'nodemailer';
+import { withHealthTimeout } from './health-timeout';
 
+const PROBE_DEADLINE_MS = 15 * 1000;
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const BACKOFF_BASE_MS = 30 * 1000;
 const BACKOFF_MAX_MS = 30 * 60 * 1000;
@@ -114,7 +116,7 @@ export class SmtpHealthIndicator implements OnModuleInit, OnModuleDestroy {
         socketTimeout: 10000,
       });
 
-      await transporter.verify();
+      await withHealthTimeout(transporter.verify(), PROBE_DEADLINE_MS);
 
       this.lastKnownUp = true;
       return { up: true, duration: Date.now() - startTime };

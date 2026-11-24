@@ -194,6 +194,52 @@ describe('SmtpHealthIndicator', () => {
       expect(bg.cachedHealth('smtp').smtp.status).toBe('up');
     });
 
+    it('fails a probe whose verify never settles at the fifteen-second deadline and keeps refreshing', async () => {
+      verify.mockImplementationOnce(
+        () => new Promise<boolean>(() => undefined),
+      );
+      bg.onModuleInit();
+      const adminCall = bg.isHealthy('smtp');
+      await jest.advanceTimersByTimeAsync(14_999);
+      expect(bg.cachedHealth('smtp').smtp.status).toBe('down');
+
+      await jest.advanceTimersByTimeAsync(1);
+
+      await expect(adminCall).resolves.toEqual({
+        smtp: {
+          status: 'down',
+          duration: '15000ms',
+          host: 'smtp.example.test',
+          error: 'timeout after 15000ms',
+        },
+      });
+      expect(jest.getTimerCount()).toBe(1);
+
+      verify.mockResolvedValue(true);
+      await jest.advanceTimersByTimeAsync(29_999);
+      expect(verify).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(verify).toHaveBeenCalledTimes(2);
+      expect(bg.cachedHealth('smtp').smtp.status).toBe('up');
+    });
+
+    it('ignores a stalled verify that settles after its probe timed out', async () => {
+      let lateRelease: (v: boolean) => void = () => undefined;
+      verify.mockImplementationOnce(
+        () => new Promise<boolean>((resolve) => (lateRelease = resolve)),
+      );
+      bg.onModuleInit();
+      await jest.advanceTimersByTimeAsync(15_000);
+
+      lateRelease(true);
+      await jest.advanceTimersByTimeAsync(0);
+
+      expect(bg.cachedHealth('smtp').smtp.status).toBe('down');
+      expect(jest.getTimerCount()).toBe(1);
+      await jest.advanceTimersByTimeAsync(29_999);
+      expect(verify).toHaveBeenCalledTimes(1);
+    });
+
     it('restarts the backoff at 30 seconds when a failure follows a success', async () => {
       verify
         .mockRejectedValueOnce(new Error('down'))
