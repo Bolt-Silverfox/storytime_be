@@ -60,11 +60,15 @@ until curl -fsS --connect-timeout 3 --max-time 10 "http://127.0.0.1:${new_port}$
   sleep 3
 done
 
-if ! curl -fsS --connect-timeout 3 --max-time 10 "http://127.0.0.1:${new_port}${HEALTH_FULL_PATH}" >/dev/null 2>&1; then
-  err "New color '$new' failed the deep health check (${HEALTH_FULL_PATH}) — rolling back."
-  pm2 delete "${APP}-${new}" >/dev/null 2>&1 || true
-  exit 1
-fi
+until curl -fsS --connect-timeout 3 --max-time 10 "http://127.0.0.1:${new_port}${HEALTH_FULL_PATH}" >/dev/null 2>&1; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then
+    err "New color '$new' failed the deep health check (${HEALTH_FULL_PATH}) — rolling back."
+    pm2 logs "${APP}-${new}" --lines 40 --nostream || true
+    pm2 delete "${APP}-${new}" >/dev/null 2>&1 || true
+    exit 1
+  fi
+  sleep 3
+done
 log "New color '$new' is healthy."
 
 # --- 4. Flip nginx to the new color ------------------------------------------

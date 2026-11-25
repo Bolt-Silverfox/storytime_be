@@ -47,10 +47,11 @@ export class AssignAvatarToUserDto {
   @IsNotEmpty()
   avatarId: string;
 
-  @ApiProperty({ example: 'user-id' })
+  @ApiProperty({ example: 'user-id', required: false })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  userId: string;
+  userId?: string;
 }
 
 export class AssignAvatarToKidDto {

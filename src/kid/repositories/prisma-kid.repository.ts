@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Kid, Voice, User } from '@prisma/client';
 import {
@@ -7,6 +7,7 @@ import {
   CreateKidData,
   UpdateKidData,
 } from './kid.repository.interface';
+import { lockLiveVoiceForReference } from '@/voice/repositories/voice-row-lock';
 
 const kidRelationsBasic = {
   avatar: true,
@@ -80,19 +81,27 @@ export class PrismaKidRepository implements IKidRepository {
   async update(id: string, data: UpdateKidData): Promise<KidWithRelations> {
     const { preferredCategoryIds, preferredVoiceId, avatarId, ...rest } = data;
 
-    return this.prisma.kid.update({
-      where: { id },
-      data: {
-        ...rest,
-        avatar: avatarId ? { connect: { id: avatarId } } : undefined,
-        preferredCategories: preferredCategoryIds
-          ? { set: preferredCategoryIds.map((id) => ({ id })) }
-          : undefined,
-        preferredVoice: preferredVoiceId
-          ? { connect: { id: preferredVoiceId } }
-          : undefined,
-      },
-      include: kidRelationsBasic,
+    return this.prisma.$transaction(async (tx) => {
+      if (
+        preferredVoiceId &&
+        !(await lockLiveVoiceForReference(tx, preferredVoiceId))
+      ) {
+        throw new NotFoundException('Voice not found');
+      }
+      return tx.kid.update({
+        where: { id },
+        data: {
+          ...rest,
+          avatar: avatarId ? { connect: { id: avatarId } } : undefined,
+          preferredCategories: preferredCategoryIds
+            ? { set: preferredCategoryIds.map((id) => ({ id })) }
+            : undefined,
+          preferredVoice: preferredVoiceId
+            ? { connect: { id: preferredVoiceId } }
+            : undefined,
+        },
+        include: kidRelationsBasic,
+      });
     });
   }
 

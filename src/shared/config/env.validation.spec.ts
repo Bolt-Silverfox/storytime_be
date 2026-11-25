@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { validateEnv } from './env.validation';
@@ -33,6 +34,19 @@ const base = {
 };
 
 describe('validateEnv', () => {
+  it('boots without the optional Bull Board credentials and passes them through when set', () => {
+    const bare = validateEnv(base);
+    expect(bare.BULL_BOARD_USER).toBeUndefined();
+    expect(bare.BULL_BOARD_PASSWORD).toBeUndefined();
+    const set = validateEnv({
+      ...base,
+      BULL_BOARD_USER: 'ops',
+      BULL_BOARD_PASSWORD: 'pw',
+    });
+    expect(set.BULL_BOARD_USER).toBe('ops');
+    expect(set.BULL_BOARD_PASSWORD).toBe('pw');
+  });
+
   it('applies defaults', () => {
     const env = validateEnv(base);
     expect(env.PORT).toBe(3000);
@@ -117,5 +131,36 @@ describe('validateEnv', () => {
       expect(nonProdThrottleMultiplier(process.env.NODE_ENV)).toBe(1);
       expect(nonProdThrottleMultiplier(nodeEnv)).toBe(1);
     });
+  });
+});
+
+describe('SWAGGER_ENABLED', () => {
+  it('treats blank as unset', () => {
+    expect(
+      validateEnv({ ...base, SWAGGER_ENABLED: '  ' }).SWAGGER_ENABLED,
+    ).toBeUndefined();
+  });
+
+  it('accepts true and false in any case', () => {
+    expect(
+      validateEnv({ ...base, SWAGGER_ENABLED: 'TRUE' }).SWAGGER_ENABLED,
+    ).toBe('true');
+    expect(
+      validateEnv({ ...base, SWAGGER_ENABLED: ' False ' }).SWAGGER_ENABLED,
+    ).toBe('false');
+  });
+
+  it('rejects 1 and logs a message naming the accepted values', () => {
+    const logged = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+
+    expect(() => validateEnv({ ...base, SWAGGER_ENABLED: '1' })).toThrow(
+      'Invalid environment variables',
+    );
+    expect(String(logged.mock.calls[0][1])).toContain(
+      'SWAGGER_ENABLED must be',
+    );
+    logged.mockRestore();
   });
 });
