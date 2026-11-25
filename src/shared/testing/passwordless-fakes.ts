@@ -95,6 +95,14 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
     return Promise.resolve(r.emailNormalized);
   }
 
+  findOpenEmailByLinkTokenHash(
+    hash: string,
+    now: Date,
+  ): Promise<string | null> {
+    const r = this.rows.find((x) => x.linkTokenHash === hash);
+    return Promise.resolve(r && this.isOpen(r, now) ? r.emailNormalized : null);
+  }
+
   consumeByLinkTokenHash(hash: string, now: Date): Promise<string | null> {
     const r = this.rows.find((x) => x.linkTokenHash === hash);
     return r ? this.consumeById(r.id, now) : Promise.resolve(null);

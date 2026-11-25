@@ -15,6 +15,10 @@ export interface ILoginChallengeRepository {
   findOpenIdByEmail(emailNormalized: string, now: Date): Promise<string | null>;
   recordAttempt(id: string, now: Date): Promise<{ codeHash: string } | null>;
   consumeById(id: string, now: Date): Promise<string | null>;
+  findOpenEmailByLinkTokenHash(
+    linkTokenHash: string,
+    now: Date,
+  ): Promise<string | null>;
   consumeByLinkTokenHash(
     linkTokenHash: string,
     now: Date,

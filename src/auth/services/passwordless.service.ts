@@ -244,8 +244,15 @@ export class PasswordlessService {
     guestSessionId?: string,
   ): Promise<PasswordlessLoginResult> {
     await this.enforceVerifyLimits(ip);
+    const linkTokenHash = this.sha256(token);
+    const pendingEmail = await this.challenges.findOpenEmailByLinkTokenHash(
+      linkTokenHash,
+      new Date(),
+    );
+    if (!pendingEmail) throw this.invalid();
+    await this.assertCreationBudgetLeft(pendingEmail, ip);
     const consumedEmail = await this.challenges.consumeByLinkTokenHash(
-      this.sha256(token),
+      linkTokenHash,
       new Date(),
     );
     if (!consumedEmail) throw this.invalid();

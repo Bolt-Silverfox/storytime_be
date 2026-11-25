@@ -230,6 +230,10 @@ describe('PasswordlessService', () => {
       expect(
         ctx.authRepo.users.find((u) => u.email === 'new4@example.com'),
       ).toBeUndefined();
+      expect(
+        ctx.repo.rows.find((r) => r.emailNormalized === 'new4@example.com')
+          ?.consumedAt,
+      ).toBeNull();
     });
 
     it('still signs an existing account in from an address that spent its budget', async () => {

@@ -84,6 +84,22 @@ export class PrismaLoginChallengeRepository implements ILoginChallengeRepository
     return rows[0]?.emailNormalized ?? null;
   }
 
+  async findOpenEmailByLinkTokenHash(
+    linkTokenHash: string,
+    now: Date,
+  ): Promise<string | null> {
+    const row = await this.prisma.loginChallenge.findFirst({
+      where: {
+        linkTokenHash,
+        consumedAt: null,
+        invalidatedAt: null,
+        expiresAt: { gt: now },
+      },
+      select: { emailNormalized: true },
+    });
+    return row?.emailNormalized ?? null;
+  }
+
   async consumeByLinkTokenHash(
     linkTokenHash: string,
     now: Date,
