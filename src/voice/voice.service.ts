@@ -32,8 +32,13 @@ export class VoiceService {
     fileUrl: string,
     dto: UploadVoiceDto,
     fileBuffer?: Buffer,
+    publicId?: string,
   ): Promise<VoiceResponseDto> {
-    return this.library.uploadVoice(userId, fileUrl, dto, fileBuffer);
+    return this.library.uploadVoice(userId, fileUrl, dto, fileBuffer, publicId);
+  }
+
+  deleteVoice(userId: string, voiceId: string): Promise<void> {
+    return this.library.deleteVoice(userId, voiceId);
   }
 
   // --- Create a voice using ElevenLabs ID ---

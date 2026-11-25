@@ -1,8 +1,14 @@
 import {
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
+import { JwtPayload } from '@/shared/guards/auth.guard';
+import { PrismaService } from '@/prisma/prisma.service';
+import { MAX_USER_UPLOAD_BYTES } from '@/shared/constants/upload.constants';
 import {
   v2 as cloudinary,
   UploadApiResponse,
@@ -10,15 +16,217 @@ import {
 } from 'cloudinary';
 import toStream from 'buffer-to-stream';
 
+export const STALE_RESERVATION_MS = 15 * 60_000;
+export const PENDING_UPLOAD_TAG = 'st-upload-pending';
+export const USER_CONTEXT_KEY = 'st_user';
+export const RESERVATION_CONTEXT_KEY = 'st_reservation';
+export const UPLOAD_QUOTA_EXCEEDED = 'UPLOAD_QUOTA_EXCEEDED';
+
+export const describeError = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
+export interface UploadOwner {
+  userId: string;
+  exempt?: boolean;
+}
+
+interface PendingMark {
+  tags: string[];
+  context: Record<string, string>;
+}
+
+export const uploadOwner = (auth: JwtPayload): UploadOwner => ({
+  userId: auth.userId,
+  exempt: auth.userRole === 'admin',
+});
+
 @Injectable()
 export class UploadService {
   private readonly logger = new Logger(UploadService.name);
-  async uploadFile(file: Express.Multer.File): Promise<UploadApiResponse> {
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async uploadFile(
+    file: Express.Multer.File,
+    owner?: UploadOwner,
+  ): Promise<UploadApiResponse> {
+    return this.countedUpload(owner, file.size, (mark) =>
+      this.putFile(file, mark),
+    );
+  }
+
+  async uploadImage(
+    file: Express.Multer.File,
+    folder: string,
+    owner?: UploadOwner,
+  ): Promise<UploadApiResponse> {
+    return this.countedUpload(owner, file.size, (mark) =>
+      this.putImage(file, folder, mark),
+    );
+  }
+
+  private async countedUpload(
+    owner: UploadOwner | undefined,
+    incomingBytes: number,
+    upload: (mark?: PendingMark) => Promise<UploadApiResponse>,
+  ): Promise<UploadApiResponse> {
+    if (!owner) return upload();
+    const reservationId = await this.reserve(
+      owner.userId,
+      incomingBytes,
+      !!owner.exempt,
+    );
+    let result: UploadApiResponse;
+    try {
+      result = await upload({
+        tags: [PENDING_UPLOAD_TAG],
+        context: {
+          [USER_CONTEXT_KEY]: owner.userId,
+          [RESERVATION_CONTEXT_KEY]: reservationId,
+        },
+      });
+    } catch (error) {
+      await this.releaseReservation(reservationId);
+      throw error;
+    }
+    try {
+      await this.prisma.$transaction([
+        this.prisma.userUpload.deleteMany({
+          where: { publicId: result.public_id, NOT: { id: reservationId } },
+        }),
+        this.prisma.userUpload.update({
+          where: { id: reservationId },
+          data: {
+            publicId: result.public_id,
+            resourceType: result.resource_type,
+            bytes: result.bytes,
+            pending: false,
+          },
+        }),
+      ]);
+    } catch (error) {
+      if (await this.destroyAfterFailedRecord(result)) {
+        await this.releaseReservation(reservationId);
+      } else {
+        await this.keepAsRecorded(reservationId, result);
+      }
+      throw error;
+    }
+    void this.clearPendingTag(result.public_id, result.resource_type);
+    return result;
+  }
+
+  private async clearPendingTag(
+    publicId: string,
+    resourceType: string,
+  ): Promise<void> {
+    try {
+      await cloudinary.uploader.remove_tag(PENDING_UPLOAD_TAG, [publicId], {
+        resource_type: resourceType,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to clear the pending tag on asset "${publicId}": ${describeError(error)}`,
+      );
+    }
+  }
+
+  private async keepAsRecorded(
+    reservationId: string,
+    result: UploadApiResponse,
+  ): Promise<void> {
+    await this.prisma.userUpload
+      .update({
+        where: { id: reservationId },
+        data: {
+          publicId: result.public_id,
+          resourceType: result.resource_type,
+          bytes: result.bytes,
+          pending: false,
+        },
+      })
+      .catch((error: unknown) =>
+        this.logger.warn(
+          `Failed to record undeleted asset "${result.public_id}": ${String(error)}`,
+        ),
+      );
+  }
+
+  private async destroyAfterFailedRecord(
+    result: UploadApiResponse,
+  ): Promise<boolean> {
+    const reason = await cloudinary.uploader
+      .destroy(result.public_id, { resource_type: result.resource_type })
+      .then((r: { result?: string }) =>
+        r.result === 'ok' ? null : `Cloudinary answered "${r.result}"`,
+      )
+      .catch((e: unknown) => (e instanceof Error ? e.message : String(e)));
+    if (reason) {
+      this.logger.warn(
+        `Failed to destroy asset "${result.public_id}" after a failed upload record: ${reason}`,
+      );
+    }
+    return !reason;
+  }
+
+  private async reserve(
+    userId: string,
+    incomingBytes: number,
+    exempt: boolean,
+  ): Promise<string> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`user_upload:${userId}`}))`;
+      await tx.userUpload.deleteMany({
+        where: {
+          userId,
+          pending: true,
+          createdAt: { lt: new Date(Date.now() - STALE_RESERVATION_MS) },
+        },
+      });
+      const { _sum } = await tx.userUpload.aggregate({
+        where: { userId },
+        _sum: { bytes: true },
+      });
+      if (
+        !exempt &&
+        (_sum.bytes ?? 0) + incomingBytes > MAX_USER_UPLOAD_BYTES
+      ) {
+        throw new PayloadTooLargeException({
+          statusCode: 413,
+          error: UPLOAD_QUOTA_EXCEEDED,
+          code: UPLOAD_QUOTA_EXCEEDED,
+          message:
+            'Upload storage limit reached. Delete some uploads and try again.',
+        });
+      }
+      const row = await tx.userUpload.create({
+        data: { userId, bytes: incomingBytes, pending: true },
+        select: { id: true },
+      });
+      return row.id;
+    });
+  }
+
+  private async releaseReservation(id: string): Promise<void> {
+    await this.prisma.userUpload
+      .deleteMany({ where: { id } })
+      .catch((error: unknown) =>
+        this.logger.warn(
+          `Failed to release upload reservation: ${String(error)}`,
+        ),
+      );
+  }
+
+  private putFile(
+    file: Express.Multer.File,
+    mark?: PendingMark,
+  ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: 'storytime',
           resource_type: 'auto',
+          ...mark,
         },
         (error: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
@@ -43,9 +251,10 @@ export class UploadService {
     });
   }
 
-  async uploadImage(
+  private putImage(
     file: Express.Multer.File,
     folder: string,
+    mark?: PendingMark,
   ): Promise<UploadApiResponse> {
     return new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
@@ -57,6 +266,7 @@ export class UploadService {
             { quality: 'auto' },
             { format: 'webp' },
           ],
+          ...mark,
         },
         (error: UploadApiErrorResponse, result?: UploadApiResponse) => {
           if (error) {
@@ -142,15 +352,66 @@ export class UploadService {
     }
   }
 
-  async deleteImage(publicId: string): Promise<void> {
+  async deleteOwned(publicId: string, auth: JwtPayload): Promise<void> {
+    const row = await this.prisma.userUpload.findFirst({
+      where: { publicId },
+      select: { userId: true },
+    });
+    if (!row || (row.userId !== auth.userId && auth.userRole !== 'admin')) {
+      throw new NotFoundException('Upload not found');
+    }
+    if (await this.isInUse(publicId)) {
+      throw new ConflictException('This upload is still in use');
+    }
+    await this.deleteImage(publicId);
+  }
+
+  async isInUse(publicId: string): Promise<boolean> {
+    const [avatars, voices, stories] = await Promise.all([
+      this.prisma.avatar.count({
+        where: {
+          OR: [{ publicId }, { url: { contains: publicId } }],
+        },
+      }),
+      this.prisma.voice.count({ where: { url: { contains: publicId } } }),
+      this.prisma.story.count({
+        where: { coverImageUrl: { contains: publicId } },
+      }),
+    ]);
+    return avatars + voices + stories > 0;
+  }
+
+  async releaseRecorded(publicId: string, userId: string): Promise<boolean> {
+    const recorded = await this.prisma.userUpload.findFirst({
+      where: { publicId, userId },
+      select: { resourceType: true },
+    });
+    if (!recorded) return false;
+    await this.deleteImage(publicId, recorded.resourceType ?? undefined);
+    return true;
+  }
+
+  async deleteImage(publicId: string, resourceType?: string): Promise<void> {
     try {
-      const result = await cloudinary.uploader.destroy(publicId);
-      if (result.result !== 'ok') {
+      const recorded = await this.prisma.userUpload.findFirst({
+        where: { publicId },
+        select: { resourceType: true },
+      });
+      const type = resourceType ?? recorded?.resourceType ?? undefined;
+      const result = type
+        ? await cloudinary.uploader.destroy(publicId, { resource_type: type })
+        : await cloudinary.uploader.destroy(publicId);
+      const goneAlready =
+        result.result === 'not found' &&
+        !!recorded?.resourceType &&
+        recorded.resourceType === type;
+      if (result.result !== 'ok' && !goneAlready) {
         this.logger.error('Cloudinary delete failed:', result);
         throw new InternalServerErrorException(
           `Delete failed: ${result.result}`,
         );
       }
+      await this.prisma.userUpload.deleteMany({ where: { publicId } });
     } catch (error) {
       this.logger.error('Cloudinary delete error:', error);
       if (error instanceof InternalServerErrorException) {

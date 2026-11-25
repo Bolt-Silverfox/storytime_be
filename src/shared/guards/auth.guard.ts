@@ -70,6 +70,24 @@ export class AuthSessionGuard implements CanActivate {
     return this.validateRequest(request);
   }
 
+  private async confirmedRole(payload: JwtPayload): Promise<string> {
+    if (payload.userRole !== 'admin') return payload.userRole;
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { role: true, isSuspended: true, isDeleted: true },
+      });
+      if (!user) return 'parent';
+      if (user.isSuspended || user.isDeleted) return 'parent';
+      return user.role;
+    } catch {
+      this.logger.warn(
+        `Admin role lookup failed, treating as non-admin [userId=${payload.userId}]`,
+      );
+      return 'parent';
+    }
+  }
+
   private async validateRequest(request: Request): Promise<boolean> {
     const authHeader = request.headers.authorization;
 
@@ -131,7 +149,10 @@ export class AuthSessionGuard implements CanActivate {
       this.logger.debug(
         `Auth success [userId=${payload.userId.substring(0, 8)}...]`,
       );
-      (request as AuthenticatedRequest).authUserData = payload;
+      (request as AuthenticatedRequest).authUserData = {
+        ...payload,
+        userRole: await this.confirmedRole(payload),
+      };
       return true;
     } catch (error) {
       if (error instanceof UnauthorizedException) {

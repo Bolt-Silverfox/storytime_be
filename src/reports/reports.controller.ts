@@ -28,15 +28,20 @@ import { SubmitQuestionAnswerDto } from '../story/dto/story.dto';
 import { OptionalAuth } from '@/shared/decorators/optional-auth.decorator';
 import {
   AuthSessionGuard,
+  AuthenticatedRequest,
   OptionalAuthRequest,
 } from '@/shared/guards/auth.guard';
+import { AccessControlService } from '@/shared/access/access-control.service';
 
 @ApiTags('reports')
 @Controller('reports')
+@UseGuards(AuthSessionGuard)
+@ApiBearerAuth()
 export class ReportsController {
   constructor(
     private readonly reportsService: ReportsService,
     private readonly screenTimeService: ScreenTimeService,
+    private readonly accessControl: AccessControlService,
   ) {}
 
   // ============== WEEKLY OVERVIEW ==============
@@ -44,7 +49,11 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get weekly overview for all kids of a parent' })
   @ApiParam({ name: 'parentId', type: String })
   @ApiResponse({ status: 200, type: WeeklyReportDto })
-  async getWeeklyOverview(@Param('parentId') parentId: string) {
+  async getWeeklyOverview(
+    @Param('parentId') parentId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, parentId);
     return this.reportsService.getWeeklyOverview(parentId);
   }
 
@@ -53,7 +62,11 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get detailed report for a specific kid' })
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: KidDetailedReportDto })
-  async getKidReport(@Param('kidId') kidId: string) {
+  async getKidReport(
+    @Param('kidId') kidId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
     return this.reportsService.getKidDetailedReport(kidId);
   }
 
@@ -62,7 +75,11 @@ export class ReportsController {
   @ApiOperation({ summary: 'Start a screen time session for a kid' })
   @ApiBody({ type: ScreenTimeSessionDto })
   @ApiResponse({ status: 201, description: 'Returns session ID' })
-  async startScreenTime(@Body() dto: ScreenTimeSessionDto) {
+  async startScreenTime(
+    @Body() dto: ScreenTimeSessionDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.accessControl.assertKidAccess(req.authUserData, dto.kidId);
     return this.screenTimeService.startScreenTimeSession(dto.kidId);
   }
 
@@ -70,7 +87,12 @@ export class ReportsController {
   @ApiOperation({ summary: 'End a screen time session' })
   @ApiBody({ type: EndScreenTimeSessionDto })
   @ApiResponse({ status: 200, description: 'Returns session duration' })
-  async endScreenTime(@Body() dto: EndScreenTimeSessionDto) {
+  async endScreenTime(
+    @Body() dto: EndScreenTimeSessionDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const kidId = await this.screenTimeService.getSessionKidId(dto.sessionId);
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
     return this.screenTimeService.endScreenTimeSession(dto.sessionId);
   }
 
@@ -78,15 +100,17 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get daily limit status for a kid' })
   @ApiParam({ name: 'kidId', type: String })
   @ApiResponse({ status: 200, type: DailyLimitDto })
-  async getDailyLimitStatus(@Param('kidId') kidId: string) {
+  async getDailyLimitStatus(
+    @Param('kidId') kidId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
     return this.screenTimeService.getDailyLimitStatus(kidId);
   }
 
   // ============== QUIZ TRACKING ==============
   @Post('answer')
   @OptionalAuth()
-  @UseGuards(AuthSessionGuard)
-  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Record a question answer',
     description:
