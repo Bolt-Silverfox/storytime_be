@@ -80,7 +80,7 @@ describe('SceneAdminService', () => {
     const live = (over: Record<string, unknown>) => scene(over);
     const hash = (a: number, b: number) => hashSceneText(pages, a, b);
 
-    let lastPlan: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let lastPlan: any;
     beforeEach(() => {
       lastPlan = undefined;
       repo.findStoryText.mockResolvedValue({ id: 'st1', textContent: TEXT });

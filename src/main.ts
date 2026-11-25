@@ -19,7 +19,7 @@ import type {
 import { NestFactory, HttpAdapterHost } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { isSwaggerEnabled, setupSwagger } from './shared/config/swagger.config';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import compression from 'compression';
@@ -147,10 +147,12 @@ async function bootstrap() {
   // Swagger UI (/docs) injects inline scripts/styles the strict CSP would block,
   // so relax the CSP ONLY for /docs. Registered AFTER the global helmet so it
   // overwrites the CSP header for /docs requests; all other routes stay strict.
-  app.use(
-    '/docs',
-    helmet({ contentSecurityPolicy: { directives: swaggerCspDirectives } }),
-  );
+  if (isSwaggerEnabled(process.env)) {
+    app.use(
+      '/docs',
+      helmet({ contentSecurityPolicy: { directives: swaggerCspDirectives } }),
+    );
+  }
   app.use(requestLogger);
   app.enableCors(corsOptions);
 
@@ -193,28 +195,18 @@ async function bootstrap() {
   // ==========================================================
   // 5. SWAGGER DOCUMENTATION
   // ==========================================================
-  const config = new DocumentBuilder()
-    .setTitle('Storytime API')
-    .setDescription('The Storytime API documentation')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-    },
-  });
+  const swaggerEnabled = setupSwagger(app);
 
   // ==========================================================
   // 6. START APPLICATION
   // ==========================================================
   await app.listen(port);
   logger.log(`Application is running on: ${await app.getUrl()}`);
-  logger.log(
-    `Swagger documentation is available at: http://localhost:${port}/docs`,
-  );
+  if (swaggerEnabled) {
+    logger.log(
+      `Swagger documentation is available at: http://localhost:${port}/docs`,
+    );
+  }
 }
 
 void bootstrap();
