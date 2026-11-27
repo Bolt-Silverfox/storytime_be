@@ -302,12 +302,13 @@ export class PrismaAuthRepository implements IAuthRepository {
     expiresAt: Date;
   }): Promise<Session> {
     return this.prisma.$transaction(async (tx) => {
-      const [row] = await tx.$queryRaw<
-        Array<{ isEmailVerified: boolean; active: boolean }>
-      >`SELECT "isEmailVerified", (NOT "isSuspended" AND NOT "isDeleted") AS "active"
-        FROM "users" WHERE "id" = ${data.userId} FOR SHARE`;
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${data.userId} FOR SHARE`;
+      const row = await tx.user.findUnique({
+        where: { id: data.userId },
+        select: { isEmailVerified: true, isSuspended: true, isDeleted: true },
+      });
       if (!row || row.isEmailVerified) throw new AccountAlreadyVerifiedError();
-      if (!row.active) throw new InactiveAccountError();
+      if (row.isSuspended || row.isDeleted) throw new InactiveAccountError();
       return tx.session.create({ data });
     });
   }
