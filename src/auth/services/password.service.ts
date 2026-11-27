@@ -62,8 +62,11 @@ export class PasswordService {
     return Number(results?.[1]?.[1]);
   }
 
-  private async lockOutIfExceeded(email: string, attempts: number) {
-    if (attempts <= RESET_MAX_FAILED_ATTEMPTS) return;
+  private async revokeResetTokensOverCap(
+    email: string,
+    attempts: number,
+  ): Promise<boolean> {
+    if (attempts <= RESET_MAX_FAILED_ATTEMPTS) return false;
     const user = await this.authRepository.findUserByEmail(email);
     if (user) {
       await this.authRepository.deleteUserTokensByType(
@@ -71,6 +74,16 @@ export class PasswordService {
         TokenType.PASSWORD_RESET,
       );
     }
+    return true;
+  }
+
+  private async chargeTokenOwner(ownerEmail: string) {
+    const attempts = await this.recordFailedResetAttempt(ownerEmail);
+    await this.revokeResetTokensOverCap(ownerEmail, attempts);
+  }
+
+  private async lockOutIfExceeded(email: string, attempts: number) {
+    if (!(await this.revokeResetTokensOverCap(email, attempts))) return;
     throw new HttpException(
       'Too many failed reset attempts. Try again later.',
       HttpStatus.TOO_MANY_REQUESTS,
@@ -91,10 +104,10 @@ export class PasswordService {
     }
 
     if (normalizeEmail(resetToken.user.email) !== normalizeEmail(email)) {
-      const ownerAttempts = await this.recordFailedResetAttempt(
-        resetToken.user.email,
-      );
-      await this.lockOutIfExceeded(resetToken.user.email, ownerAttempts);
+      this.chargeTokenOwner(resetToken.user.email).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Failed to charge reset token owner: ${message}`);
+      });
       throw new NotFoundException('Invalid reset token');
     }
 

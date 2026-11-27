@@ -21,7 +21,8 @@ import {
 import { TokenType } from '../dto/auth.dto';
 import { AppEvents } from '@/shared/events';
 import { Role, OnboardingStatus } from '@prisma/client';
-import { HttpException } from '@nestjs/common';
+import { HttpException, Logger } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { RedisService } from '@/redis/redis.service';
 
 jest.mock('bcryptjs', () => ({
@@ -874,11 +875,115 @@ describe('PasswordService', () => {
             email: 'r5@example.com',
             newPassword: 'x',
           }),
-        ).rejects.toMatchObject({ status: 429 });
+        ).rejects.toThrow(NotFoundException);
+        await new Promise((resolve) => setImmediate(resolve));
         expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
           'user-1',
           TokenType.PASSWORD_RESET,
         );
+      });
+
+      it('answers a mismatched email over the owner cap exactly like an unknown token', async () => {
+        const unknownToken = async () => {
+          authRepository.findTokenByHashedToken.mockResolvedValueOnce(null);
+          return service
+            .resetPassword('raw-reset-token', 'probe@example.com', 'x', {
+              token: 'raw-reset-token',
+              email: 'probe@example.com',
+              newPassword: 'x',
+            })
+            .catch((error: HttpException) => error);
+        };
+        const expected = await unknownToken();
+        redisStore.clear();
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        for (let i = 0; i < 5; i++) {
+          await service
+            .resetPassword('raw-reset-token', `r${i}@example.com`, 'x', {
+              token: 'raw-reset-token',
+              email: `r${i}@example.com`,
+              newPassword: 'x',
+            })
+            .catch(() => undefined);
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+
+        const overCap = await service
+          .resetPassword('raw-reset-token', 'probe@example.com', 'x', {
+            token: 'raw-reset-token',
+            email: 'probe@example.com',
+            newPassword: 'x',
+          })
+          .catch((error: HttpException) => error);
+
+        expect(overCap).toBeInstanceOf(NotFoundException);
+        expect((overCap as HttpException).getStatus()).toBe(
+          (expected as HttpException).getStatus(),
+        );
+        expect((overCap as HttpException).getResponse()).toEqual(
+          (expected as HttpException).getResponse(),
+        );
+      });
+
+      it('logs a failed owner charge without the owner email', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        authRepository.findUserByEmail.mockRejectedValue(
+          new Error('db unavailable'),
+        );
+        const errorSpy = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        redisStore.set(
+          `password-reset:failed:${createHash('sha256').update(mockUser.email).digest('hex')}`,
+          5,
+        );
+
+        await expect(
+          service.resetPassword('raw-reset-token', 'other@example.com', 'x', {
+            token: 'raw-reset-token',
+            email: 'other@example.com',
+            newPassword: 'x',
+          }),
+        ).rejects.toThrow(NotFoundException);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Failed to charge reset token owner: db unavailable',
+        );
+        expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+          mockUser.email,
+        );
+        errorSpy.mockRestore();
+      });
+
+      it('answers a mismatched email without waiting on the owner charge', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        const redisClient = (service as unknown as { redis: RedisService })
+          .redis.client as unknown as { multi: jest.Mock };
+        const realMulti = redisClient.multi.getMockImplementation()!;
+        redisClient.multi
+          .mockImplementationOnce(realMulti)
+          .mockImplementationOnce(() => ({
+            set: function () {
+              return this;
+            },
+            incr: function () {
+              return this;
+            },
+            ttl: function () {
+              return this;
+            },
+            exec: () => new Promise(() => undefined),
+          }));
+
+        await expect(
+          service.resetPassword('raw-reset-token', 'other@example.com', 'x', {
+            token: 'raw-reset-token',
+            email: 'other@example.com',
+            newPassword: 'x',
+          }),
+        ).rejects.toThrow(NotFoundException);
       });
 
       it('gives a legacy counter with no TTL an expiry on the next attempt', async () => {
