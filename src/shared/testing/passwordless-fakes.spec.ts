@@ -5,6 +5,7 @@ import {
 } from './passwordless-fakes';
 import { AmbiguousEmailAccountError } from '@/auth/repositories/ambiguous-email-account.error';
 import {
+  ADMIT_WITHIN_LIMITS,
   DECR_CLAMPED,
   INCR_WITH_EXPIRY,
 } from '@/auth/services/passwordless-throttle.service';
@@ -281,6 +282,32 @@ describe('InMemoryRedis expiry', () => {
     jest.advanceTimersByTime(200);
 
     expect(await client.get('k')).toBeNull();
+  });
+});
+
+describe('InMemoryRedis admission', () => {
+  it('admits up to the limit, refuses without counting and charges no key when one is spent', async () => {
+    const { client } = new InMemoryRedis();
+    await client.set('spent', '3', 'PX', 1000);
+
+    expect(await client.eval(ADMIT_WITHIN_LIMITS, 1, 'a', '1000', '1')).toBe(1);
+    expect(await client.eval(ADMIT_WITHIN_LIMITS, 1, 'a', '1000', '1')).toBe(0);
+    expect(
+      await client.eval(
+        ADMIT_WITHIN_LIMITS,
+        2,
+        'b',
+        'spent',
+        '1000',
+        '9',
+        '1000',
+        '3',
+      ),
+    ).toBe(0);
+
+    expect(await client.get('a')).toBe('1');
+    expect(await client.get('b')).toBeNull();
+    expect(await client.get('spent')).toBe('3');
   });
 });
 

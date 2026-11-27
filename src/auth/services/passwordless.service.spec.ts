@@ -13,6 +13,7 @@ import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import { INCR_WITH_EXPIRY } from './passwordless-throttle.service';
 import { PASSWORDLESS_REDIS_TIMEOUT_MS } from './passwordless.constants';
+import { ipBlock } from './ip-block';
 import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
 import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
 import {
@@ -61,10 +62,11 @@ function build() {
     authRepo as never,
   );
   const guestMerge = { carryOver: jest.fn().mockResolvedValue(undefined) };
+  const throttle = new PasswordlessThrottleService(redis as never);
   const service = new PasswordlessService(
     config as never,
     repo,
-    new PasswordlessThrottleService(redis as never),
+    throttle,
     authRepo as never,
     tokenService,
     {
@@ -73,7 +75,16 @@ function build() {
     events,
     guestMerge as never,
   );
-  return { service, repo, redis, authRepo, captured, guestMerge, events };
+  return {
+    service,
+    repo,
+    redis,
+    throttle,
+    authRepo,
+    captured,
+    guestMerge,
+    events,
+  };
 }
 
 async function expectGeneric(p: Promise<unknown>) {
@@ -90,6 +101,17 @@ async function expectGeneric(p: Promise<unknown>) {
 }
 
 const wrongCode = (code: string) => (code === '000000' ? '111111' : '000000');
+const DAY_MS = 24 * 60 * 60_000;
+const quiet = () => {
+  jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+  jest.spyOn(Logger.prototype, 'log').mockImplementation();
+  return jest.spyOn(Logger.prototype, 'error').mockImplementation();
+};
+const emailHash = (email: string) =>
+  nodeCrypto.createHmac('sha256', PEPPER).update(email).digest('hex');
+const failKey = (email: string) => `pwl:fail:email:${emailHash(email)}`;
+const ipHash = (ip: string) =>
+  nodeCrypto.createHmac('sha256', PEPPER).update(ip).digest('hex');
 
 describe('PasswordlessService', () => {
   beforeEach(() => {
@@ -216,6 +238,28 @@ describe('PasswordlessService', () => {
         ctx.repo.rows.find((r) => r.emailNormalized === 'new4@example.com')
           ?.consumedAt,
       ).toBeNull();
+    });
+
+    it('does not charge the network budget for a creation the address budget refuses', async () => {
+      const ctx = build();
+      const ip = '203.0.113.9';
+      const netKey = `pwl:create:net:${nodeCrypto.createHmac('sha256', PEPPER).update(ipBlock(ip)).digest('hex')}`;
+      await ctx.service.request('late@example.com', ip);
+      const peek = ctx.throttle.peek.bind(ctx.throttle);
+      jest.spyOn(ctx.throttle, 'peek').mockImplementation(async (key) => {
+        const value = await peek(key);
+        if (key.startsWith('pwl:create:')) {
+          await ctx.redis.client.set(ipKey(ip), '3', 'PX', 3_600_000);
+        }
+        return value;
+      });
+
+      await expectTooMany(
+        ctx.service.verify('late@example.com', ctx.captured[0].code, ip),
+      );
+
+      expect(await ctx.redis.client.get(netKey)).toBeNull();
+      expect(await ctx.redis.client.get(ipKey(ip))).toBe('3');
     });
 
     it('answers 429 for the emailed link too when the budget is spent', async () => {
@@ -730,6 +774,67 @@ describe('PasswordlessService', () => {
       expect(results[20]).toBe(429);
       expect(results.slice(0, 20).every((r) => r === 400)).toBe(true);
     });
+
+    it('does not charge the email verify limit for a verify the IP limit refuses', async () => {
+      const { service, redis } = build();
+      for (let i = 0; i < 20; i++) {
+        await service
+          .verify(`e${i}@example.com`, '123456', '30.0.0.1')
+          .catch(() => undefined);
+      }
+
+      const status = await service
+        .verify('target@example.com', '123456', '30.0.0.1')
+        .catch((e: HttpException) => e.getStatus());
+
+      expect(status).toBe(429);
+      expect(
+        await redis.client.get(
+          `pwl:ver:email:${emailHash('target@example.com')}`,
+        ),
+      ).toBeNull();
+    });
+
+    it('answers 429 for an IP over its limit even when the email counter is unreachable', async () => {
+      quiet();
+      const { service, redis } = build();
+      for (let i = 0; i < 20; i++) {
+        await service
+          .verify(`e${i}@example.com`, '123456', '30.0.0.1')
+          .catch(() => undefined);
+      }
+      const evaluate = redis.client.eval;
+      redis.client.eval = (script, numKeys, ...args) =>
+        args[0].startsWith('pwl:ver:email:')
+          ? Promise.reject(new Error('redis down'))
+          : evaluate(script, numKeys, ...args);
+
+      const status = await service
+        .verify('target@example.com', '123456', '30.0.0.1')
+        .catch((e: HttpException) => e.getStatus());
+
+      expect(status).toBe(429);
+    });
+
+    it('still checks the email limit and signs in when only the IP counter is unreachable', async () => {
+      quiet();
+      const { service, redis, captured } = build();
+      await service.request('owner@example.com', '1.1.1.1');
+      const evaluate = redis.client.eval;
+      redis.client.eval = (script, numKeys, ...args) =>
+        args[0] === `pwl:ver:ip:${ipHash('30.0.0.1')}`
+          ? Promise.reject(new Error('redis down'))
+          : evaluate(script, numKeys, ...args);
+
+      await expect(
+        service.verify('owner@example.com', captured[0].code, '30.0.0.1'),
+      ).resolves.toBeDefined();
+      expect(
+        await redis.client.get(
+          `pwl:ver:email:${emailHash('owner@example.com')}`,
+        ),
+      ).toBe('1');
+    });
   });
 
   describe('logging', () => {
@@ -1108,12 +1213,6 @@ describe('PasswordlessService', () => {
   });
 
   describe('long-term caps per email', () => {
-    const quiet = () => {
-      jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-      jest.spyOn(Logger.prototype, 'log').mockImplementation();
-      return jest.spyOn(Logger.prototype, 'error').mockImplementation();
-    };
-
     it('stops sending after 10 emails from one network to one address in a day, with an error log', async () => {
       const errorSpy = quiet();
       const { service, captured } = build();
@@ -1280,8 +1379,9 @@ describe('PasswordlessService', () => {
         ),
       );
 
-      const key = `pwl:fail:email:${nodeCrypto.createHmac('sha256', PEPPER).update('target@example.com').digest('hex')}`;
-      expect(await redis.client.get(key)).toBeNull();
+      expect(
+        Number((await redis.client.get(failKey('target@example.com'))) ?? 0),
+      ).toBe(0);
     });
 
     it('keeps the daily send backstop from being burned by strangers on a network the owner already signed in from', async () => {
@@ -1370,6 +1470,50 @@ describe('PasswordlessService', () => {
       await expectGeneric(
         service.verify('target@example.com', captured[0].code, '41.0.0.1'),
       );
+    });
+
+    it('keeps the right code working after a refused guess raced a correct one at the last slot', async () => {
+      quiet();
+      const { service, captured, redis } = build();
+      await redis.client.set(failKey('target@example.com'), '19', 'PX', DAY_MS);
+      await service.request('target@example.com', '1.1.1.1');
+      const real = captured[0].code;
+
+      await Promise.all([
+        service.verify('target@example.com', real, '41.0.0.1'),
+        service
+          .verify('target@example.com', wrongCode(real), '41.0.0.2')
+          .catch(() => undefined),
+      ]);
+
+      expect(await redis.client.get(failKey('target@example.com'))).toBe('19');
+      jest.advanceTimersByTime(61 * 60_000);
+      await service.request('target@example.com', '1.1.1.1');
+      await expect(
+        service.verify(
+          'target@example.com',
+          captured[captured.length - 1].code,
+          '41.0.0.3',
+        ),
+      ).resolves.toBeDefined();
+    });
+
+    it('spends no challenge attempt and no daily slot on a guess the daily cap refuses', async () => {
+      quiet();
+      const { service, captured, redis, repo } = build();
+      await redis.client.set(failKey('target@example.com'), '20', 'PX', DAY_MS);
+      await service.request('target@example.com', '1.1.1.1');
+
+      await expectGeneric(
+        service.verify(
+          'target@example.com',
+          wrongCode(captured[0].code),
+          '41.0.0.1',
+        ),
+      );
+
+      expect(repo.rows[0].attempts).toBe(0);
+      expect(await redis.client.get(failKey('target@example.com'))).toBe('20');
     });
 
     it('lets the right code through before the cap is reached', async () => {

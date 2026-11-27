@@ -59,6 +59,48 @@ maybe('PasswordlessThrottleService against real Redis', () => {
     expect(await client.pttl(key)).toBeLessThanOrEqual(5_000);
   });
 
+  it('admits up to the limit and refuses without counting the refused call', async () => {
+    const key = `${prefix}admit`;
+    const budget = [{ key, windowMs: 60_000, max: 2 }];
+
+    expect(await throttle.admit(budget)).toBe(1);
+    expect(await throttle.admit(budget)).toBe(2);
+    expect(await throttle.admit(budget)).toBe(0);
+
+    expect(await client.get(key)).toBe('2');
+    const ttl = await client.pttl(key);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(60_000);
+  });
+
+  it('charges no budget when any one of them is spent', async () => {
+    const open = `${prefix}admit-open`;
+    const spent = `${prefix}admit-spent`;
+    await client.set(spent, '3', 'PX', 60_000);
+
+    expect(
+      await throttle.admit([
+        { key: open, windowMs: 60_000, max: 10 },
+        { key: spent, windowMs: 60_000, max: 3 },
+      ]),
+    ).toBe(0);
+
+    expect(await client.get(open)).toBeNull();
+    expect(await client.get(spent)).toBe('3');
+  });
+
+  it('admits exactly the limit when admissions run concurrently', async () => {
+    const key = `${prefix}admit-race`;
+    const results = await Promise.all(
+      Array.from({ length: 30 }, () =>
+        throttle.admit([{ key, windowMs: 60_000, max: 20 }]),
+      ),
+    );
+
+    expect(results.filter((n) => n > 0)).toHaveLength(20);
+    expect(await client.get(key)).toBe('20');
+  });
+
   it('keeps the exact count when releases race with hits', async () => {
     const key = `${prefix}race`;
     for (let i = 0; i < 50; i++) await throttle.hit(key, 60_000);

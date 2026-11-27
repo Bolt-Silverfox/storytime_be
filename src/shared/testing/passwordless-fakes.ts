@@ -1,4 +1,5 @@
 import {
+  ADMIT_WITHIN_LIMITS,
   DECR_CLAMPED,
   INCR_WITH_EXPIRY,
 } from '@/auth/services/passwordless-throttle.service';
@@ -144,13 +145,36 @@ export class InMemoryRedis {
     },
     eval: (
       script: string,
-      _numKeys: number,
-      key: string,
-      ttlMs: string,
+      numKeys: number,
+      ...args: string[]
     ): Promise<number> => {
       if (this.stalls('eval')) return new Promise(() => undefined);
       if (this.down) return Promise.reject(new Error('redis down'));
       const now = Date.now();
+      const [key, ttlMs] = args;
+      if (script === ADMIT_WITHIN_LIMITS) {
+        const keys = args.slice(0, numKeys);
+        const limits = args.slice(numKeys);
+        const live = (k: string) => {
+          const cur = this.store.get(k);
+          return cur && cur.expiresAt > now ? cur : undefined;
+        };
+        if (
+          keys.some((k, i) => (live(k)?.n ?? 0) >= Number(limits[i * 2 + 1]))
+        ) {
+          return Promise.resolve(0);
+        }
+        const counts = keys.map((k, i) => {
+          const cur = live(k);
+          const next = {
+            n: (cur?.n ?? 0) + 1,
+            expiresAt: cur?.expiresAt ?? now + Number(limits[i * 2]),
+          };
+          this.store.set(k, next);
+          return next.n;
+        });
+        return Promise.resolve(counts[0]);
+      }
       if (script === DECR_CLAMPED) {
         const live = this.store.get(key);
         const current = live && live.expiresAt > now ? live.n : 0;

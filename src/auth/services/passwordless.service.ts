@@ -94,12 +94,7 @@ export class PasswordlessService {
         `pwl:req:ip:${ipHash}`,
         L.requestPerIp.windowMs,
       );
-      if (ipCount > L.requestPerIp.max) {
-        throw new HttpException(
-          'Too many requests. Please try again later.',
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
+      if (ipCount > L.requestPerIp.max) throw this.tooManyRequests();
       const burstCount = await this.throttle.hit(
         `pwl:req:email:${emailHash}:m`,
         L.requestPerEmailBurst.windowMs,
@@ -214,12 +209,12 @@ export class PasswordlessService {
       throw this.invalid();
     }
 
+    const slot = await this.admitDailyAttempt(emailHash);
+    if (!slot.admitted) throw this.invalid();
     const attempt = await this.challenges.recordAttempt(challengeId, now);
     if (!attempt) {
+      if (slot.charged) await this.releaseFailedAttempt(emailHash);
       this.logger.warn(`Passwordless challenge not usable ${challengeId}`);
-      throw this.invalid();
-    }
-    if (!(await this.withinDailyAttemptCap(emailHash))) {
       throw this.invalid();
     }
     if (
@@ -229,7 +224,7 @@ export class PasswordlessService {
       throw this.invalid();
     }
 
-    await this.releaseFailedAttempt(emailHash);
+    if (slot.charged) await this.releaseFailedAttempt(emailHash);
     await this.assertCreationBudgetLeft(emailNormalized, ip);
     const consumedEmail = await this.challenges.consumeById(
       challengeId,
@@ -394,7 +389,7 @@ export class PasswordlessService {
     ];
   }
 
-  private tooManyAccounts(): HttpException {
+  private tooManyRequests(): HttpException {
     return new HttpException(
       'Too many requests. Please try again later.',
       HttpStatus.TOO_MANY_REQUESTS,
@@ -404,12 +399,7 @@ export class PasswordlessService {
   private async spendCreationBudget(ip: string | undefined): Promise<void> {
     let spent: boolean;
     try {
-      const counts = await Promise.all(
-        this.creationBudgets(ip).map((b) =>
-          this.throttle.hit(b.key, b.windowMs).then((n) => n > b.max),
-        ),
-      );
-      spent = counts.some(Boolean);
+      spent = (await this.throttle.admit(this.creationBudgets(ip))) === 0;
     } catch {
       this.logger.error('Passwordless throttle store unavailable');
       throw new ServiceUnavailableException(
@@ -418,7 +408,7 @@ export class PasswordlessService {
     }
     if (spent) {
       this.logger.warn('Passwordless account creation budget spent');
-      throw this.tooManyAccounts();
+      throw this.tooManyRequests();
     }
   }
 
@@ -433,7 +423,7 @@ export class PasswordlessService {
     try {
       for (const b of this.creationBudgets(ip)) {
         if ((await this.throttle.peek(b.key)) >= b.max) {
-          throw this.tooManyAccounts();
+          throw this.tooManyRequests();
         }
       }
     } catch (error) {
@@ -450,45 +440,48 @@ export class PasswordlessService {
     emailHash?: string,
   ): Promise<void> {
     const L = PASSWORDLESS_LIMITS;
+    const ipCount = await this.countOrFailOpen(
+      `pwl:ver:ip:${this.hmac(ip ?? 'unknown')}`,
+      L.verifyPerIp.windowMs,
+    );
+    if (ipCount > L.verifyPerIp.max) throw this.tooManyRequests();
+    if (!emailHash) return;
+    const emailCount = await this.countOrFailOpen(
+      `pwl:ver:email:${emailHash}`,
+      L.verifyPerEmail.windowMs,
+    );
+    if (emailCount > L.verifyPerEmail.max) throw this.tooManyRequests();
+  }
+
+  private async countOrFailOpen(
+    key: string,
+    windowMs: number,
+  ): Promise<number> {
     try {
-      const ipCount = await this.throttle.hit(
-        `pwl:ver:ip:${this.hmac(ip ?? 'unknown')}`,
-        L.verifyPerIp.windowMs,
-      );
-      const emailCount = emailHash
-        ? await this.throttle.hit(
-            `pwl:ver:email:${emailHash}`,
-            L.verifyPerEmail.windowMs,
-          )
-        : 0;
-      if (ipCount > L.verifyPerIp.max || emailCount > L.verifyPerEmail.max) {
-        throw new HttpException(
-          'Too many requests. Please try again later.',
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
+      return await this.throttle.hit(key, windowMs);
+    } catch {
       this.logger.error('Passwordless throttle store unavailable');
+      return 0;
     }
   }
 
-  private async withinDailyAttemptCap(emailHash: string): Promise<boolean> {
+  private async admitDailyAttempt(
+    emailHash: string,
+  ): Promise<{ admitted: boolean; charged: boolean }> {
     const cap = PASSWORDLESS_LIMITS.failedVerifyPerEmailDay;
     try {
-      const attempts = await this.throttle.hit(
-        `pwl:fail:email:${emailHash}`,
-        cap.windowMs,
-      );
+      const attempts = await this.throttle.admit([
+        { key: `pwl:fail:email:${emailHash}`, ...cap },
+      ]);
       if (attempts === cap.max) {
         this.logger.error(
           `Passwordless failed-attempt cap reached for email hash ${emailHash.slice(0, 12)}`,
         );
       }
-      return attempts <= cap.max;
+      return { admitted: attempts > 0, charged: attempts > 0 };
     } catch {
       this.logger.error('Passwordless throttle store unavailable');
-      return true;
+      return { admitted: true, charged: false };
     }
   }
 
