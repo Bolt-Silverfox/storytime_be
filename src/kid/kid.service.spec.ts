@@ -1,7 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { KidService } from './kid.service';
 import { KID_REPOSITORY } from './repositories/kid.repository.interface';
 import { VoiceService } from '../voice/voice.service';
@@ -174,6 +178,23 @@ describe('KidService', () => {
       await expect(service.updateKid(kidId, userId, dto)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('does not update the kid when the ElevenLabs id cannot be registered', async () => {
+      repo.findByIdNotDeleted.mockResolvedValue({
+        id: 'kid-1',
+        parentId: 'user-1',
+      });
+      mockVoiceService.findOrCreateElevenLabsVoice.mockRejectedValue(
+        new ConflictException('nope'),
+      );
+
+      await expect(
+        service.updateKid('kid-1', 'user-1', {
+          preferredVoiceId: 'clone-of-an-uploaded-voice',
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(repo.update).not.toHaveBeenCalled();
     });
   });
 

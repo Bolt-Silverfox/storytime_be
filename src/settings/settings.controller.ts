@@ -6,6 +6,7 @@ import {
   Post,
   Body,
   Param,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -17,7 +18,11 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
-import { AuthSessionGuard } from '@/shared/guards/auth.guard';
+import {
+  AuthSessionGuard,
+  AuthenticatedRequest,
+} from '@/shared/guards/auth.guard';
+import { AccessControlService } from '@/shared/access/access-control.service';
 import { UpdateSettingsDto, SetKidDailyLimitDto } from './dto/settings.dto';
 
 @ApiTags('settings')
@@ -25,7 +30,10 @@ import { UpdateSettingsDto, SetKidDailyLimitDto } from './dto/settings.dto';
 @UseGuards(AuthSessionGuard)
 @ApiBearerAuth()
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly accessControl: AccessControlService,
+  ) {}
 
   // ============== PARENT SETTINGS (Existing) ==============
 
@@ -55,7 +63,11 @@ export class SettingsController {
     },
   })
   @ApiResponse({ status: 404, description: 'Settings not found.' })
-  async getSettings(@Param('userId') userId: string) {
+  async getSettings(
+    @Param('userId') userId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, userId);
     return this.settingsService.getSettings(userId);
   }
 
@@ -102,7 +114,9 @@ export class SettingsController {
   async updateSettings(
     @Param('userId') userId: string,
     @Body() body: UpdateSettingsDto,
+    @Req() req: AuthenticatedRequest,
   ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, userId);
     return this.settingsService.updateSettings(userId, body);
   }
 
@@ -130,7 +144,9 @@ export class SettingsController {
   async setKidDailyLimit(
     @Param('kidId') kidId: string,
     @Body() body: SetKidDailyLimitDto,
+    @Req() req: AuthenticatedRequest,
   ) {
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
     return this.settingsService.setKidDailyLimit(kidId, body.limitMins);
   }
 
@@ -151,7 +167,11 @@ export class SettingsController {
       },
     },
   })
-  async getKidDailyLimit(@Param('kidId') kidId: string) {
+  async getKidDailyLimit(
+    @Param('kidId') kidId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.accessControl.assertKidAccess(req.authUserData, kidId);
     return this.settingsService.getKidDailyLimit(kidId);
   }
 
@@ -185,7 +205,11 @@ export class SettingsController {
       ],
     },
   })
-  async getKidsScreenTimeSettings(@Param('parentId') parentId: string) {
+  async getKidsScreenTimeSettings(
+    @Param('parentId') parentId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, parentId);
     return this.settingsService.getKidsScreenTimeSettings(parentId);
   }
 
@@ -207,7 +231,11 @@ export class SettingsController {
       },
     },
   })
-  async applyDefaultToAllKids(@Param('parentId') parentId: string) {
+  async applyDefaultToAllKids(
+    @Param('parentId') parentId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.accessControl.assertSelfOrAdmin(req.authUserData, parentId);
     return this.settingsService.applyDefaultToAllKids(parentId);
   }
 }

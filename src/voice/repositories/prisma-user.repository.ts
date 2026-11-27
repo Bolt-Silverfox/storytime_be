@@ -4,6 +4,7 @@ import type {
   IVoiceUserRepository,
   UserWithPreferredVoice,
 } from './user.repository.interface';
+import { lockLiveVoiceForReference } from './voice-row-lock';
 
 @Injectable()
 export class PrismaVoiceUserRepository implements IVoiceUserRepository {
@@ -12,11 +13,16 @@ export class PrismaVoiceUserRepository implements IVoiceUserRepository {
   async updatePreferredVoiceWithInclude(
     userId: string,
     voiceId: string,
-  ): Promise<UserWithPreferredVoice> {
-    return this.prisma.user.update({
-      where: { id: userId },
-      data: { preferredVoiceId: voiceId },
-      include: { preferredVoice: true },
+  ): Promise<UserWithPreferredVoice | null> {
+    return this.prisma.$transaction(async (tx) => {
+      if (!(await lockLiveVoiceForReference(tx, voiceId))) {
+        return null;
+      }
+      return tx.user.update({
+        where: { id: userId },
+        data: { preferredVoiceId: voiceId },
+        include: { preferredVoice: true },
+      });
     });
   }
 

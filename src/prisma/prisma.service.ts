@@ -49,6 +49,22 @@ export const resolvePrismaDatasourceUrl = (
   }
 };
 
+/**
+ * Story columns that must never reach API clients by default. Applied as a
+ * Prisma global `omit`, so every read through PrismaService (including nested
+ * includes, feeds and library endpoints that return raw rows) leaves them out.
+ * A caller that really needs one opts in per query, e.g.
+ * `omit: { adaptationNotes: false }` (admin detail does this). Importers/seeds
+ * that need sourceId/contentHash use their own opt-in or a separate client.
+ * NOTE: types still list these fields; they are absent at runtime unless opted in.
+ */
+export const STORY_INTERNAL_FIELDS_OMIT = {
+  sourceId: true,
+  contentHash: true,
+  adaptationNotes: true,
+  importedAt: true,
+} as const;
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -63,6 +79,7 @@ export class PrismaService
     // (prisma://) URLs are passed through untouched. Any of these can be
     // overridden in DATABASE_URL: ?connection_limit=10&pool_timeout=10
     super({
+      omit: { story: STORY_INTERNAL_FIELDS_OMIT },
       datasources: {
         db: {
           url: resolvePrismaDatasourceUrl(process.env.DATABASE_URL),

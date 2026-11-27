@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Headers,
@@ -40,7 +41,7 @@ import { FREE_TIER_LIMITS } from '@/shared/constants/free-tier.constants';
 import { GuestSessionService } from '@/guest/guest-session.service';
 import { StoryQuotaService } from '../story/story-quota.service';
 import { StoryService } from '../story/story.service';
-import { UploadService } from '../upload/upload.service';
+import { UploadService, uploadOwner } from '../upload/upload.service';
 import { TextToSpeechService } from '../story/text-to-speech.service';
 import { DEFAULT_VOICE } from './voice.constants';
 import { GuestStoryAudioService } from './guest-story-audio.service';
@@ -141,15 +142,30 @@ export class VoiceController {
     const { userId } = req.authUserData;
 
     // Upload file to Cloudinary
-    const uploadResult = await this.uploadService.uploadFile(file);
-
-    // Save voice record
-    const voice = await this.voiceService.uploadVoice(
-      userId,
-      uploadResult.secure_url,
-      dto,
-      file.buffer,
+    const uploadResult = await this.uploadService.uploadFile(
+      file,
+      uploadOwner(req.authUserData),
     );
+
+    let voice;
+    try {
+      voice = await this.voiceService.uploadVoice(
+        userId,
+        uploadResult.secure_url,
+        dto,
+        file.buffer,
+        uploadResult.public_id,
+      );
+    } catch (error) {
+      await this.uploadService
+        .deleteImage(uploadResult.public_id, uploadResult.resource_type)
+        .catch((cleanupError: Error) => {
+          this.logger.warn(
+            `Failed to release voice upload "${uploadResult.public_id}": ${cleanupError.message}`,
+          );
+        });
+      throw error;
+    }
 
     return {
       message: 'Voice uploaded successfully',
@@ -185,6 +201,23 @@ export class VoiceController {
     @Req() req: AuthenticatedRequest,
   ): Promise<VoiceResponseDto[]> {
     return this.voiceService.listVoices(req.authUserData.userId);
+  }
+
+  @Delete(':id')
+  @UseGuards(AuthSessionGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Delete one of your voices and free its uploaded sample',
+  })
+  @ApiResponse({ status: 200, description: 'Voice deleted' })
+  @ApiResponse({ status: 404, description: 'Voice not found' })
+  @ApiResponse({ status: 409, description: 'Voice is still selected' })
+  async deleteVoice(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    await this.voiceService.deleteVoice(req.authUserData.userId, id);
+    return { success: true };
   }
 
   // --- Set preferred voice ---
