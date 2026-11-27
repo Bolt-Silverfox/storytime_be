@@ -156,6 +156,12 @@ export class NotificationService {
     return this.settingsService.create(dto);
   }
 
+  async createMany(
+    dtos: CreateNotificationPreferenceDto[],
+  ): Promise<NotificationPreferenceDto[]> {
+    return this.settingsService.createMany(dtos);
+  }
+
   async update(
     id: string,
     dto: UpdateNotificationPreferenceDto,
@@ -164,10 +170,9 @@ export class NotificationService {
   }
 
   async bulkUpdate(
-    userId: string,
     dtos: BulkUpdateNotificationPreferenceDto[],
   ): Promise<NotificationPreferenceDto[]> {
-    return this.settingsService.bulkUpdate(userId, dtos);
+    return this.settingsService.bulkUpdate(dtos);
   }
 
   async getForUser(userId: string): Promise<NotificationPreferenceDto[]> {
@@ -176,6 +181,12 @@ export class NotificationService {
 
   async getForKid(kidId: string): Promise<NotificationPreferenceDto[]> {
     return this.settingsService.getForKid(kidId);
+  }
+
+  async getPreferenceOwner(
+    id: string,
+  ): Promise<{ userId: string | null; kidId: string | null }> {
+    return this.settingsService.getPreferenceOwner(id);
   }
 
   async getById(id: string): Promise<NotificationPreferenceDto> {

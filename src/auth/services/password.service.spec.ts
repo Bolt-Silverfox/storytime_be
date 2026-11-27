@@ -961,6 +961,30 @@ describe('PasswordService', () => {
         expect(authRepository.deleteAllUserSessions).not.toHaveBeenCalled();
         expect(authRepository.deleteToken).not.toHaveBeenCalled();
       });
+
+      it('accepts the owner email regardless of the stored casing', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue({
+          ...mockResetToken,
+          user: { ...mockUser, email: 'Test@Example.com' },
+        });
+
+        await expect(
+          service.resetPassword(
+            'raw-reset-token',
+            'test@example.com',
+            'NewPass1#',
+            {
+              token: 'raw-reset-token',
+              email: 'test@example.com',
+              newPassword: 'NewPass1#',
+            },
+          ),
+        ).resolves.toEqual({ message: 'Password has been reset successfully' });
+        expect(authRepository.updateUser).toHaveBeenCalledWith(
+          mockResetToken.userId,
+          { passwordHash: 'hashed-password' },
+        );
+      });
     });
 
     describe('attempt cap', () => {

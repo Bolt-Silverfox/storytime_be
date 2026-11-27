@@ -7,11 +7,12 @@ export type UserWithPreferredVoice = Prisma.UserGetPayload<{
 
 // ==================== Repository Interface ====================
 export interface IVoiceUserRepository {
-  // Set a user's preferred voice and return the user with the loaded relation
+  // Set a user's preferred voice and return the user with the loaded relation,
+  // or null when the voice is no longer live
   updatePreferredVoiceWithInclude(
     userId: string,
     voiceId: string,
-  ): Promise<UserWithPreferredVoice>;
+  ): Promise<UserWithPreferredVoice | null>;
 
   // Find a user with their preferred voice relation loaded
   findByIdWithPreferredVoice(

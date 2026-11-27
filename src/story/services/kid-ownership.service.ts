@@ -42,14 +42,16 @@ export class KidOwnershipService {
   }
 
   /**
-   * Verifies the story exists and is owned (via its creator kid) by the given
-   * user. Throws NotFoundException when missing, ForbiddenException when it
-   * belongs to another user — preserving the original two-stage semantics.
+   * Verifies the story exists and, unless bypassOwnerCheck is true, that it is
+   * owned (via its creator kid) by the given user. Throws NotFoundException
+   * when missing, ForbiddenException when it belongs to another user. The
+   * existence and soft-delete checks always apply, including on bypass.
    */
   async getOwnedStoryOrThrow(
     storyId: string,
     userId: string,
     includeDeleted = false,
+    bypassOwnerCheck = false,
   ): Promise<StoryWithCreatorParent> {
     const story = await this.storyRepository.findStoryByIdWithCreatorParent(
       storyId,
@@ -58,6 +60,7 @@ export class KidOwnershipService {
     if (!story) {
       throw new NotFoundException(`Story ${storyId} not found`);
     }
+    if (bypassOwnerCheck) return story;
     if (!story.creatorKidId || story.creatorKid?.parentId !== userId) {
       throw new ForbiddenException(
         'You do not have permission to modify this story',

@@ -60,6 +60,8 @@ export const envSchema = z
     MAIL_ENCRYPTION: z.enum(['TLS', 'SSL']).optional().default('TLS'),
     JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
     ADMIN_SECRET: z.string().min(1, 'ADMIN_SECRET is required'),
+    BULL_BOARD_USER: z.string().optional(),
+    BULL_BOARD_PASSWORD: z.string().optional(),
     SECRET: z.string().min(1, 'SECRET is required'),
     WEB_APP_BASE_URL: z.string().url('WEB_APP_BASE_URL must be a valid URL'),
     GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
@@ -92,6 +94,19 @@ export const envSchema = z
     OTEL_EXPORTER_LOGS_ENDPOINT: z.string().url().optional(),
     OTEL_EXPORTER_METRICS_ENDPOINT: z.string().url().optional(),
     OTEL_EXPORTER_OTLP_HEADERS: z.string().optional(),
+    OTEL_EXPORTER_PROMETHEUS_HOST: z.string().optional(),
+    SWAGGER_ENABLED: z.preprocess(
+      (v) => {
+        if (typeof v !== 'string') return v;
+        const trimmed = v.trim().toLowerCase();
+        return trimmed === '' ? undefined : trimmed;
+      },
+      z
+        .enum(['true', 'false'], {
+          error: 'SWAGGER_ENABLED must be "true" or "false"',
+        })
+        .optional(),
+    ),
     OTEL_METRICS_EXPORTER: z.enum(['prometheus', 'otlp']).optional(),
     OTEL_METRIC_EXPORT_INTERVAL: z.coerce.number().optional(),
     PROMETHEUS_PORT: z.coerce.number().optional(),

@@ -28,6 +28,8 @@ const RESET_MAX_ISSUANCES = 5;
 const RESET_COUNTER_WINDOW_SECONDS = 60 * 60;
 const RESET_CODE_MAX_COLLISION_RETRIES = 5;
 
+const normalizeEmail = (email: string) => email.toLowerCase().trim();
+
 @Injectable()
 export class PasswordService {
   private readonly logger = new Logger(PasswordService.name);
@@ -46,7 +48,7 @@ export class PasswordService {
 
   private issuanceKey(email: string): string {
     const digest = createHash('sha256')
-      .update(email.toLowerCase().trim())
+      .update(normalizeEmail(email))
       .digest('hex');
     return `password-reset:issued:${digest}`;
   }
