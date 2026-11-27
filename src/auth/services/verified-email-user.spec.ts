@@ -161,12 +161,12 @@ describe('findOrCreateParentByVerifiedEmail', () => {
     const repo = new InMemoryAuthRepository();
     const moved = await seed(repo);
     const lookup = repo.findUserByEmailInsensitive;
-    repo.findUserByEmailInsensitive = (async (email: string) => {
+    repo.findUserByEmailInsensitive = async (email: string) => {
       const found = await lookup(email);
       if (found?.id !== moved.id) return found;
       moved.email = 'moved@x.co';
       return { ...found, email: 'a@x.co' };
-    }) as typeof lookup;
+    };
 
     const result = await findOrCreateParentByVerifiedEmail(
       { authRepository: asRepo(repo), passwordService },
