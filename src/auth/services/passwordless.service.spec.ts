@@ -246,26 +246,69 @@ describe('PasswordlessService', () => {
       ).toBeNull();
     });
 
-    it('does not charge the network budget for a creation the address budget refuses', async () => {
+    it.each(['code', 'link'] as const)(
+      'refuses through the %s without charging the network or consuming the challenge when the address budget fills just before the charge',
+      async (via) => {
+        const ctx = build();
+        const ip = '203.0.113.9';
+        const netKey = `pwl:create:net:${nodeCrypto.createHmac('sha256', PEPPER).update(ipBlock(ip)).digest('hex')}`;
+        await ctx.service.request('late@example.com', ip);
+        const admit = ctx.throttle.admit.bind(ctx.throttle);
+        jest
+          .spyOn(ctx.throttle, 'admit')
+          .mockImplementation(async (budgets) => {
+            if (budgets.some((b) => b.key.startsWith('pwl:create:'))) {
+              await ctx.redis.client.set(ipKey(ip), '3', 'PX', 3_600_000);
+            }
+            return admit(budgets);
+          });
+
+        await expectTooMany(
+          via === 'code'
+            ? ctx.service.verify('late@example.com', ctx.captured[0].code, ip)
+            : ctx.service.consume(ctx.captured[0].linkToken, ip),
+        );
+
+        expect(await ctx.redis.client.get(netKey)).toBeNull();
+        expect(await ctx.redis.client.get(ipKey(ip))).toBe('3');
+        expect(ctx.repo.rows[0].consumedAt).toBeNull();
+        expect(ctx.authRepo.users).toHaveLength(0);
+      },
+    );
+
+    it('charges the budget once when the code and the link of one challenge race to create the account', async () => {
       const ctx = build();
       const ip = '203.0.113.9';
-      const netKey = `pwl:create:net:${nodeCrypto.createHmac('sha256', PEPPER).update(ipBlock(ip)).digest('hex')}`;
-      await ctx.service.request('late@example.com', ip);
-      const peek = ctx.throttle.peek.bind(ctx.throttle);
-      jest.spyOn(ctx.throttle, 'peek').mockImplementation(async (key) => {
-        const value = await peek(key);
-        if (key.startsWith('pwl:create:')) {
-          await ctx.redis.client.set(ipKey(ip), '3', 'PX', 3_600_000);
-        }
-        return value;
+      await ctx.service.request('pair@example.com', ip);
+      const { code, linkToken } = ctx.captured[0];
+      let arrived = 0;
+      let bothArrived: () => void = () => undefined;
+      const barrier = new Promise<void>((resolve) => (bothArrived = resolve));
+      const meet = async () => {
+        if (++arrived === 2) bothArrived();
+        await barrier;
+      };
+      const byId = ctx.repo.consumeById.bind(ctx.repo);
+      const byLink = ctx.repo.consumeByLinkTokenHash.bind(ctx.repo);
+      jest.spyOn(ctx.repo, 'consumeById').mockImplementation(async (...a) => {
+        await meet();
+        return byId(...a);
       });
+      jest
+        .spyOn(ctx.repo, 'consumeByLinkTokenHash')
+        .mockImplementation(async (...a) => {
+          await meet();
+          return byLink(...a);
+        });
 
-      await expectTooMany(
-        ctx.service.verify('late@example.com', ctx.captured[0].code, ip),
-      );
+      const outcomes = await Promise.allSettled([
+        ctx.service.verify('pair@example.com', code, ip),
+        ctx.service.consume(linkToken, ip),
+      ]);
 
-      expect(await ctx.redis.client.get(netKey)).toBeNull();
-      expect(await ctx.redis.client.get(ipKey(ip))).toBe('3');
+      expect(outcomes.filter((o) => o.status === 'fulfilled')).toHaveLength(1);
+      expect(ctx.authRepo.users).toHaveLength(1);
+      expect(await ctx.redis.client.get(ipKey(ip))).toBe('1');
     });
 
     it('answers 429 for the emailed link too when the budget is spent', async () => {

@@ -231,13 +231,19 @@ export class PasswordlessService {
     }
 
     if (slot.charged) await this.releaseFailedAttempt(emailHash);
-    await this.assertCreationBudgetLeft(emailNormalized, ip);
-    const consumedEmail = await this.challenges.consumeById(
-      challengeId,
-      new Date(),
+    const reserved = await this.reserveCreationBudget(emailNormalized, ip);
+    const consumedEmail = await this.consumeOrRelease(
+      () => this.challenges.consumeById(challengeId, new Date()),
+      reserved,
+      ip,
     );
-    if (!consumedEmail) throw this.invalid();
-    return this.completeLogin(consumedEmail, challengeId, ip, guestSessionId);
+    return this.completeLogin(
+      consumedEmail,
+      challengeId,
+      ip,
+      guestSessionId,
+      reserved,
+    );
   }
 
   async consume(
@@ -252,20 +258,46 @@ export class PasswordlessService {
       new Date(),
     );
     if (!pendingEmail) throw this.invalid();
-    await this.assertCreationBudgetLeft(pendingEmail, ip);
-    const consumedEmail = await this.challenges.consumeByLinkTokenHash(
-      linkTokenHash,
-      new Date(),
+    const reserved = await this.reserveCreationBudget(pendingEmail, ip);
+    const consumedEmail = await this.consumeOrRelease(
+      () => this.challenges.consumeByLinkTokenHash(linkTokenHash, new Date()),
+      reserved,
+      ip,
     );
-    if (!consumedEmail) throw this.invalid();
-    return this.completeLogin(consumedEmail, undefined, ip, guestSessionId);
+    return this.completeLogin(
+      consumedEmail,
+      undefined,
+      ip,
+      guestSessionId,
+      reserved,
+    );
+  }
+
+  private async consumeOrRelease(
+    consume: () => Promise<string | null>,
+    reserved: boolean,
+    ip: string | undefined,
+  ): Promise<string> {
+    let email: string | null;
+    try {
+      email = await consume();
+    } catch (error) {
+      if (reserved) await this.releaseCreationBudget(ip);
+      throw error;
+    }
+    if (!email) {
+      if (reserved) await this.releaseCreationBudget(ip);
+      throw this.invalid();
+    }
+    return email;
   }
 
   private async completeLogin(
     emailNormalized: string,
     challengeId: string | undefined,
     ip: string | undefined,
-    guestSessionId?: string,
+    guestSessionId: string | undefined,
+    creationReserved: boolean,
   ): Promise<PasswordlessLoginResult> {
     const refuseInactive = (): never => {
       this.logger.warn(
@@ -286,6 +318,7 @@ export class PasswordlessService {
     const { user, isNewUser, newlyVerified } = await this.findOrCreateUser(
       emailNormalized,
       ip,
+      creationReserved,
     ).catch((error: unknown) => {
       if (error instanceof AmbiguousEmailAccountError) {
         this.logger.warn(
@@ -371,6 +404,7 @@ export class PasswordlessService {
   private async findOrCreateUser(
     email: string,
     ip: string | undefined,
+    creationReserved: boolean,
   ): Promise<VerifiedEmailResult> {
     return findOrCreateParentByVerifiedEmail(
       {
@@ -383,7 +417,9 @@ export class PasswordlessService {
         onboardingStatus: 'email_verified',
         refuseInactive: true,
         matchEmailCaseInsensitively: true,
-        beforeCreate: () => this.spendCreationBudget(ip),
+        beforeCreate: creationReserved
+          ? undefined
+          : () => this.spendCreationBudget(ip),
       },
     );
   }
@@ -425,27 +461,26 @@ export class PasswordlessService {
     }
   }
 
-  private async assertCreationBudgetLeft(
+  private async reserveCreationBudget(
     email: string,
     ip: string | undefined,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const existing = await this.authRepository
       .findUserByEmailInsensitive(email)
       .catch(() => true);
-    if (existing) return;
-    try {
-      for (const b of this.creationBudgets(ip)) {
-        if ((await this.throttle.peek(b.key)) >= b.max) {
-          throw this.tooManyRequests();
-        }
-      }
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
+    if (existing) return false;
+    await this.spendCreationBudget(ip);
+    return true;
+  }
+
+  private async releaseCreationBudget(ip: string | undefined): Promise<void> {
+    await Promise.all(
+      this.creationBudgets(ip).map((b) =>
+        this.throttle.release(b.key, b.windowMs),
+      ),
+    ).catch(() => {
       this.logger.error('Passwordless throttle store unavailable');
-      throw new ServiceUnavailableException(
-        'Service temporarily unavailable. Please try again.',
-      );
-    }
+    });
   }
 
   private async enforceVerifyLimits(
