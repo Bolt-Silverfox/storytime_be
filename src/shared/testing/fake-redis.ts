@@ -12,6 +12,7 @@ export class FakeRedisClient {
   link: FakeLink = 'up';
   chargeReply: FakeReply = 'ok';
   writeReply: FakeReply = 'ok';
+  private readonly deadlines = new Map<string, number>();
   private backlog: Array<() => void> = [];
   private lateTimer: NodeJS.Timeout | undefined;
 
@@ -22,9 +23,32 @@ export class FakeRedisClient {
   seed(key: string, failures: number, ttlMs: number | null = 3_600_000) {
     const hash = new Map([['window', '1']]);
     for (let i = 0; i < failures; i++) hash.set(`seed-${i}`, '1');
+    this.forget(key);
     this.hashes.set(key, hash);
-    if (ttlMs === null) this.ttls.delete(key);
-    else this.ttls.set(key, ttlMs);
+    if (ttlMs !== null) this.expire(key, ttlMs);
+  }
+
+  reset() {
+    this.hashes.clear();
+    this.ttls.clear();
+    this.deadlines.clear();
+    this.applied.length = 0;
+  }
+
+  private forget(key: string) {
+    this.hashes.delete(key);
+    this.ttls.delete(key);
+    this.deadlines.delete(key);
+  }
+
+  private expire(key: string, ttlMs: number) {
+    this.ttls.set(key, ttlMs);
+    this.deadlines.set(key, Date.now() + ttlMs);
+  }
+
+  private evictIfExpired(key: string) {
+    const deadline = this.deadlines.get(key);
+    if (deadline !== undefined && Date.now() >= deadline) this.forget(key);
   }
 
   failures(key: string): number | undefined {
@@ -57,10 +81,11 @@ export class FakeRedisClient {
       'eval',
       this.chargeReply,
       () => {
+        this.evictIfExpired(key);
         const hash = this.hashes.get(key) ?? new Map<string, string>();
         this.hashes.set(key, hash);
         if (!hash.has(windowField)) hash.set(windowField, '1');
-        if (!this.ttls.has(key)) this.ttls.set(key, Number(windowMs));
+        if (!this.ttls.has(key)) this.expire(key, Number(windowMs));
         const charged = hash.size - 1;
         if (charged >= Number(max)) return 0;
         hash.set(reservation, '1');
@@ -75,8 +100,9 @@ export class FakeRedisClient {
       'hdel',
       this.writeReply,
       () => {
+        this.evictIfExpired(key);
         const removed = this.hashes.get(key)?.delete(field) ? 1 : 0;
-        if (this.hashes.get(key)?.size === 0) this.hashes.delete(key);
+        if (this.hashes.get(key)?.size === 0) this.forget(key);
         return removed;
       },
       () => 0,
@@ -89,8 +115,8 @@ export class FakeRedisClient {
       () => {
         let removed = 0;
         for (const key of keys) {
-          if (this.hashes.delete(key)) removed++;
-          this.ttls.delete(key);
+          if (this.hashes.has(key)) removed++;
+          this.forget(key);
         }
         return removed;
       },

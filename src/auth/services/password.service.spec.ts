@@ -875,7 +875,7 @@ describe('PasswordService', () => {
             .catch((error: HttpException) => error);
         };
         const expected = await unknownToken();
-        redis.hashes.clear();
+        redis.reset();
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
         authRepository.findUserByEmail.mockResolvedValue(mockUser);
         for (let i = 0; i < 5; i++) {
@@ -976,6 +976,27 @@ describe('PasswordService', () => {
         await expect(attempt('b')).rejects.toMatchObject({ status: 429 });
 
         expect(redis.ttls.get(key)).toBe(3_600_000);
+      });
+
+      it('lets the owner try again once the attempt window has passed', async () => {
+        jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+        try {
+          authRepository.findTokenByHashedToken.mockResolvedValue(null);
+          for (let i = 0; i < 5; i++) {
+            await expect(attempt(`guess-${i}`)).rejects.toThrow(
+              NotFoundException,
+            );
+          }
+          await expect(attempt('guess-5')).rejects.toMatchObject({
+            status: 429,
+          });
+
+          jest.advanceTimersByTime(3_600_000);
+
+          await expect(attempt('guess-6')).rejects.toThrow(NotFoundException);
+        } finally {
+          jest.useRealTimers();
+        }
       });
 
       it('lets concurrent guesses through at most 5 times', async () => {
@@ -1223,9 +1244,7 @@ describe('PasswordService', () => {
       try {
         applyWorld(w);
         seedAll();
-        redis.hashes.clear();
-        redis.ttls.clear();
-        redis.applied.length = 0;
+        redis.reset();
         redis.seed(counterKey('a@example.com'), priorFailures[state]);
         const callerKey = counterKey(email.trim().toLowerCase());
         if (callerKey !== counterKey('a@example.com')) {
