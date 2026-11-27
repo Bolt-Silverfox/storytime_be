@@ -13,6 +13,7 @@ import {
   PrismaAuthRepository,
 } from '../repositories/prisma-auth.repository';
 import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
+import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
 import { PrismaLoginChallengeRepository } from '../repositories/prisma-login-challenge.repository';
 import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
@@ -31,8 +32,9 @@ maybe('PasswordlessService against Postgres', () => {
   const captured: Array<{ code: string; linkToken: string }> = [];
   let service: PasswordlessService;
   let n = 0;
+  const run = crypto.randomBytes(6).toString('hex');
 
-  const emailFor = () => `pwl-it-${process.pid}-${++n}@example.com`;
+  const emailFor = () => `pwl-it-${run}-${++n}@example.com`;
   const issue = async (email: string) => {
     await service.request(email, `10.${n % 250}.0.1`);
     return captured[captured.length - 1];
@@ -63,10 +65,74 @@ maybe('PasswordlessService against Postgres', () => {
     );
   };
 
+  const gateTransactionStep = (
+    model: 'user' | 'token' | 'session',
+    method: 'delete' | 'deleteMany' | 'update',
+  ) => {
+    let reached: () => void = () => undefined;
+    let release: () => void = () => undefined;
+    const reachedStep = new Promise<void>((resolve) => (reached = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const bound = <T extends object>(target: T) =>
+      new Proxy(target, {
+        get: (t, key) => {
+          const value = Reflect.get(t, key) as unknown;
+          return typeof value === 'function'
+            ? (value as (...args: unknown[]) => unknown).bind(t)
+            : value;
+        },
+      });
+    const gatedTx = (tx: Record<string, unknown>) =>
+      new Proxy(tx, {
+        get: (t, key) => {
+          if (key !== model) return bound(t)[key as never];
+          const delegate = t[model] as Record<string, unknown>;
+          return new Proxy(delegate, {
+            get: (d, name) =>
+              name === method
+                ? async (...args: unknown[]) => {
+                    reached();
+                    await gate;
+                    return (d[method] as (...a: unknown[]) => unknown)(...args);
+                  }
+                : bound(d)[name as never],
+          });
+        },
+      });
+    const client = new Proxy(prisma, {
+      get: (target, key) =>
+        key === '$transaction'
+          ? (fn: (tx: Record<string, unknown>) => unknown) =>
+              target.$transaction((tx) => fn(gatedTx(tx as never)) as never)
+          : bound(target)[key as never],
+    });
+    return { client, reached: reachedStep, release };
+  };
+
+  const releaseAfter = async (
+    observed: Promise<unknown>,
+    release: () => void,
+    started: Promise<unknown>[],
+  ) => {
+    try {
+      await observed;
+    } finally {
+      release();
+      await Promise.allSettled(started);
+    }
+  };
+
   beforeAll(() => {
-    prisma = new PrismaClient({ datasources: { db: { url } } });
+    const pooled = new URL(url!);
+    pooled.searchParams.set('connection_limit', '10');
+    prisma = new PrismaClient({
+      datasources: { db: { url: pooled.toString() } },
+    });
     const events = new EventEmitter2();
-    events.on('passwordless.requested', (p) => captured.push(p));
+    events.on(
+      'passwordless.requested',
+      (p: { code: string; linkToken: string }) => captured.push(p),
+    );
     const authRepo = new PrismaAuthRepository(prisma as never);
     service = new PasswordlessService(
       {
@@ -84,34 +150,47 @@ maybe('PasswordlessService against Postgres', () => {
 
   afterAll(async () => {
     await prisma.loginChallenge.deleteMany({
-      where: {
-        emailNormalized: {
-          startsWith: 'pwl-it-',
-          contains: `-${process.pid}-`,
-          mode: 'insensitive',
-        },
-      },
+      where: { emailNormalized: { contains: run, mode: 'insensitive' } },
     });
     await prisma.user.deleteMany({
-      where: {
-        email: {
-          startsWith: 'pwl-it-',
-          contains: `-${process.pid}-`,
-          mode: 'insensitive',
-        },
-      },
+      where: { email: { contains: run, mode: 'insensitive' } },
     });
     await prisma.$disconnect();
   });
 
   it('has the login_challenges table with the unique link hash index', async () => {
-    const idx = await prisma.$queryRaw<Array<{ indexname: string }>>`
-      SELECT indexname FROM pg_indexes WHERE tablename = 'login_challenges'`;
-    expect(idx.map((i) => i.indexname).sort()).toEqual([
-      'login_challenges_emailNormalized_createdAt_idx',
-      'login_challenges_expiresAt_idx',
-      'login_challenges_linkTokenHash_key',
-      'login_challenges_pkey',
+    const idx = await prisma.$queryRaw<
+      Array<{ name: string; isUnique: boolean; columns: string[] }>
+    >`
+      SELECT i.relname AS name,
+             x.indisunique AS "isUnique",
+             array_agg(a.attname::text ORDER BY k.ord) AS columns
+      FROM pg_index x
+      JOIN pg_class t ON t.oid = x.indrelid
+      JOIN pg_class i ON i.oid = x.indexrelid
+      JOIN pg_namespace ns ON ns.oid = t.relnamespace
+      CROSS JOIN LATERAL unnest(x.indkey) WITH ORDINALITY AS k(attnum, ord)
+      JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+      WHERE t.relname = 'login_challenges' AND ns.nspname = current_schema()
+      GROUP BY i.relname, x.indisunique
+      ORDER BY i.relname`;
+    expect(idx).toEqual([
+      {
+        name: 'login_challenges_emailNormalized_createdAt_idx',
+        isUnique: false,
+        columns: ['emailNormalized', 'createdAt'],
+      },
+      {
+        name: 'login_challenges_expiresAt_idx',
+        isUnique: false,
+        columns: ['expiresAt'],
+      },
+      {
+        name: 'login_challenges_linkTokenHash_key',
+        isUnique: true,
+        columns: ['linkTokenHash'],
+      },
+      { name: 'login_challenges_pkey', isUnique: true, columns: ['id'] },
     ]);
   });
 
@@ -260,7 +339,7 @@ maybe('PasswordlessService against Postgres', () => {
   });
 
   it('finds a mixed-case stored account without creating a duplicate', async () => {
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const stored = `Pwl-It-Mixed-${stamp}@Example.com`;
     const created = await prisma.user.create({
       data: { email: stored, passwordHash: 'h', isEmailVerified: true },
@@ -290,7 +369,7 @@ maybe('PasswordlessService against Postgres', () => {
       data: Array.from({ length: 5 }, (_, i) => ({
         emailNormalized: email,
         codeHash: 'x',
-        linkTokenHash: `purge-${process.pid}-${n}-${i}`,
+        linkTokenHash: `purge-${run}-${n}-${i}`,
         expiresAt: old,
       })),
     });
@@ -303,7 +382,7 @@ maybe('PasswordlessService against Postgres', () => {
   });
 
   it('strips every credential an attacker planted on an unverified account and keeps the kids', async () => {
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const email = `pwl-it-victim-${stamp}@example.com`;
     const attacker = await prisma.user.create({
       data: {
@@ -367,7 +446,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('only links a provider to a verified account', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const unverified = await prisma.user.create({
       data: {
         email: `pwl-it-u-${stamp}@example.com`,
@@ -405,7 +484,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('refuses a link tied to a session that no longer exists', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const user = await prisma.user.create({
       data: {
         email: `pwl-it-s-${stamp}@example.com`,
@@ -439,7 +518,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('refuses a link tied to a soft-revoked session', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const user = await prisma.user.create({
       data: {
         email: `pwl-it-sr-${stamp}@example.com`,
@@ -469,7 +548,7 @@ maybe('PasswordlessService against Postgres', () => {
   it('never lets a link in flight during a takeover attach the attacker identity', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
     for (let round = 0; round < 12; round++) {
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const email = `pwl-it-race-${stamp}@example.com`;
       const attacker = await prisma.user.create({
         data: { email, passwordHash: 'attacker-hash', isEmailVerified: false },
@@ -502,7 +581,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('makes a link that was waiting on the takeover see the revoked session', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const user = await prisma.user.create({
       data: {
         email: `pwl-it-wait-${stamp}@example.com`,
@@ -542,7 +621,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('rolls the whole takeover back when its last statement fails', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     await prisma.user.create({
       data: {
         email: `pwl-it-dup-${stamp}@example.com`,
@@ -577,7 +656,7 @@ maybe('PasswordlessService against Postgres', () => {
     });
 
     await expect(
-      authRepo.takeOverUnverifiedAccount(victim.id, {
+      authRepo.takeOverUnverifiedAccount(victim, {
         passwordHash: 'rotated',
         hasLocalPassword: false,
         pinHash: null,
@@ -609,7 +688,7 @@ maybe('PasswordlessService against Postgres', () => {
   });
 
   it('deletes reset and verification tokens the attacker requested before the takeover', async () => {
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const email = `pwl-it-tok-${stamp}@example.com`;
     const attacker = await prisma.user.create({
       data: { email, passwordHash: 'attacker-hash', isEmailVerified: false },
@@ -633,7 +712,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('prefers a verified account, then the exact case, then the oldest for a case-insensitive lookup', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const upper = `PWL-IT-CASE-${stamp}@EXAMPLE.COM`;
     const lower = upper.toLowerCase();
     const older = await prisma.user.create({
@@ -672,7 +751,7 @@ maybe('PasswordlessService against Postgres', () => {
   });
 
   it('lands a lowercase sign-in on the verified mixed-case account, not on an attacker unverified lowercase row', async () => {
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const mixed = `Pwl-It-Div-${stamp}@Example.com`;
     const victim = await prisma.user.create({
       data: {
@@ -702,7 +781,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('lands an OAuth sign-in with the lowercase provider email on the verified account too', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const mixed = `Pwl-It-Oauth-${stamp}@Example.com`;
     const victim = await prisma.user.create({
       data: {
@@ -759,7 +838,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   describe('LIKE wildcards in the sign-in email', () => {
     it('does not let an underscore in the address capture another verified account (code)', async () => {
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const victim = await prisma.user.create({
         data: {
           email: `pwl-it-john.smith${stamp}@example.com`,
@@ -777,7 +856,7 @@ maybe('PasswordlessService against Postgres', () => {
     });
 
     it('does not let an underscore capture another verified account (link)', async () => {
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const victim = await prisma.user.create({
         data: {
           email: `pwl-it-link.smith${stamp}@example.com`,
@@ -794,7 +873,7 @@ maybe('PasswordlessService against Postgres', () => {
     });
 
     it('does not let a percent sign convert an unverified account that is not the attacker address', async () => {
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const victim = await prisma.user.create({
         data: {
           email: `pwl-it-alice.unv${stamp}@example.com`,
@@ -827,7 +906,7 @@ maybe('PasswordlessService against Postgres', () => {
 
     it('does not let an underscore in an OAuth email capture another account or add the attacker provider id', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const victim = await prisma.user.create({
         data: {
           email: `pwl-it-ann.lee${stamp}@example.com`,
@@ -861,7 +940,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('prefers an exact-case verified variant over an older verified one', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const upper = `PWL-IT-OLD-${stamp}@EXAMPLE.COM`;
     await prisma.user.create({
       data: {
@@ -882,7 +961,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('refuses when several verified variants match and none is the exact case', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const base = `pwl-it-amb-${stamp}@example.com`;
     await prisma.user.create({
       data: { email: base, passwordHash: 'h', isEmailVerified: true },
@@ -902,7 +981,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('signs an exact-case OAuth email into its own account and leaves the lowercase twin unlinked', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const lower = `pwl-it-twin-${stamp}@example.com`;
     const twin = await prisma.user.create({
       data: {
@@ -947,7 +1026,7 @@ maybe('PasswordlessService against Postgres', () => {
     'leaves an unverified %s account and its sessions untouched when a takeover is attempted',
     async (_label, flags) => {
       const authRepo = new PrismaAuthRepository(prisma as never);
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const user = await prisma.user.create({
         data: {
           email: `pwl-it-inactive-${stamp}@example.com`,
@@ -965,7 +1044,7 @@ maybe('PasswordlessService against Postgres', () => {
       });
 
       await expect(
-        authRepo.takeOverUnverifiedAccount(user.id, {
+        authRepo.takeOverUnverifiedAccount(user, {
           passwordHash: 'rotated',
           isEmailVerified: true,
         }),
@@ -986,7 +1065,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   describe('registration session racing a takeover', () => {
     const registrant = async () => {
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       return prisma.user.create({
         data: {
           email: `pwl-it-reg-${stamp}@example.com`,
@@ -1007,7 +1086,7 @@ maybe('PasswordlessService against Postgres', () => {
         authRepo,
       );
       const user = await registrant();
-      await authRepo.takeOverUnverifiedAccount(user.id, takeOverData);
+      await authRepo.takeOverUnverifiedAccount(user, takeOverData);
 
       await expect(
         tokens.createTokenPair(user as never, { requireUnverified: true }),
@@ -1028,7 +1107,7 @@ maybe('PasswordlessService against Postgres', () => {
         const user = await registrant();
 
         await Promise.allSettled([
-          authRepo.takeOverUnverifiedAccount(user.id, takeOverData),
+          authRepo.takeOverUnverifiedAccount(user, takeOverData),
           tokens.createTokenPair(user as never, { requireUnverified: true }),
         ]);
 
@@ -1045,7 +1124,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('lets only one of two concurrent first sign-ins for differently cased spellings of a mailbox create an account', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const lower = `pwl-it-case${stamp}@example.com`;
     const mixed = `PWL-it-Case${stamp}@example.com`;
     const signIn = (email: string) =>
@@ -1074,7 +1153,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('keeps an existing provider id when a verified-email match arrives with a different one', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const owner = await prisma.user.create({
       data: {
         email: `pwl-it-keep${stamp}@example.com`,
@@ -1108,7 +1187,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('keeps a provider id linked between the lookup and the sign-in write', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const owner = await prisma.user.create({
       data: {
         email: `pwl-it-race${stamp}@example.com`,
@@ -1148,7 +1227,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('refuses to reset an account that was verified between the read and the takeover', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
-    const stamp = `${process.pid}-${++n}`;
+    const stamp = `${run}-${++n}`;
     const user = await prisma.user.create({
       data: {
         email: `pwl-it-late${stamp}@example.com`,
@@ -1166,7 +1245,7 @@ maybe('PasswordlessService against Postgres', () => {
     });
 
     await expect(
-      authRepo.takeOverUnverifiedAccount(user.id, {
+      authRepo.takeOverUnverifiedAccount(user, {
         passwordHash: 'rotated',
         hasLocalPassword: false,
         pinHash: null,
@@ -1185,12 +1264,94 @@ maybe('PasswordlessService against Postgres', () => {
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(1);
   });
 
+  describe('takeover of an account whose email changed after the lookup', () => {
+    const seedRenamable = async () => {
+      const stamp = `${run}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-mv-${stamp}@example.com`,
+          passwordHash: 'attacker-hash',
+          isEmailVerified: false,
+        },
+      });
+      await prisma.session.create({
+        data: {
+          userId: user.id,
+          token: `pwl-it-mv-s-${stamp}`,
+          expiresAt: new Date(Date.now() + 3_600_000),
+        },
+      });
+      return { user, renamed: `pwl-it-mv-renamed-${stamp}@example.com` };
+    };
+    const expectUntouched = async (id: string) => {
+      const after = await prisma.user.findUniqueOrThrow({ where: { id } });
+      expect(after.isEmailVerified).toBe(false);
+      expect(after.passwordHash).toBe('attacker-hash');
+      expect(await prisma.session.count({ where: { userId: id } })).toBe(1);
+    };
+
+    it('refuses the takeover and leaves the account untouched', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user, renamed } = await seedRenamable();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { email: renamed },
+      });
+
+      await expect(
+        authRepo.takeOverUnverifiedAccount(user, {
+          passwordHash: 'rotated',
+          isEmailVerified: true,
+        }),
+      ).rejects.toBeInstanceOf(TakeoverTargetChangedError);
+      await expectUntouched(user.id);
+    });
+
+    it('refuses the takeover when the rename commits while the takeover waits on the row', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user, renamed } = await seedRenamable();
+      let takeover: Promise<unknown> = Promise.resolve();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { email: renamed },
+        });
+        takeover = authRepo
+          .takeOverUnverifiedAccount(user, {
+            passwordHash: 'rotated',
+            isEmailVerified: true,
+          })
+          .catch((error: unknown) => error);
+        await waitForBlockedStatement('%FOR NO KEY UPDATE%');
+      });
+
+      expect(await takeover).toBeInstanceOf(TakeoverTargetChangedError);
+      await expectUntouched(user.id);
+    });
+
+    it('accepts the proven email in another case', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user } = await seedRenamable();
+
+      await authRepo.takeOverUnverifiedAccount(
+        { id: user.id, email: user.email.toUpperCase() },
+        { passwordHash: 'rotated', isEmailVerified: true },
+      );
+
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(after.isEmailVerified).toBe(true);
+    });
+  });
+
   describe('change-password in flight during a takeover', () => {
     const makePasswordService = (authRepo: PrismaAuthRepository) =>
       new PasswordService(authRepo, new EventEmitter2(), {} as never);
 
     const seedAttacker = async (label: string) => {
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const user = await prisma.user.create({
         data: {
           email: `pwl-it-${label}-${stamp}@example.com`,
@@ -1238,57 +1399,104 @@ maybe('PasswordlessService against Postgres', () => {
       expect(outcome).toBeInstanceOf(UnauthorizedException);
     });
 
-    it('never deadlocks the takeover against a concurrent change-password', async () => {
+    const rotate = {
+      passwordHash: 'rotated',
+      hasLocalPassword: false,
+      pinHash: null,
+      biometricsEnabled: false,
+      isEmailVerified: true,
+      googleId: null,
+      appleId: null,
+    };
+    const changeFor = (
+      passwords: PasswordService,
+      user: { id: string },
+      session: { id: string },
+    ) =>
+      passwords
+        .changePassword(
+          user.id,
+          { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
+          session.id,
+        )
+        .catch((error: unknown) => error);
+
+    it('lets a takeover wait out a change-password that already holds the user row', async () => {
+      const gated = gateTransactionStep('session', 'deleteMany');
+      const passwords = makePasswordService(
+        new PrismaAuthRepository(gated.client as never),
+      );
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user, session } = await seedAttacker('cpd1');
+
+      const change = changeFor(passwords, user, session);
+      await gated.reached;
+      const takeover = authRepo
+        .takeOverUnverifiedAccount(user, rotate)
+        .catch((error: unknown) => error);
+      await releaseAfter(
+        waitForBlockedStatement('%FOR NO KEY UPDATE%'),
+        gated.release,
+        [change, takeover],
+      );
+      const [changed, taken] = await Promise.all([change, takeover]);
+
+      expect(changed).not.toBeInstanceOf(Error);
+      expect(taken).not.toBeInstanceOf(Error);
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(after.passwordHash).toBe('rotated');
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        0,
+      );
+    });
+
+    it('refuses a change-password that read the old hash and then waited on a running takeover', async () => {
+      const gated = gateTransactionStep('token', 'deleteMany');
+      const authRepo = new PrismaAuthRepository(gated.client as never);
+      const passwords = makePasswordService(
+        new PrismaAuthRepository(prisma as never),
+      );
+      const { user, session } = await seedAttacker('cpd2');
+
+      const takeover = authRepo
+        .takeOverUnverifiedAccount(user, rotate)
+        .catch((error: unknown) => error);
+      await gated.reached;
+      const change = changeFor(passwords, user, session);
+      await releaseAfter(
+        waitForBlockedStatement('UPDATE%"users"%'),
+        gated.release,
+        [takeover, change],
+      );
+      const [taken, changed] = await Promise.all([takeover, change]);
+
+      expect(taken).not.toBeInstanceOf(Error);
+      expect(changed).toBeInstanceOf(UnauthorizedException);
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(after.passwordHash).toBe('rotated');
+    });
+
+    it('rejects the old password once a takeover has committed', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
       const passwords = makePasswordService(authRepo);
-      const failures: unknown[] = [];
-      for (let round = 0; round < 60; round++) {
-        const { user, session } = await seedAttacker('cpd');
-        for (let extra = 0; extra < 2; extra++) {
-          await prisma.session.create({
-            data: {
-              userId: user.id,
-              token: `pwl-it-cpd-x-${process.pid}-${++n}`,
-              expiresAt: new Date(Date.now() + 3_600_000),
-            },
-          });
-        }
-        const change = passwords
-          .changePassword(
-            user.id,
-            { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
-            session.id,
-          )
-          .catch((error: unknown) => error);
-        const takeover = new Promise((resolve) =>
-          setTimeout(resolve, 30 + (round % 12) * 8),
-        ).then(() =>
-          authRepo
-            .takeOverUnverifiedAccount(user.id, {
-              passwordHash: 'rotated',
-              hasLocalPassword: false,
-              pinHash: null,
-              biometricsEnabled: false,
-              isEmailVerified: true,
-              googleId: null,
-              appleId: null,
-            })
-            .catch((error: unknown) => error),
-        );
-        const [changeResult, takeoverResult] = await Promise.all([
-          change,
-          takeover,
-        ]);
-        if (takeoverResult instanceof Error) failures.push(takeoverResult);
-        if (
-          changeResult instanceof Error &&
-          !(changeResult instanceof UnauthorizedException)
-        ) {
-          failures.push(changeResult);
-        }
-      }
-      expect(failures).toEqual([]);
-    }, 60_000);
+      const { user, session } = await seedAttacker('cpd3');
+      await authRepo.takeOverUnverifiedAccount(user, rotate);
+
+      const changed = await changeFor(passwords, user, session);
+
+      expect(changed).toBeInstanceOf(BadRequestException);
+      expect((changed as BadRequestException).message).toBe(
+        'Invalid old password',
+      );
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: user.id },
+      });
+      expect(after.passwordHash).toBe('rotated');
+    });
 
     it('still changes the password when nothing intervened', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
@@ -1356,7 +1564,7 @@ maybe('PasswordlessService against Postgres', () => {
     };
 
     const seedSquatter = async (label: string) => {
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const user = await prisma.user.create({
         data: {
           email: `pwl-it-${label}-${stamp}@example.com`,
@@ -1407,10 +1615,13 @@ maybe('PasswordlessService against Postgres', () => {
       await reached;
 
       const takeover = authRepo
-        .takeOverUnverifiedAccount(user.id, takeoverData)
+        .takeOverUnverifiedAccount(user, takeoverData)
         .catch((error: unknown) => error);
-      await waitForBlockedStatement('DELETE%"sessions"%');
-      release();
+      await releaseAfter(
+        waitForBlockedStatement('DELETE%"sessions"%'),
+        release,
+        [register, takeover],
+      );
       const [registered, taken] = await Promise.all([register, takeover]);
 
       expect(taken).not.toBeInstanceOf(Error);
@@ -1438,13 +1649,13 @@ maybe('PasswordlessService against Postgres', () => {
       await reached;
 
       const takeover = authRepo
-        .takeOverUnverifiedAccount(user.id, takeoverData)
+        .takeOverUnverifiedAccount(user, takeoverData)
         .catch((error: unknown) => error);
-      await Promise.race([
-        takeover,
-        waitForBlockedStatement('DELETE%"sessions"%'),
-      ]);
-      release();
+      await releaseAfter(
+        Promise.race([takeover, waitForBlockedStatement('DELETE%"sessions"%')]),
+        release,
+        [register, takeover],
+      );
       const [, taken] = await Promise.all([register, takeover]);
 
       expect(taken).not.toBeInstanceOf(Error);
@@ -1476,8 +1687,10 @@ maybe('PasswordlessService against Postgres', () => {
       const removal = adminRepo
         .hardDeleteUser(user.id)
         .catch((error: unknown) => error);
-      await waitForBlockedStatement('DELETE%');
-      release();
+      await releaseAfter(waitForBlockedStatement('DELETE%'), release, [
+        register,
+        removal,
+      ]);
       const [registered, removed] = await Promise.all([register, removal]);
 
       expect(registered).not.toBeInstanceOf(Error);
@@ -1506,52 +1719,6 @@ maybe('PasswordlessService against Postgres', () => {
       ).toBe(0);
     });
 
-    const gateTransactionStep = (
-      model: 'user' | 'token',
-      method: 'delete' | 'deleteMany' | 'update',
-    ) => {
-      let reached: () => void = () => undefined;
-      let release: () => void = () => undefined;
-      const reachedStep = new Promise<void>((resolve) => (reached = resolve));
-      const gate = new Promise<void>((resolve) => (release = resolve));
-      const bound = <T extends object>(target: T) =>
-        new Proxy(target, {
-          get: (t, key) => {
-            const value = Reflect.get(t, key) as unknown;
-            return typeof value === 'function'
-              ? (value as (...args: unknown[]) => unknown).bind(t)
-              : value;
-          },
-        });
-      const gatedTx = (tx: Record<string, unknown>) =>
-        new Proxy(tx, {
-          get: (t, key) => {
-            if (key !== model) return bound(t)[key as never];
-            const delegate = t[model] as Record<string, unknown>;
-            return new Proxy(delegate, {
-              get: (d, name) =>
-                name === method
-                  ? async (...args: unknown[]) => {
-                      reached();
-                      await gate;
-                      return (d[method] as (...a: unknown[]) => unknown)(
-                        ...args,
-                      );
-                    }
-                  : bound(d)[name as never],
-            });
-          },
-        });
-      const client = new Proxy(prisma, {
-        get: (target, key) =>
-          key === '$transaction'
-            ? (fn: (tx: Record<string, unknown>) => unknown) =>
-                target.$transaction((tx) => fn(gatedTx(tx as never)) as never)
-            : bound(target)[key as never],
-      });
-      return { client, reached: reachedStep, release };
-    };
-
     it('does not deadlock an admin hard delete that already removed the sessions against a takeover', async () => {
       const gated = gateTransactionStep('user', 'delete');
       const adminRepo = new PrismaAdminUserRepository(gated.client as never);
@@ -1563,19 +1730,16 @@ maybe('PasswordlessService against Postgres', () => {
         .catch((error: unknown) => error);
       await gated.reached;
       const takeover = authRepo
-        .takeOverUnverifiedAccount(user.id, takeoverData)
+        .takeOverUnverifiedAccount(user, takeoverData)
         .catch((error: unknown) => error);
-      await waitForBlockedStatement('%');
-      gated.release();
+      await releaseAfter(waitForBlockedStatement('%'), gated.release, [
+        removal,
+        takeover,
+      ]);
       const [removed, taken] = await Promise.all([removal, takeover]);
 
       expect(removed).not.toBeInstanceOf(Error);
-      if (
-        taken instanceof Error &&
-        !(taken instanceof AccountAlreadyVerifiedError)
-      ) {
-        throw taken;
-      }
+      expect(taken).toBeInstanceOf(TakeoverTargetChangedError);
       expect(await prisma.user.count({ where: { id: user.id } })).toBe(0);
     });
 
@@ -1586,14 +1750,16 @@ maybe('PasswordlessService against Postgres', () => {
       const { user } = await seedSquatter('tkad');
 
       const takeover = authRepo
-        .takeOverUnverifiedAccount(user.id, takeoverData)
+        .takeOverUnverifiedAccount(user, takeoverData)
         .catch((error: unknown) => error);
       await gated.reached;
       const removal = adminRepo
         .hardDeleteUser(user.id)
         .catch((error: unknown) => error);
-      await waitForBlockedStatement('%');
-      gated.release();
+      await releaseAfter(waitForBlockedStatement('%'), gated.release, [
+        takeover,
+        removal,
+      ]);
       const [taken, removed] = await Promise.all([takeover, removal]);
 
       expect(taken).not.toBeInstanceOf(Error);
@@ -1602,7 +1768,7 @@ maybe('PasswordlessService against Postgres', () => {
     });
 
     const seedLinkedSquatter = async (label: string) => {
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const user = await prisma.user.create({
         data: {
           email: `pwl-it-${label}-${stamp}@example.com`,
@@ -1636,13 +1802,16 @@ maybe('PasswordlessService against Postgres', () => {
         .catch((error: unknown) => error);
       await gated.reached;
       const takeover = authRepo
-        .takeOverUnverifiedAccount(user.id, {
+        .takeOverUnverifiedAccount(user, {
           ...takeoverData,
           googleId: ownerGoogleId,
         })
         .catch((error: unknown) => error);
-      await Promise.race([takeover, waitForBlockedStatement('%')]);
-      gated.release();
+      await releaseAfter(
+        Promise.race([takeover, waitForBlockedStatement('%')]),
+        gated.release,
+        [unlink, takeover],
+      );
       const [unlinked, taken] = await Promise.all([unlink, takeover]);
 
       expect(unlinked).not.toBeInstanceOf(Error);
@@ -1663,7 +1832,7 @@ maybe('PasswordlessService against Postgres', () => {
       const { user, ownerGoogleId } = await seedLinkedSquatter('unl2');
 
       const takeover = authRepo
-        .takeOverUnverifiedAccount(user.id, {
+        .takeOverUnverifiedAccount(user, {
           ...takeoverData,
           googleId: ownerGoogleId,
         })
@@ -1672,8 +1841,11 @@ maybe('PasswordlessService against Postgres', () => {
       const unlink = linking
         .unlinkProvider(user.id, 'google')
         .catch((error: unknown) => error);
-      await Promise.race([unlink, waitForBlockedStatement('%')]);
-      gated.release();
+      await releaseAfter(
+        Promise.race([unlink, waitForBlockedStatement('%')]),
+        gated.release,
+        [takeover, unlink],
+      );
       const [taken, unlinked] = await Promise.all([takeover, unlink]);
 
       expect(taken).not.toBeInstanceOf(Error);
@@ -1690,7 +1862,7 @@ maybe('PasswordlessService against Postgres', () => {
         new PrismaDeviceTokenRepository(prisma as never),
       );
       const { user, session, stamp } = await seedSquatter('late');
-      await authRepo.takeOverUnverifiedAccount(user.id, takeoverData);
+      await authRepo.takeOverUnverifiedAccount(user, takeoverData);
 
       await expect(
         devices.registerDeviceToken(
@@ -1709,7 +1881,7 @@ maybe('PasswordlessService against Postgres', () => {
     it('leaves exactly one open challenge per email when requests race', async () => {
       const challenges = new PrismaLoginChallengeRepository(prisma as never);
       for (let round = 0; round < 6; round++) {
-        const email = `pwl-it-race-ch-${process.pid}-${++n}@example.com`;
+        const email = `pwl-it-race-ch-${run}-${++n}@example.com`;
 
         await Promise.all(
           Array.from({ length: 8 }, (_, i) =>
@@ -1741,7 +1913,7 @@ maybe('PasswordlessService against Postgres', () => {
   describe('password change and session state', () => {
     it('changes the password for a live session', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const user = await prisma.user.create({
         data: {
           email: `pwl-it-pwl-${stamp}@example.com`,
@@ -1770,7 +1942,7 @@ maybe('PasswordlessService against Postgres', () => {
 
     it('refuses a password change tied to a soft-revoked session', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const user = await prisma.user.create({
         data: {
           email: `pwl-it-pw-${stamp}@example.com`,
@@ -1804,7 +1976,7 @@ maybe('PasswordlessService against Postgres', () => {
     const unverifiedUser = async () =>
       prisma.user.create({
         data: {
-          email: `pwl-it-lk-${process.pid}-${++n}@example.com`,
+          email: `pwl-it-lk-${run}-${++n}@example.com`,
           passwordHash: 'registrant',
           isEmailVerified: false,
         },
@@ -1849,7 +2021,7 @@ maybe('PasswordlessService against Postgres', () => {
 
       await prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${user.id} FOR SHARE`;
-        takeover = authRepo.takeOverUnverifiedAccount(user.id, {
+        takeover = authRepo.takeOverUnverifiedAccount(user, {
           passwordHash: 'rotated',
           isEmailVerified: true,
         });
@@ -1867,7 +2039,7 @@ maybe('PasswordlessService against Postgres', () => {
   describe('device-token live-session lock', () => {
     it('blocks a soft revocation of the session until the registering transaction ends', async () => {
       const repo = new PrismaDeviceTokenRepository(prisma as never);
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const user = await prisma.user.create({
         data: {
           email: `pwl-it-dt-${stamp}@example.com`,
@@ -1906,7 +2078,7 @@ maybe('PasswordlessService against Postgres', () => {
   describe('guest carry-over resume', () => {
     it('keeps newer progress and a deletion when the carry-over is resumed', async () => {
       const guests = new PrismaGuestRepository(prisma as never);
-      const stamp = `${process.pid}-${++n}`;
+      const stamp = `${run}-${++n}`;
       const user = await prisma.user.create({
         data: {
           email: `pwl-it-gm-${stamp}@example.com`,
@@ -1927,30 +2099,36 @@ maybe('PasswordlessService against Postgres', () => {
             ageMax: 9,
           },
         });
-      const read = await story('read');
-      const removed = await story('removed');
-      await guests.createUserStoryProgressIfAbsent(user.id, read.id);
-      await guests.createUserStoryProgressIfAbsent(user.id, removed.id);
-      await prisma.userStoryProgress.update({
-        where: { userId_storyId: { userId: user.id, storyId: read.id } },
-        data: { progress: 70 },
-      });
-      await prisma.userStoryProgress.update({
-        where: { userId_storyId: { userId: user.id, storyId: removed.id } },
-        data: { isDeleted: true, deletedAt: new Date() },
-      });
+      const storyIds: string[] = [];
+      try {
+        const read = await story('read');
+        storyIds.push(read.id);
+        const removed = await story('removed');
+        storyIds.push(removed.id);
+        await guests.createUserStoryProgressIfAbsent(user.id, read.id);
+        await guests.createUserStoryProgressIfAbsent(user.id, removed.id);
+        await prisma.userStoryProgress.update({
+          where: { userId_storyId: { userId: user.id, storyId: read.id } },
+          data: { progress: 70 },
+        });
+        await prisma.userStoryProgress.update({
+          where: { userId_storyId: { userId: user.id, storyId: removed.id } },
+          data: { isDeleted: true, deletedAt: new Date() },
+        });
 
-      await guests.createUserStoryProgressIfAbsent(user.id, read.id);
-      await guests.createUserStoryProgressIfAbsent(user.id, removed.id);
+        await guests.createUserStoryProgressIfAbsent(user.id, read.id);
+        await guests.createUserStoryProgressIfAbsent(user.id, removed.id);
 
-      const rows = await prisma.userStoryProgress.findMany({
-        where: { userId: user.id },
-      });
-      expect(rows.find((r) => r.storyId === read.id)?.progress).toBe(70);
-      expect(rows.find((r) => r.storyId === removed.id)?.isDeleted).toBe(true);
-      await prisma.story.deleteMany({
-        where: { id: { in: [read.id, removed.id] } },
-      });
+        const rows = await prisma.userStoryProgress.findMany({
+          where: { userId: user.id },
+        });
+        expect(rows.find((r) => r.storyId === read.id)?.progress).toBe(70);
+        expect(rows.find((r) => r.storyId === removed.id)?.isDeleted).toBe(
+          true,
+        );
+      } finally {
+        await prisma.story.deleteMany({ where: { id: { in: storyIds } } });
+      }
     });
   });
 });

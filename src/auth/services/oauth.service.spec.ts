@@ -192,7 +192,10 @@ describe('OAuthService', () => {
         await service.loginWithGoogleIdToken('valid-token');
 
         const call = authRepository.takeOverUnverifiedAccount.mock.calls[0];
-        expect(call[0]).toBe('victim-account');
+        expect(call[0]).toEqual({
+          id: 'victim-account',
+          email: 'victim@example.com',
+        });
         expect(call[1]).toMatchObject({
           isEmailVerified: true,
           hasLocalPassword: false,

@@ -6,6 +6,7 @@ import type {
 } from '../repositories';
 import type { PasswordService } from './password.service';
 import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
+import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
 
 export interface VerifiedEmailInput {
   email: string;
@@ -78,7 +79,7 @@ async function resolveParent(
       );
       try {
         const user = await authRepository.takeOverUnverifiedAccount(
-          existing.id,
+          { id: existing.id, email },
           {
             passwordHash,
             hasLocalPassword: false,
@@ -92,6 +93,9 @@ async function resolveParent(
         );
         return { user, isNewUser: false, newlyVerified: true };
       } catch (error) {
+        if (canRetry && error instanceof TakeoverTargetChangedError) {
+          return resolveParent(deps, input, false);
+        }
         if (!(error instanceof AccountAlreadyVerifiedError)) throw error;
         current = (await authRepository.findUserById(existing.id)) ?? existing;
       }
@@ -135,7 +139,7 @@ async function resolveParent(
     return { user, isNewUser: true, newlyVerified: false };
   } catch (error) {
     if (canRetry && isEmailUniqueViolation(error)) {
-      return resolveParent(deps, input, false);
+      return resolveParent(deps, { ...input, beforeCreate: undefined }, false);
     }
     throw error;
   }

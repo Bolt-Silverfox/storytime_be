@@ -146,7 +146,7 @@ export interface IAuthRepository {
   deleteAllUserSessions(userId: string): Promise<void>;
   deleteAllUserDeviceTokens(userId: string): Promise<void>;
   takeOverUnverifiedAccount(
-    id: string,
+    target: { id: string; email: string },
     data: Partial<{
       passwordHash: string;
       hasLocalPassword: boolean;

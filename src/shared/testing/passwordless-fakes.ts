@@ -3,6 +3,7 @@ import {
   INCR_WITH_EXPIRY,
 } from '@/auth/services/passwordless-throttle.service';
 import { AccountAlreadyVerifiedError } from '@/auth/repositories/account-already-verified.error';
+import { TakeoverTargetChangedError } from '@/auth/repositories/takeover-target-changed.error';
 import { AmbiguousEmailAccountError } from '@/auth/repositories/ambiguous-email-account.error';
 import type { User, Profile, Avatar, Session } from '@prisma/client';
 import type {
@@ -328,8 +329,14 @@ export class InMemoryAuthRepository {
   findUserById = (id: string) =>
     Promise.resolve(this.users.find((u) => u.id === id) ?? null);
 
-  takeOverUnverifiedAccount = (id: string, data: Partial<User>) => {
-    const u = this.users.find((x) => x.id === id)!;
+  takeOverUnverifiedAccount = (
+    { id, email }: { id: string; email: string },
+    data: Partial<User>,
+  ) => {
+    const u = this.users.find(
+      (x) => x.id === id && x.email.toLowerCase() === email.toLowerCase(),
+    );
+    if (!u) return Promise.reject(new TakeoverTargetChangedError());
     if (u.isEmailVerified) {
       return Promise.reject(new AccountAlreadyVerifiedError());
     }

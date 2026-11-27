@@ -13,6 +13,8 @@ import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import { INCR_WITH_EXPIRY } from './passwordless-throttle.service';
 import { PASSWORDLESS_REDIS_TIMEOUT_MS } from './passwordless.constants';
+import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
+import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
 import {
   InMemoryAuthRepository,
   InMemoryLoginChallengeRepository,
@@ -919,6 +921,40 @@ describe('PasswordlessService', () => {
       expect(authRepo.sessions.map((s) => s.token)).toContain(
         'attacker-refresh',
       );
+    });
+
+    it('refuses a session for an account still unverified after a refused takeover', async () => {
+      const { service, captured, authRepo } = build();
+      const user = await seedAttackerAccount(authRepo, 'flip@example.com', {
+        isSuspended: true,
+      });
+      authRepo.findUserByEmailInsensitive = () =>
+        Promise.resolve({ ...user, isSuspended: false });
+      authRepo.takeOverUnverifiedAccount = () => {
+        user.isSuspended = false;
+        return Promise.reject(new AccountAlreadyVerifiedError());
+      };
+      await service.request('flip@example.com', '1.1.1.1');
+      const sessionsBefore = authRepo.sessions.length;
+
+      await expectGeneric(
+        service.verify('flip@example.com', captured[0].code, '3.3.3.3'),
+      );
+      expect(user.isEmailVerified).toBe(false);
+      expect(authRepo.sessions).toHaveLength(sessionsBefore);
+    });
+
+    it('answers with the generic error when the matched account keeps changing its email', async () => {
+      const { service, captured, authRepo } = build();
+      const user = await seedAttackerAccount(authRepo, 'moving@example.com');
+      authRepo.takeOverUnverifiedAccount = () =>
+        Promise.reject(new TakeoverTargetChangedError());
+      await service.request('moving@example.com', '1.1.1.1');
+
+      await expectGeneric(
+        service.verify('moving@example.com', captured[0].code, '3.3.3.3'),
+      );
+      expect(user.isEmailVerified).toBe(false);
     });
 
     it.each(['isSuspended', 'isDeleted'])(

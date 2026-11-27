@@ -119,6 +119,43 @@ describe('findOrCreateParentByVerifiedEmail', () => {
     expect(create).toHaveBeenCalledTimes(2);
   });
 
+  it('charges the creation hook once when the conflict retry finds no user', async () => {
+    const repo = new InMemoryAuthRepository();
+    repo.createUser = jest.fn().mockRejectedValue(emailCollision());
+    const beforeCreate = jest.fn().mockResolvedValue(undefined);
+
+    await expect(
+      findOrCreateParentByVerifiedEmail(
+        { authRepository: asRepo(repo), passwordService },
+        { email: 'a@x.co', emailVerified: true, beforeCreate },
+      ),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    expect(beforeCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not verify an account whose email changed after the lookup and signs the mailbox owner into a fresh account', async () => {
+    const repo = new InMemoryAuthRepository();
+    const renamed = await seed(repo, { isEmailVerified: false });
+    const hashPassword = jest.fn().mockImplementation(() => {
+      renamed.email = 'renamed@x.co';
+      return Promise.resolve('hash');
+    });
+
+    const result = await findOrCreateParentByVerifiedEmail(
+      { authRepository: asRepo(repo), passwordService: { hashPassword } },
+      {
+        email: 'a@x.co',
+        emailVerified: true,
+        matchEmailCaseInsensitively: true,
+      },
+    );
+
+    expect(renamed.isEmailVerified).toBe(false);
+    expect(result.user.id).not.toBe(renamed.id);
+    expect(result.user.email).toBe('a@x.co');
+    expect(result.isNewUser).toBe(true);
+  });
+
   it.each([
     ['a unique violation on another column', uniqueViolation(['googleId'])],
     ['an error that is not a unique violation', new Error('connection lost')],

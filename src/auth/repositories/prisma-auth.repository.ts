@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AccountAlreadyVerifiedError } from './account-already-verified.error';
 import { AmbiguousEmailAccountError } from './ambiguous-email-account.error';
+import { TakeoverTargetChangedError } from './takeover-target-changed.error';
 import type {
   User,
   Profile,
@@ -326,11 +327,15 @@ export class PrismaAuthRepository implements IAuthRepository {
   }
 
   async takeOverUnverifiedAccount(
-    id: string,
+    { id, email }: { id: string; email: string },
     data: Parameters<IAuthRepository['takeOverUnverifiedAccount']>[1],
   ): Promise<UserWithProfileAndAvatar> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${id} FOR NO KEY UPDATE`;
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "users"
+        WHERE "id" = ${id} AND lower("email") = lower(${email})
+        FOR NO KEY UPDATE`;
+      if (locked.length === 0) throw new TakeoverTargetChangedError();
       await tx.session.deleteMany({ where: { userId: id } });
       await tx.deviceToken.deleteMany({ where: { userId: id } });
       await tx.token.deleteMany({ where: { userId: id } });

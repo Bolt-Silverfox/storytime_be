@@ -13,6 +13,7 @@ import * as crypto from 'crypto';
 import { UserDto } from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
+import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
 import {
   ILoginChallengeRepository,
   LOGIN_CHALLENGE_REPOSITORY,
@@ -275,11 +276,23 @@ export class PasswordlessService {
         );
         throw this.invalid();
       }
+      if (error instanceof TakeoverTargetChangedError) {
+        this.logger.warn(
+          `Passwordless login refused for account whose email changed (challenge ${challengeId ?? 'link'})`,
+        );
+        throw this.invalid();
+      }
       throw error;
     });
     if (user.isSuspended || user.isDeleted) {
       this.logger.warn(
         `Passwordless login refused for inactive account (challenge ${challengeId ?? 'link'})`,
+      );
+      throw this.invalid();
+    }
+    if (!user.isEmailVerified) {
+      this.logger.warn(
+        `Passwordless login refused for unverified account (challenge ${challengeId ?? 'link'})`,
       );
       throw this.invalid();
     }
