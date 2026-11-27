@@ -38,7 +38,7 @@ describe('PasswordlessCleanupService', () => {
       Array.from({ length: 50 }, () => 1000),
     );
     await service.purgeExpired();
-    expect(deleteExpiredBefore.mock.calls.length).toBeLessThanOrEqual(20);
+    expect(deleteExpiredBefore).toHaveBeenCalledTimes(20);
   });
 
   it('purges rows holding emails without consulting the feature flag', async () => {
