@@ -106,6 +106,45 @@ describe('findOrCreateParentByVerifiedEmail', () => {
     expect(repo.users).toHaveLength(1);
   });
 
+  it.each([
+    ['googleId', { googleId: 'g-1' }],
+    ['appleId', { appleId: 'a-1' }],
+  ])(
+    'resolves to the user a concurrent first sign-in created when the create collides on %s',
+    async (field, provider) => {
+      const repo = new InMemoryAuthRepository();
+      const originalCreate = repo.createUser;
+      repo.createUser = async (data) => {
+        await originalCreate(data);
+        throw uniqueViolation([field]);
+      };
+
+      const result = await findOrCreateParentByVerifiedEmail(
+        { authRepository: asRepo(repo), passwordService },
+        { email: 'a@x.co', emailVerified: true, ...provider },
+      );
+
+      expect(result.isNewUser).toBe(false);
+      expect(result.user.email).toBe('a@x.co');
+      expect(result.user).toMatchObject(provider);
+      expect(repo.users).toHaveLength(1);
+    },
+  );
+
+  it('rethrows a provider id collision that the user did not bring', async () => {
+    const repo = new InMemoryAuthRepository();
+    const create = jest.fn().mockRejectedValue(uniqueViolation(['googleId']));
+    repo.createUser = create;
+
+    await expect(
+      findOrCreateParentByVerifiedEmail(
+        { authRepository: asRepo(repo), passwordService },
+        { email: 'a@x.co', emailVerified: true },
+      ),
+    ).rejects.toMatchObject({ code: 'P2002' });
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
   it('rethrows a unique violation that persists after one retry', async () => {
     const repo = new InMemoryAuthRepository();
     const create = jest.fn().mockRejectedValue(emailCollision());

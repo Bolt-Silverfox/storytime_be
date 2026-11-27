@@ -31,16 +31,26 @@ export interface VerifiedEmailResult {
   newlyVerified: boolean;
 }
 
-const isEmailUniqueViolation = (error: unknown): boolean => {
+const isSignInUniqueViolation = (
+  error: unknown,
+  input: VerifiedEmailInput,
+): boolean => {
   const { code, meta } = (error ?? {}) as {
     code?: string;
     meta?: { target?: unknown };
   };
   if (code !== 'P2002') return false;
   const target = meta?.target;
-  return Array.isArray(target)
-    ? target.includes('email')
-    : typeof target === 'string' && target.includes('email');
+  const fields = [
+    'email',
+    ...(input.googleId ? ['googleId'] : []),
+    ...(input.appleId ? ['appleId'] : []),
+  ];
+  return fields.some((field) =>
+    Array.isArray(target)
+      ? target.includes(field)
+      : typeof target === 'string' && target.includes(field),
+  );
 };
 
 export function findOrCreateParentByVerifiedEmail(
@@ -152,7 +162,7 @@ async function resolveParent(
     });
     return { user, isNewUser: true, newlyVerified: false };
   } catch (error) {
-    if (canRetry && isEmailUniqueViolation(error)) {
+    if (canRetry && isSignInUniqueViolation(error, input)) {
       return resolveParent(deps, { ...input, beforeCreate: undefined }, false);
     }
     throw error;
