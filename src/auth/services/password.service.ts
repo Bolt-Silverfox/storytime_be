@@ -73,39 +73,50 @@ export class PasswordService {
     }
   }
 
-  private async lockOutIfExceeded(email: string, attempts: number) {
-    if (attempts <= RESET_MAX_FAILED_ATTEMPTS) return;
-    const user = await this.authRepository.findUserByEmail(email);
-    if (user) {
-      await this.authRepository.deleteUserTokensByType(
-        user.id,
-        TokenType.PASSWORD_RESET,
-      );
-    }
-    throw new HttpException(
-      'Too many failed reset attempts. Try again later.',
-      HttpStatus.TOO_MANY_REQUESTS,
+  private async revokePresentedCode(resetToken: TokenWithUser) {
+    await this.recordFailedResetAttempt(resetToken.user.email);
+    await this.authRepository.deleteToken(resetToken.id);
+  }
+
+  private inBackground(task: Promise<void>) {
+    task.catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Failed to charge reset token owner: ${message}`);
+    });
+  }
+
+  private findPresentedCode(token: string) {
+    return this.authRepository.findTokenByHashedToken(
+      this.tokenService.hashToken(token),
+      TokenType.PASSWORD_RESET,
     );
   }
 
   private async consumeResetAttempt(token: string, email: string) {
     const attempts = await this.recordFailedResetAttempt(email);
-    await this.lockOutIfExceeded(email, attempts);
+    if (attempts > RESET_MAX_FAILED_ATTEMPTS) {
+      await this.authRepository.deleteTokensByUserEmail(
+        normalizeEmail(email),
+        TokenType.PASSWORD_RESET,
+      );
+      const presented = await this.findPresentedCode(token);
+      if (presented) {
+        this.inBackground(this.revokePresentedCode(presented));
+      }
+      throw new HttpException(
+        'Too many failed reset attempts. Try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
-    const resetToken = await this.authRepository.findTokenByHashedToken(
-      this.tokenService.hashToken(token),
-      TokenType.PASSWORD_RESET,
-    );
+    const resetToken = await this.findPresentedCode(token);
 
     if (!resetToken) {
       throw new NotFoundException('Invalid reset token');
     }
 
     if (normalizeEmail(resetToken.user.email) !== normalizeEmail(email)) {
-      this.chargeTokenOwner(resetToken).catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.error(`Failed to charge reset token owner: ${message}`);
-      });
+      this.inBackground(this.chargeTokenOwner(resetToken));
       throw new NotFoundException('Invalid reset token');
     }
 

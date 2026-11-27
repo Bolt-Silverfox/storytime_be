@@ -74,6 +74,7 @@ describe('PasswordService', () => {
       findUserByEmail: jest.fn(),
       findUserById: jest.fn(),
       deleteUserTokensByType: jest.fn(),
+      deleteTokensByUserEmail: jest.fn(),
       createToken: jest.fn(),
       findTokenByHashedToken: jest.fn(),
       deleteToken: jest.fn(),
@@ -825,8 +826,8 @@ describe('PasswordService', () => {
         await expect(sixth).rejects.toMatchObject({ status: 429 });
         await expect(sixth).rejects.toBeInstanceOf(HttpException);
         expect(authRepository.updateUser).not.toHaveBeenCalled();
-        expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
-          'user-1',
+        expect(authRepository.deleteTokensByUserEmail).toHaveBeenCalledWith(
+          'test@example.com',
           TokenType.PASSWORD_RESET,
         );
       });
@@ -1009,7 +1010,10 @@ describe('PasswordService', () => {
             r.status === 'rejected' && r.reason instanceof NotFoundException,
         );
         expect(lookedUp).toHaveLength(5);
-        expect(authRepository.findTokenByHashedToken).toHaveBeenCalledTimes(5);
+        const lockedOut = results.filter(
+          (r) => r.status === 'rejected' && r.reason?.getStatus?.() === 429,
+        );
+        expect(lockedOut).toHaveLength(15);
       });
 
       it('clears the counter after a successful reset', async () => {
@@ -1027,6 +1031,381 @@ describe('PasswordService', () => {
 
         expect(redisStore.size).toBe(0);
       });
+    });
+  });
+
+  describe('reset attempt matrix', () => {
+    type Presented =
+      | 'own-live'
+      | 'own-expired'
+      | 'unknown'
+      | 'foreign-live'
+      | 'foreign-expired';
+    type CapState = 'first' | 'last' | 'over';
+    type Entry = 'validate' | 'reset';
+
+    const ownerA = makeUser({ id: 'user-a', email: 'a@example.com' });
+    const ownerB = makeUser({ id: 'user-b', email: 'b@example.com' });
+    const priorFailures: Record<CapState, number> = {
+      first: 0,
+      last: 4,
+      over: 5,
+    };
+    const codeFor: Record<Presented, string> = {
+      'own-live': 'a-live',
+      'own-expired': 'a-old',
+      unknown: 'no-such-code',
+      'foreign-live': 'b-live',
+      'foreign-expired': 'b-old',
+    };
+    const counterKey = (email: string) =>
+      `password-reset:failed:${createHash('sha256').update(email).digest('hex')}`;
+
+    let tokens: Map<string, TokenWithUser>;
+    let repoCalls: string[];
+
+    const seedToken = (code: string, owner: typeof ownerA, expired: boolean) =>
+      tokens.set(code, {
+        ...makeToken({
+          id: `id-${code}`,
+          userId: owner.id,
+          token: `h:${code}`,
+          type: TokenType.PASSWORD_RESET,
+          expiresAt: new Date(Date.now() + (expired ? -1 : 1) * 3600_000),
+        }),
+        user: owner,
+      });
+
+    const flush = async () => {
+      for (let i = 0; i < 10; i++) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+    };
+
+    beforeEach(() => {
+      tokens = new Map();
+      repoCalls = [];
+      seedToken('a-live', ownerA, false);
+      seedToken('a-old', ownerA, true);
+      seedToken('b-live', ownerB, false);
+      seedToken('b-old', ownerB, true);
+
+      const users = [ownerA, ownerB];
+      const record =
+        <A extends unknown[], R>(name: string, fn: (...args: A) => R) =>
+        (...args: A) => {
+          repoCalls.push(name);
+          return fn(...args);
+        };
+      const removeWhere = (match: (t: TokenWithUser) => boolean) => {
+        for (const [code, t] of tokens) if (match(t)) tokens.delete(code);
+      };
+      tokenService.hashToken.mockImplementation((code: string) => `h:${code}`);
+      authRepository.findUserByEmail.mockImplementation(
+        record('findUserByEmail', (email: string) =>
+          Promise.resolve(users.find((u) => u.email === email) ?? null),
+        ),
+      );
+      authRepository.findTokenByHashedToken.mockImplementation(
+        record('findTokenByHashedToken', (hash: string) =>
+          Promise.resolve(
+            [...tokens.values()].find((t) => t.token === hash) ?? null,
+          ),
+        ),
+      );
+      authRepository.deleteToken.mockImplementation(
+        record('deleteToken', (id: string) => {
+          const before = tokens.size;
+          removeWhere((t) => t.id === id);
+          return before === tokens.size
+            ? Promise.reject(new Error('Record to delete does not exist.'))
+            : Promise.resolve();
+        }),
+      );
+      authRepository.deleteUserTokensByType.mockImplementation(
+        record('deleteUserTokensByType', (userId: string) => {
+          removeWhere((t) => t.userId === userId);
+          return Promise.resolve();
+        }),
+      );
+      authRepository.deleteTokensByUserEmail.mockImplementation(
+        record('deleteTokensByUserEmail', (email: string) => {
+          removeWhere(
+            (t) => t.user.email.toLowerCase() === email.trim().toLowerCase(),
+          );
+          return Promise.resolve();
+        }),
+      );
+      authRepository.updateUser.mockImplementation(
+        record('updateUser', () => Promise.resolve(ownerA)),
+      );
+      authRepository.deleteAllUserSessions.mockImplementation(
+        record('deleteAllUserSessions', () => Promise.resolve()),
+      );
+
+      const redisClient = (service as unknown as { redis: RedisService }).redis
+        .client as unknown as { multi: jest.Mock };
+      const realMulti = redisClient.multi.getMockImplementation()!;
+      redisClient.multi.mockImplementation(() => {
+        const chain = realMulti() as { exec: () => Promise<unknown> };
+        const exec = chain.exec;
+        chain.exec = () =>
+          new Promise((resolve) => setImmediate(() => resolve(exec())));
+        return chain;
+      });
+    });
+
+    const run = async (
+      entry: Entry,
+      email: string,
+      presented: Presented,
+      state: CapState,
+    ) => {
+      redisStore.set(counterKey('a@example.com'), priorFailures[state]);
+      redisTtls.set(counterKey('a@example.com'), 3600);
+      const code = codeFor[presented];
+      let preResponseCalls: string[] = [];
+      const call =
+        entry === 'validate'
+          ? service.validateResetToken(code, email, { token: code, email })
+          : service.resetPassword(code, email, 'NewPass1#', {
+              token: code,
+              email,
+              newPassword: 'NewPass1#',
+            });
+      const outcome = await call.then(
+        (body): { status: number; body: unknown } => {
+          preResponseCalls = [...repoCalls];
+          return { status: 200, body };
+        },
+        (error: unknown) => {
+          if (!(error instanceof HttpException)) throw error;
+          preResponseCalls = [...repoCalls];
+          return { status: error.getStatus(), body: error.getResponse() };
+        },
+      );
+      await flush();
+      return {
+        ...outcome,
+        preResponseCalls,
+        remaining: [...tokens.keys()].sort(),
+        counterA: redisStore.get(counterKey('a@example.com')),
+        counterB: redisStore.get(counterKey('b@example.com')),
+      };
+    };
+
+    const NOT_FOUND = new NotFoundException(
+      'Invalid reset token',
+    ).getResponse();
+    const EXPIRED = new UnauthorizedException(
+      'Reset token has expired',
+    ).getResponse();
+    const LOCKED = new HttpException(
+      'Too many failed reset attempts. Try again later.',
+      429,
+    ).getResponse();
+    const ALL = ['a-live', 'a-old', 'b-live', 'b-old'];
+    const without = (...codes: string[]) =>
+      ALL.filter((c) => !codes.includes(c));
+
+    type Expected = {
+      status: number;
+      body: unknown;
+      remaining: string[];
+      counterA: number | undefined;
+      counterB: number | undefined;
+    };
+
+    const expectedFor = (
+      entry: Entry,
+      emailOwnsA: boolean,
+      presented: Presented,
+      state: CapState,
+    ): Expected => {
+      const charged = priorFailures[state] + 1;
+      const foreign = presented.startsWith('foreign') ? 1 : undefined;
+      if (state === 'over') {
+        const revokedPresented =
+          presented === 'unknown' ? [] : [codeFor[presented]];
+        return {
+          status: 429,
+          body: LOCKED,
+          remaining: without(
+            ...revokedPresented,
+            ...(emailOwnsA ? ['a-live', 'a-old'] : []),
+          ),
+          counterA: charged,
+          counterB: foreign,
+        };
+      }
+      switch (presented) {
+        case 'own-live':
+          return {
+            status: 200,
+            body: {
+              message:
+                entry === 'validate'
+                  ? 'Valid reset token'
+                  : 'Password has been reset successfully',
+            },
+            remaining: entry === 'validate' ? ALL : without('a-live'),
+            counterA: undefined,
+            counterB: undefined,
+          };
+        case 'own-expired':
+          return {
+            status: 401,
+            body: EXPIRED,
+            remaining: without('a-old'),
+            counterA: charged,
+            counterB: undefined,
+          };
+        default:
+          return {
+            status: 404,
+            body: NOT_FOUND,
+            remaining: ALL,
+            counterA: charged,
+            counterB: foreign,
+          };
+      }
+    };
+
+    const emails = [
+      { label: 'owner email', email: 'a@example.com', ownsA: true },
+      {
+        label: 'owner email in other casing',
+        email: 'A@Example.com',
+        ownsA: true,
+      },
+      {
+        label: 'email with no account',
+        email: 'ghost@example.com',
+        ownsA: false,
+      },
+    ];
+    const presentedCases: Presented[] = [
+      'own-live',
+      'own-expired',
+      'unknown',
+      'foreign-live',
+      'foreign-expired',
+    ];
+    const rows = (['validate', 'reset'] as Entry[]).flatMap((entry) =>
+      emails.flatMap(({ label, email, ownsA }) =>
+        (['first', 'last', 'over'] as CapState[]).flatMap((state) =>
+          presentedCases
+            .filter((p) => ownsA || !p.startsWith('own'))
+            .map((presented) => ({
+              entry,
+              label,
+              email,
+              presented,
+              state,
+              expected: expectedFor(entry, ownsA, presented, state),
+            })),
+        ),
+      ),
+    );
+
+    it.each(rows)(
+      '$entry: $label, $state attempt, $presented code',
+      async ({ entry, email, presented, state, expected }) => {
+        if (!email.startsWith('a') && !email.startsWith('A')) {
+          redisStore.set(counterKey(email), priorFailures[state]);
+          redisTtls.set(counterKey(email), 3600);
+        }
+
+        const result = await run(entry, email, presented, state);
+
+        expect({
+          status: result.status,
+          body: result.body,
+          remaining: result.remaining,
+          counterA: email.startsWith('g')
+            ? redisStore.get(counterKey(email))
+            : result.counterA,
+          counterB: result.counterB,
+        }).toEqual(expected);
+        expect(authRepository.updateUser).toHaveBeenCalledTimes(
+          entry === 'reset' && expected.status === 200 ? 1 : 0,
+        );
+      },
+    );
+
+    it.each(
+      (['validate', 'reset'] as Entry[]).flatMap((entry) =>
+        emails.flatMap(({ label, email }) =>
+          (['first', 'last', 'over'] as CapState[]).map((state) => ({
+            entry,
+            label,
+            email,
+            state,
+          })),
+        ),
+      ),
+    )(
+      '$entry: $label, $state attempt answers foreign and unknown codes alike',
+      async ({ entry, email, state }) => {
+        const answers = [];
+        for (const presented of [
+          'unknown',
+          'foreign-live',
+          'foreign-expired',
+        ] as Presented[]) {
+          tokens.clear();
+          seedToken('a-live', ownerA, false);
+          seedToken('a-old', ownerA, true);
+          seedToken('b-live', ownerB, false);
+          seedToken('b-old', ownerB, true);
+          redisStore.clear();
+          redisStore.set(counterKey(email.toLowerCase()), priorFailures[state]);
+          repoCalls = [];
+          const { status, body, preResponseCalls } = await run(
+            entry,
+            email,
+            presented,
+            state,
+          );
+          answers.push({ status, body, preResponseCalls });
+        }
+
+        expect(answers[1]).toEqual(answers[0]);
+        expect(answers[2]).toEqual(answers[0]);
+      },
+    );
+
+    it('never logs an email or a code on any path', async () => {
+      const spies = (['log', 'error', 'warn', 'debug', 'verbose'] as const).map(
+        (level) =>
+          jest
+            .spyOn(Logger.prototype, level)
+            .mockImplementation(() => undefined),
+      );
+      const deleteToken = authRepository.deleteToken.getMockImplementation()!;
+      authRepository.deleteToken.mockImplementation((id: string) =>
+        id.startsWith('id-b')
+          ? Promise.reject(new Error('db unavailable'))
+          : deleteToken(id),
+      );
+
+      for (const { entry, email, presented, state } of rows) {
+        redisStore.clear();
+        await run(entry, email, presented, state);
+      }
+
+      const logged = JSON.stringify(spies.map((spy) => spy.mock.calls));
+      for (const secret of [
+        'a@example.com',
+        'A@Example.com',
+        'b@example.com',
+        'ghost@example.com',
+        ...Object.values(codeFor),
+      ]) {
+        expect(logged).not.toContain(secret);
+      }
+      expect(logged).toContain('db unavailable');
+      spies.forEach((spy) => spy.mockRestore());
     });
   });
 
