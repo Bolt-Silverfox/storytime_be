@@ -100,4 +100,20 @@ describe('GuestStoryController credit fields', () => {
       expect(res[k]).toBeNull();
     }
   });
+
+  it('public-domain stories do not expose sourceName/sourceUrl but keep the credit', async () => {
+    const pd = {
+      ...fullStory,
+      sourceName: 'gutenberg',
+      sourceUrl: 'https://upstream.example/ebooks/1',
+      licenseCode: 'PD-US',
+      attributionText: 'T by A. Public domain in the United States.',
+    };
+    const res: any = await build(pd).getStoryForGuest('s1', sid);
+    expect(res.sourceName).toBeNull();
+    expect(res.sourceUrl).toBeNull();
+    expect(res.attributionText).toContain('Public domain');
+    expect(res.licenseCode).toBe('PD-US');
+    expect(res.authorName).toBe('A. Author');
+  });
 });
