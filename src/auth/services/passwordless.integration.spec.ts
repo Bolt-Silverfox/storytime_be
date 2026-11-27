@@ -51,9 +51,11 @@ maybe('PasswordlessService against Postgres', () => {
   const waitForBlockedStatement = async (
     queryLike: string,
     timeoutMs = LOCK_OBSERVATION_MS,
+    stop?: AbortSignal,
   ) => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
+      if (stop?.aborted) return;
       const blocked = await prisma.$queryRaw<Array<{ pid: number }>>`
         SELECT pid FROM pg_stat_activity
         WHERE datname = current_database()
@@ -110,6 +112,44 @@ maybe('PasswordlessService against Postgres', () => {
           : bound(target)[key as never],
     });
     return { client, reached: reachedStep, release };
+  };
+
+  const blockedUnlessSettled = async (
+    operation: Promise<unknown>,
+    queryLike: string,
+  ) => {
+    const stop = new AbortController();
+    const observer = waitForBlockedStatement(
+      queryLike,
+      LOCK_OBSERVATION_MS,
+      stop.signal,
+    );
+    try {
+      await Promise.race([operation, observer]);
+    } finally {
+      stop.abort();
+      await observer.catch(() => undefined);
+    }
+  };
+
+  const untilReached = async (
+    reached: Promise<void>,
+    operation: Promise<unknown>,
+    release: () => void,
+  ) => {
+    const settledFirst = operation.then((outcome) => {
+      throw new Error(
+        `operation settled before reaching the gate: ${String(outcome)}`,
+      );
+    });
+    settledFirst.catch(() => undefined);
+    try {
+      await Promise.race([reached, settledFirst]);
+    } catch (error) {
+      release();
+      await operation;
+      throw error;
+    }
   };
 
   const releaseAfter = async (
@@ -695,7 +735,10 @@ maybe('PasswordlessService against Postgres', () => {
         googleId: `pwl-it-dup-g-${stamp}`,
         appleId: null,
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      code: 'P2002',
+      meta: { target: ['googleId'] },
+    });
 
     const after = await prisma.user.findUniqueOrThrow({
       where: { id: victim.id },
@@ -921,8 +964,11 @@ maybe('PasswordlessService against Postgres', () => {
       });
 
       const { code } = await issue(attackerEmail);
-      await service.verify(attackerEmail, code, '32.0.2.1');
+      const res = await service.verify(attackerEmail, code, '32.0.2.1');
 
+      expect(res.isNewUser).toBe(true);
+      expect(res.user.email).toBe(attackerEmail);
+      expect([victim.id, matching.id]).not.toContain(res.user.id);
       const after = await prisma.user.findUniqueOrThrow({
         where: { id: victim.id },
       });
@@ -1483,7 +1529,7 @@ maybe('PasswordlessService against Postgres', () => {
       const { user, session } = await seedAttacker('cpd1');
 
       const change = changeFor(passwords, user, session);
-      await gated.reached;
+      await untilReached(gated.reached, change, gated.release);
       const takeover = authRepo
         .takeOverUnverifiedAccount(user, rotate)
         .catch((error: unknown) => error);
@@ -1516,7 +1562,7 @@ maybe('PasswordlessService against Postgres', () => {
       const takeover = authRepo
         .takeOverUnverifiedAccount(user, rotate)
         .catch((error: unknown) => error);
-      await gated.reached;
+      await untilReached(gated.reached, takeover, gated.release);
       const change = changeFor(passwords, user, session);
       await releaseAfter(
         waitForBlockedStatement('UPDATE%"users"%'),
@@ -1665,7 +1711,7 @@ maybe('PasswordlessService against Postgres', () => {
           session.id,
         )
         .catch((error: unknown) => error);
-      await reached;
+      await untilReached(reached, register, release);
 
       const takeover = authRepo
         .takeOverUnverifiedAccount(user, takeoverData)
@@ -1699,13 +1745,13 @@ maybe('PasswordlessService against Postgres', () => {
           session.id,
         )
         .catch((error: unknown) => error);
-      await reached;
+      await untilReached(reached, register, release);
 
       const takeover = authRepo
         .takeOverUnverifiedAccount(user, takeoverData)
         .catch((error: unknown) => error);
       await releaseAfter(
-        Promise.race([takeover, waitForBlockedStatement('DELETE%"sessions"%')]),
+        blockedUnlessSettled(takeover, 'DELETE%"sessions"%'),
         release,
         [register, takeover],
       );
@@ -1735,7 +1781,7 @@ maybe('PasswordlessService against Postgres', () => {
           session.id,
         )
         .catch((error: unknown) => error);
-      await reached;
+      await untilReached(reached, register, release);
 
       const removal = adminRepo
         .hardDeleteUser(user.id)
@@ -1781,7 +1827,7 @@ maybe('PasswordlessService against Postgres', () => {
       const removal = adminRepo
         .hardDeleteUser(user.id)
         .catch((error: unknown) => error);
-      await gated.reached;
+      await untilReached(gated.reached, removal, gated.release);
       const takeover = authRepo
         .takeOverUnverifiedAccount(user, takeoverData)
         .catch((error: unknown) => error);
@@ -1805,7 +1851,7 @@ maybe('PasswordlessService against Postgres', () => {
       const takeover = authRepo
         .takeOverUnverifiedAccount(user, takeoverData)
         .catch((error: unknown) => error);
-      await gated.reached;
+      await untilReached(gated.reached, takeover, gated.release);
       const removal = adminRepo
         .hardDeleteUser(user.id)
         .catch((error: unknown) => error);
@@ -1853,18 +1899,17 @@ maybe('PasswordlessService against Postgres', () => {
       const unlink = linking
         .unlinkProvider(user.id, 'google')
         .catch((error: unknown) => error);
-      await gated.reached;
+      await untilReached(gated.reached, unlink, gated.release);
       const takeover = authRepo
         .takeOverUnverifiedAccount(user, {
           ...takeoverData,
           googleId: ownerGoogleId,
         })
         .catch((error: unknown) => error);
-      await releaseAfter(
-        Promise.race([takeover, waitForBlockedStatement('%')]),
-        gated.release,
-        [unlink, takeover],
-      );
+      await releaseAfter(blockedUnlessSettled(takeover, '%'), gated.release, [
+        unlink,
+        takeover,
+      ]);
       const [unlinked, taken] = await Promise.all([unlink, takeover]);
 
       expect(unlinked).not.toBeInstanceOf(Error);
@@ -1890,15 +1935,14 @@ maybe('PasswordlessService against Postgres', () => {
           googleId: ownerGoogleId,
         })
         .catch((error: unknown) => error);
-      await gated.reached;
+      await untilReached(gated.reached, takeover, gated.release);
       const unlink = linking
         .unlinkProvider(user.id, 'google')
         .catch((error: unknown) => error);
-      await releaseAfter(
-        Promise.race([unlink, waitForBlockedStatement('%')]),
-        gated.release,
-        [takeover, unlink],
-      );
+      await releaseAfter(blockedUnlessSettled(unlink, '%'), gated.release, [
+        takeover,
+        unlink,
+      ]);
       const [taken, unlinked] = await Promise.all([takeover, unlink]);
 
       expect(taken).not.toBeInstanceOf(Error);

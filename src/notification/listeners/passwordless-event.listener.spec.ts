@@ -75,22 +75,45 @@ describe('PasswordlessEventListener', () => {
     expect(data.linkUrl).not.toContain('?');
   });
 
-  it('swallows send failures and logs only the challenge id', async () => {
-    const spies = (['log', 'warn', 'error', 'debug'] as const).map((m) =>
-      jest.spyOn(Logger.prototype, m).mockImplementation(),
-    );
-    const { listener } = build(new Error('smtp down'));
-    await expect(
-      listener.handlePasswordlessRequested(payload),
-    ).resolves.toBeUndefined();
-    const { listener: l2 } = build({ success: false, error: 'bad' });
-    await l2.handlePasswordlessRequested(payload);
+  const leakingFailures: Array<
+    [string, { success: boolean; error?: string } | Error]
+  > = [
+    [
+      'a rejected send',
+      new Error(
+        `smtp rejected ${payload.email}: code ${payload.code}, link ${payload.linkToken}`,
+      ),
+    ],
+    [
+      'an unsuccessful result',
+      {
+        success: false,
+        error: `bounced ${payload.email} code=${payload.code} t=${payload.linkToken}`,
+      },
+    ],
+  ];
 
-    const logged = JSON.stringify(spies.flatMap((s) => s.mock.calls));
-    expect(logged).toContain(payload.challengeId);
-    expect(logged).not.toContain(payload.code);
-    expect(logged).not.toContain(payload.linkToken);
-    expect(logged).not.toContain('secret.person');
-    jest.restoreAllMocks();
-  });
+  it.each(leakingFailures)(
+    'swallows %s and logs only the challenge id',
+    async (_label, failure) => {
+      const spies = (['log', 'warn', 'error', 'debug', 'verbose'] as const).map(
+        (m) => jest.spyOn(Logger.prototype, m).mockImplementation(),
+      );
+      try {
+        const { listener } = build(failure);
+
+        await expect(
+          listener.handlePasswordlessRequested(payload),
+        ).resolves.toBeUndefined();
+
+        const logged = JSON.stringify(spies.flatMap((s) => s.mock.calls));
+        expect(logged).toContain(payload.challengeId);
+        expect(logged).not.toContain(payload.code);
+        expect(logged).not.toContain(payload.linkToken);
+        expect(logged).not.toContain('secret.person');
+      } finally {
+        jest.restoreAllMocks();
+      }
+    },
+  );
 });
