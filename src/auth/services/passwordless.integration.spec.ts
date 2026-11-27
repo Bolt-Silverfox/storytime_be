@@ -114,7 +114,7 @@ maybe('PasswordlessService against Postgres', () => {
     return { client, reached: reachedStep, release };
   };
 
-  const blockedUnlessSettled = async (
+  const blockedBeforeSettled = async (
     operation: Promise<unknown>,
     queryLike: string,
   ) => {
@@ -124,8 +124,14 @@ maybe('PasswordlessService against Postgres', () => {
       LOCK_OBSERVATION_MS,
       stop.signal,
     );
+    const settledFirst = operation.then((outcome) => {
+      throw new Error(
+        `operation settled before blocking on a lock: ${String(outcome)}`,
+      );
+    });
+    settledFirst.catch(() => undefined);
     try {
-      await Promise.race([operation, observer]);
+      await Promise.race([observer, settledFirst]);
     } finally {
       stop.abort();
       await observer.catch(() => undefined);
@@ -1774,7 +1780,7 @@ maybe('PasswordlessService against Postgres', () => {
         .takeOverUnverifiedAccount(user, takeoverData)
         .catch((error: unknown) => error);
       await releaseAfter(
-        blockedUnlessSettled(takeover, 'DELETE%"sessions"%'),
+        blockedBeforeSettled(takeover, 'DELETE%"sessions"%'),
         release,
         [register, takeover],
       );
@@ -1929,7 +1935,7 @@ maybe('PasswordlessService against Postgres', () => {
           googleId: ownerGoogleId,
         })
         .catch((error: unknown) => error);
-      await releaseAfter(blockedUnlessSettled(takeover, '%'), gated.release, [
+      await releaseAfter(blockedBeforeSettled(takeover, '%'), gated.release, [
         unlink,
         takeover,
       ]);
@@ -1962,7 +1968,7 @@ maybe('PasswordlessService against Postgres', () => {
       const unlink = linking
         .unlinkProvider(user.id, 'google')
         .catch((error: unknown) => error);
-      await releaseAfter(blockedUnlessSettled(unlink, '%'), gated.release, [
+      await releaseAfter(blockedBeforeSettled(unlink, '%'), gated.release, [
         takeover,
         unlink,
       ]);
@@ -1970,6 +1976,9 @@ maybe('PasswordlessService against Postgres', () => {
 
       expect(taken).not.toBeInstanceOf(Error);
       expect(unlinked).toBeInstanceOf(BadRequestException);
+      expect((unlinked as BadRequestException).message).toBe(
+        'Cannot unlink. You must have at least one linked sign-in method.',
+      );
       const after = await prisma.user.findUniqueOrThrow({
         where: { id: user.id },
       });
