@@ -3,6 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AccountAlreadyVerifiedError } from './account-already-verified.error';
 import { AmbiguousEmailAccountError } from './ambiguous-email-account.error';
 import { TakeoverTargetChangedError } from './takeover-target-changed.error';
+import { InactiveAccountError } from './inactive-account.error';
 import type {
   User,
   Profile,
@@ -300,11 +301,12 @@ export class PrismaAuthRepository implements IAuthRepository {
     expiresAt: Date;
   }): Promise<Session> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${data.userId} FOR SHARE`;
-      const unverified = await tx.user.count({
-        where: { id: data.userId, isEmailVerified: false },
-      });
-      if (unverified === 0) throw new AccountAlreadyVerifiedError();
+      const [row] = await tx.$queryRaw<
+        Array<{ isEmailVerified: boolean; active: boolean }>
+      >`SELECT "isEmailVerified", (NOT "isSuspended" AND NOT "isDeleted") AS "active"
+        FROM "users" WHERE "id" = ${data.userId} FOR SHARE`;
+      if (!row || row.isEmailVerified) throw new AccountAlreadyVerifiedError();
+      if (!row.active) throw new InactiveAccountError();
       return tx.session.create({ data });
     });
   }
@@ -313,12 +315,30 @@ export class PrismaAuthRepository implements IAuthRepository {
     data: { userId: string; token: string; expiresAt: Date },
     email: string,
   ): Promise<Session> {
+    return this.createSessionForActiveRow(data, email);
+  }
+
+  async createSessionForActiveUser(data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<Session> {
+    return this.createSessionForActiveRow(data, null);
+  }
+
+  private createSessionForActiveRow(
+    data: { userId: string; token: string; expiresAt: Date },
+    email: string | null,
+  ): Promise<Session> {
     return this.prisma.$transaction(async (tx) => {
-      const bound = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT "id" FROM "users"
-        WHERE "id" = ${data.userId} AND lower("email") = lower(${email})
+      const [row] = await tx.$queryRaw<Array<{ active: boolean }>>`
+        SELECT (NOT "isSuspended" AND NOT "isDeleted") AS "active"
+        FROM "users"
+        WHERE "id" = ${data.userId}
+          AND (${email}::text IS NULL OR lower("email") = lower(${email}::text))
         FOR SHARE`;
-      if (bound.length === 0) throw new TakeoverTargetChangedError();
+      if (!row) throw new TakeoverTargetChangedError();
+      if (!row.active) throw new InactiveAccountError();
       return tx.session.create({ data });
     });
   }

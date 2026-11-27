@@ -14,6 +14,7 @@ import {
 } from '../repositories/prisma-auth.repository';
 import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
 import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
+import { InactiveAccountError } from '../repositories/inactive-account.error';
 import { PrismaLoginChallengeRepository } from '../repositories/prisma-login-challenge.repository';
 import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
@@ -2168,6 +2169,110 @@ maybe('PasswordlessService against Postgres', () => {
 
       expect(res.user.id).not.toBe(user.id);
       expect(res.user.email).toBe(user.email);
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        0,
+      );
+    });
+  });
+
+  describe('account suspended or deleted during sign-in', () => {
+    const activeUser = async (isEmailVerified: boolean) =>
+      prisma.user.create({
+        data: {
+          email: `pwl-it-st-${run}-${++n}@example.com`,
+          passwordHash: 'owner-hash',
+          isEmailVerified,
+        },
+      });
+    const sessionData = (userId: string) => ({
+      userId,
+      token: crypto.randomUUID(),
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    const flags = [
+      ['isSuspended', { isSuspended: true, suspendedAt: new Date() }],
+      ['isDeleted', { isDeleted: true, deletedAt: new Date() }],
+    ] as const;
+
+    it.each(flags)(
+      'refuses an email-bound session paused behind a change to %s that then commits',
+      async (_flag, change) => {
+        const authRepo = new PrismaAuthRepository(prisma as never);
+        const user = await activeUser(true);
+        let create: Promise<unknown> = Promise.resolve();
+
+        await prisma.$transaction(async (tx) => {
+          await tx.user.update({ where: { id: user.id }, data: change });
+          create = authRepo
+            .createSessionForEmail(sessionData(user.id), user.email)
+            .then(
+              () => null,
+              (e: unknown) => e,
+            );
+          await waitForBlockedStatement('%FOR SHARE%');
+        });
+
+        expect(await create).toBeInstanceOf(InactiveAccountError);
+        expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+          0,
+        );
+      },
+    );
+
+    it.each(flags)(
+      'refuses a registration session for an account whose %s flag is set',
+      async (_flag, change) => {
+        const authRepo = new PrismaAuthRepository(prisma as never);
+        const user = await activeUser(false);
+        await prisma.user.update({ where: { id: user.id }, data: change });
+
+        await expect(
+          authRepo.createSessionForUnverifiedUser(sessionData(user.id)),
+        ).rejects.toBeInstanceOf(InactiveAccountError);
+        expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+          0,
+        );
+      },
+    );
+
+    it('answers a code for an account suspended after its status check with the generic error and no session', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const user = await activeUser(true);
+      const racingRepo = Object.create(authRepo) as PrismaAuthRepository;
+      racingRepo.countKidsByParentId = async (id: string) => {
+        await prisma.user.update({
+          where: { id },
+          data: { isSuspended: true, suspendedAt: new Date() },
+        });
+        return authRepo.countKidsByParentId(id);
+      };
+      const events = new EventEmitter2();
+      const codes: string[] = [];
+      events.on('passwordless.requested', (p: { code: string }) =>
+        codes.push(p.code),
+      );
+      const racing = new PasswordlessService(
+        {
+          get: (k: string) => ({ PASSWORDLESS_PEPPER: 'p'.repeat(40) })[k],
+        } as never,
+        new PrismaLoginChallengeRepository(prisma as never),
+        new PasswordlessThrottleService(new InMemoryRedis() as never),
+        racingRepo,
+        new TokenService(new JwtService({ secret: 's' }), racingRepo),
+        { hashPassword: () => Promise.resolve('hashed-random') } as never,
+        events,
+        { carryOver: () => Promise.resolve() } as never,
+      );
+      await racing.request(user.email, '10.9.9.8');
+
+      const outcome = await racing
+        .verify(user.email, codes[0], '10.9.9.8')
+        .catch((error: unknown) => error);
+
+      expect(outcome).toBeInstanceOf(BadRequestException);
+      expect((outcome as BadRequestException).message).toBe(
+        'Invalid or expired code',
+      );
       expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
         0,
       );

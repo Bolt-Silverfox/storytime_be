@@ -6,6 +6,7 @@ import {
 import { AccountAlreadyVerifiedError } from '@/auth/repositories/account-already-verified.error';
 import { TakeoverTargetChangedError } from '@/auth/repositories/takeover-target-changed.error';
 import { AmbiguousEmailAccountError } from '@/auth/repositories/ambiguous-email-account.error';
+import { InactiveAccountError } from '@/auth/repositories/inactive-account.error';
 import type { User, Profile, Avatar, Session } from '@prisma/client';
 import type {
   ILoginChallengeRepository,
@@ -168,7 +169,10 @@ export class InMemoryRedis {
           const cur = live(k);
           const next = {
             n: (cur?.n ?? 0) + 1,
-            expiresAt: cur?.expiresAt ?? now + Number(limits[i * 2]),
+            expiresAt:
+              cur && cur.expiresAt !== Infinity
+                ? cur.expiresAt
+                : now + Number(limits[i * 2]),
           };
           this.store.set(k, next);
           return next.n;
@@ -193,8 +197,13 @@ export class InMemoryRedis {
         this.store.set(key, { n: 1, expiresAt: now + Number(ttlMs) });
         return Promise.resolve(1);
       }
-      cur.n += 1;
-      return Promise.resolve(cur.n);
+      const next = {
+        n: cur.n + 1,
+        expiresAt:
+          cur.expiresAt === Infinity ? now + Number(ttlMs) : cur.expiresAt,
+      };
+      this.store.set(key, next);
+      return Promise.resolve(next.n);
     },
     decr: (key: string): Promise<number> => {
       if (this.stalls('decr')) return new Promise(() => undefined);
@@ -204,8 +213,8 @@ export class InMemoryRedis {
         this.store.set(key, { n: -1, expiresAt: Infinity });
         return Promise.resolve(-1);
       }
-      cur.n -= 1;
-      return Promise.resolve(cur.n);
+      this.store.set(key, { n: cur.n - 1, expiresAt: cur.expiresAt });
+      return Promise.resolve(cur.n - 1);
     },
     set: (
       key: string,
@@ -373,7 +382,7 @@ export class InMemoryAuthRepository {
       (x) => x.id === id && x.email.toLowerCase() === email.toLowerCase(),
     );
     if (!u) return Promise.reject(new TakeoverTargetChangedError());
-    if (u.isEmailVerified) {
+    if (u.isEmailVerified || u.isSuspended || u.isDeleted) {
       return Promise.reject(new AccountAlreadyVerifiedError());
     }
     this.sessions = this.sessions.filter((s) => s.userId !== id);
@@ -409,19 +418,39 @@ export class InMemoryAuthRepository {
     if (!u || u.isEmailVerified) {
       return Promise.reject(new AccountAlreadyVerifiedError());
     }
+    if (u.isSuspended || u.isDeleted) {
+      return Promise.reject(new InactiveAccountError());
+    }
     return this.createSession(data);
   };
 
   createSessionForEmail = (
     data: { userId: string; token: string; expiresAt: Date },
     email: string,
-  ) => {
+  ) => this.createSessionIfActive(data, email);
+
+  createSessionForActiveUser = (data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }) => this.createSessionIfActive(data, null);
+
+  private createSessionIfActive(
+    data: { userId: string; token: string; expiresAt: Date },
+    email: string | null,
+  ) {
     const u = this.users.find((x) => x.id === data.userId);
-    if (!u || u.email.toLowerCase() !== email.toLowerCase()) {
+    if (
+      !u ||
+      (email !== null && u.email.toLowerCase() !== email.toLowerCase())
+    ) {
       return Promise.reject(new TakeoverTargetChangedError());
     }
+    if (u.isSuspended || u.isDeleted) {
+      return Promise.reject(new InactiveAccountError());
+    }
     return this.createSession(data);
-  };
+  }
 
   recordLastLogin = () => Promise.resolve();
 }

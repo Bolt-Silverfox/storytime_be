@@ -18,6 +18,7 @@ import { AppEvents, UserEmailVerifiedEvent } from '@/shared/events/app-events';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
 import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
+import { InactiveAccountError } from '../repositories/inactive-account.error';
 import {
   AUTH_REPOSITORY,
   IAuthRepository,
@@ -243,9 +244,15 @@ export class OAuthService {
 
     const userDto = new UserDto({ ...user, numberOfKids });
     const tokenData = await this.tokenService
-      .createTokenPair(userDto, boundEmail ? { boundEmail } : undefined)
+      .createTokenPair(
+        userDto,
+        boundEmail ? { boundEmail } : { requireActive: true },
+      )
       .catch((error: unknown) => {
-        if (error instanceof TakeoverTargetChangedError) {
+        if (
+          error instanceof TakeoverTargetChangedError ||
+          error instanceof InactiveAccountError
+        ) {
           throw new UnauthorizedException('This account is not available.');
         }
         throw error;

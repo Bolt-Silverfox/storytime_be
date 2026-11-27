@@ -1133,6 +1133,38 @@ describe('PasswordlessService', () => {
       expect(authRepo.sessions).toHaveLength(0);
     });
 
+    it.each([
+      ['code', 'isSuspended'],
+      ['code', 'isDeleted'],
+      ['link', 'isSuspended'],
+      ['link', 'isDeleted'],
+    ] as const)(
+      'issues no session through the %s when %s is set after the status check',
+      async (via, flag) => {
+        quiet();
+        const { service, captured, authRepo } = build();
+        const owner = await authRepo.createUser({
+          email: 'target@example.com',
+          passwordHash: 'h',
+          isEmailVerified: true,
+          role: 'parent',
+        });
+        jest.spyOn(authRepo, 'countKidsByParentId').mockImplementation(() => {
+          owner[flag] = true;
+          return Promise.resolve(0);
+        });
+        await service.request('target@example.com', '1.1.1.1');
+
+        await expectGeneric(
+          via === 'code'
+            ? service.verify('target@example.com', captured[0].code, '41.0.0.1')
+            : service.consume(captured[0].linkToken, '41.0.0.1'),
+        );
+
+        expect(authRepo.sessions).toHaveLength(0);
+      },
+    );
+
     it('still signs a mixed-case stored account in', async () => {
       const { service, captured, authRepo } = build();
       await authRepo.createUser({

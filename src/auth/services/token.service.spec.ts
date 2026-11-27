@@ -59,6 +59,7 @@ describe('TokenService', () => {
       createSession: jest.fn(),
       createSessionForUnverifiedUser: jest.fn(),
       createSessionForEmail: jest.fn(),
+      createSessionForActiveUser: jest.fn(),
       recordLastLogin: jest.fn().mockResolvedValue(undefined),
       findSessionByToken: jest.fn(),
       findSessionById: jest.fn(),
@@ -100,6 +101,17 @@ describe('TokenService', () => {
       expect(authRepository.createSessionForEmail).toHaveBeenCalledWith(
         expect.objectContaining({ userId: mockUser.id }),
         'a@example.com',
+      );
+      expect(authRepository.createSession).not.toHaveBeenCalled();
+    });
+
+    it('creates the session only for an account still active when asked', async () => {
+      authRepository.createSessionForActiveUser.mockResolvedValue(mockSession);
+
+      await service.createTokenPair(mockUser, { requireActive: true });
+
+      expect(authRepository.createSessionForActiveUser).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: mockUser.id }),
       );
       expect(authRepository.createSession).not.toHaveBeenCalled();
     });

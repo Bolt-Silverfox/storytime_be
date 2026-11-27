@@ -40,7 +40,11 @@ export class TokenService {
    */
   async createTokenPair(
     user: UserDto,
-    options?: { requireUnverified?: boolean; boundEmail?: string },
+    options?: {
+      requireUnverified?: boolean;
+      boundEmail?: string;
+      requireActive?: boolean;
+    },
   ): Promise<TokenPair> {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRES_IN_DAYS);
@@ -58,7 +62,9 @@ export class TokenService {
             sessionData,
             options.boundEmail,
           )
-        : await this.authRepository.createSession(sessionData);
+        : options?.requireActive
+          ? await this.authRepository.createSessionForActiveUser(sessionData)
+          : await this.authRepository.createSession(sessionData);
 
     // Every new Session is a successful login (password, OAuth, registration
     // auto-sign-in); refresh reuses a session and never gets here.

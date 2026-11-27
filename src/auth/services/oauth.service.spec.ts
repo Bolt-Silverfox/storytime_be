@@ -16,6 +16,7 @@ import { Role } from '@prisma/client';
 import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
 import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
 import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
+import { InactiveAccountError } from '../repositories/inactive-account.error';
 import appleSigninAuth from 'apple-signin-auth';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents } from '@/shared/events/app-events';
@@ -436,8 +437,40 @@ describe('OAuthService', () => {
 
         await service.loginWithGoogleIdToken('valid-token');
 
-        expect(tokenService.createTokenPair.mock.calls[0][1]).toBeUndefined();
+        expect(tokenService.createTokenPair.mock.calls[0][1]).toEqual({
+          requireActive: true,
+        });
       });
+
+      it.each([
+        ['matched by email', matchByEmail],
+        [
+          'matched by provider id',
+          () => {
+            googleClient.verifyIdToken.mockResolvedValue({
+              getPayload: () => ({
+                sub: 'google-123',
+                email: 'other@example.com',
+                email_verified: true,
+              }),
+            });
+            authRepository.findUserByGoogleId.mockResolvedValue(mockUser);
+            authRepository.countKidsByParentId.mockResolvedValue(0);
+          },
+        ],
+      ])(
+        'answers 401 when the account %s was suspended before the session was created',
+        async (_label, arrange) => {
+          arrange();
+          tokenService.createTokenPair.mockRejectedValue(
+            new InactiveAccountError(),
+          );
+
+          await expect(
+            service.loginWithGoogleIdToken('valid-token'),
+          ).rejects.toThrow(UnauthorizedException);
+        },
+      );
     });
 
     it('refuses without linking or issuing tokens when several verified accounts match the email', async () => {

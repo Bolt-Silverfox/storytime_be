@@ -141,6 +141,11 @@ export interface IAuthRepository {
     data: { userId: string; token: string; expiresAt: Date },
     email: string,
   ): Promise<Session>;
+  createSessionForActiveUser(data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<Session>;
   /**
    * Stamp User.lastLoginAt = now for an active (not suspended / deleted) user.
    * Callers treat this as best-effort.

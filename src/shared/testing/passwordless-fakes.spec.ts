@@ -4,6 +4,8 @@ import {
   InMemoryRedis,
 } from './passwordless-fakes';
 import { AmbiguousEmailAccountError } from '@/auth/repositories/ambiguous-email-account.error';
+import { AccountAlreadyVerifiedError } from '@/auth/repositories/account-already-verified.error';
+import { InactiveAccountError } from '@/auth/repositories/inactive-account.error';
 import {
   ADMIT_WITHIN_LIMITS,
   DECR_CLAMPED,
@@ -308,6 +310,150 @@ describe('InMemoryRedis admission', () => {
     expect(await client.get('a')).toBe('1');
     expect(await client.get('b')).toBeNull();
     expect(await client.get('spent')).toBe('3');
+  });
+});
+
+describe('InMemoryRedis counters after SET, like Redis', () => {
+  afterEach(() => jest.useRealTimers());
+
+  it.each([
+    ['INCR_WITH_EXPIRY', INCR_WITH_EXPIRY, '20'],
+    ['DECR_CLAMPED', DECR_CLAMPED, '18'],
+  ])(
+    'reads back the value %s returned and keeps the expiry SET gave',
+    async (_name, script, expected) => {
+      jest.useFakeTimers({ now: NOW });
+      const { client } = new InMemoryRedis();
+      await client.set('k', '19', 'PX', 1000);
+
+      expect(String(await client.eval(script, 1, 'k', '60000'))).toBe(expected);
+      expect(await client.get('k')).toBe(expected);
+      jest.advanceTimersByTime(1001);
+      expect(await client.get('k')).toBeNull();
+    },
+  );
+
+  it('reads back the value a raw DECR returned and keeps the expiry', async () => {
+    jest.useFakeTimers({ now: NOW });
+    const { client } = new InMemoryRedis();
+    await client.set('k', '19', 'PX', 1000);
+
+    expect(await client.decr('k')).toBe(18);
+    expect(await client.get('k')).toBe('18');
+    jest.advanceTimersByTime(1001);
+    expect(await client.get('k')).toBeNull();
+  });
+
+  it.each([
+    [
+      'INCR_WITH_EXPIRY',
+      (c: InMemoryRedis['client']) => c.eval(INCR_WITH_EXPIRY, 1, 'k', '1000'),
+    ],
+    [
+      'ADMIT_WITHIN_LIMITS',
+      (c: InMemoryRedis['client']) =>
+        c.eval(ADMIT_WITHIN_LIMITS, 1, 'k', '1000', '9'),
+    ],
+  ])(
+    'gives a counter a raw DECR left without expiry the window %s sets',
+    async (_name, bump) => {
+      jest.useFakeTimers({ now: NOW });
+      const { client } = new InMemoryRedis();
+      await client.decr('k');
+
+      await bump(client);
+
+      expect(await client.get('k')).toBe('0');
+      jest.advanceTimersByTime(1001);
+      expect(await client.get('k')).toBeNull();
+    },
+  );
+});
+
+describe('InMemoryAuthRepository inactive accounts', () => {
+  const data = (userId: string) => ({
+    userId,
+    token: 't',
+    expiresAt: minutes(60),
+  });
+  const seed = async (
+    repo: InMemoryAuthRepository,
+    flag: 'isSuspended' | 'isDeleted',
+    isEmailVerified: boolean,
+  ) => {
+    const user = await repo.createUser({
+      email: 'a@x.co',
+      passwordHash: 'attacker',
+      isEmailVerified,
+    });
+    user[flag] = true;
+    await repo.createSession(data(user.id));
+    repo.deviceTokens.push({ userId: user.id, token: 'd' });
+    return user;
+  };
+
+  it.each(['isSuspended', 'isDeleted'] as const)(
+    'refuses every session-issuing path for a %s account',
+    async (flag) => {
+      const repo = new InMemoryAuthRepository();
+      const verified = await seed(repo, flag, true);
+      const unverified = await repo.createUser({
+        email: 'b@x.co',
+        passwordHash: 'h',
+        isEmailVerified: false,
+      });
+      unverified[flag] = true;
+      const before = repo.sessions.length;
+
+      await expect(
+        repo.createSessionForEmail(data(verified.id), verified.email),
+      ).rejects.toBeInstanceOf(InactiveAccountError);
+      await expect(
+        repo.createSessionForActiveUser(data(verified.id)),
+      ).rejects.toBeInstanceOf(InactiveAccountError);
+      await expect(
+        repo.createSessionForUnverifiedUser(data(unverified.id)),
+      ).rejects.toBeInstanceOf(InactiveAccountError);
+      expect(repo.sessions).toHaveLength(before);
+    },
+  );
+
+  it.each(['isSuspended', 'isDeleted'] as const)(
+    'refuses a takeover of a %s unverified account without touching it',
+    async (flag) => {
+      const repo = new InMemoryAuthRepository();
+      const user = await seed(repo, flag, false);
+
+      await expect(
+        repo.takeOverUnverifiedAccount(user, {
+          passwordHash: 'rotated',
+          isEmailVerified: true,
+        }),
+      ).rejects.toBeInstanceOf(AccountAlreadyVerifiedError);
+
+      expect(user.passwordHash).toBe('attacker');
+      expect(user.isEmailVerified).toBe(false);
+      expect(repo.sessions).toHaveLength(1);
+      expect(repo.deviceTokens).toHaveLength(1);
+    },
+  );
+
+  it('still takes over an active unverified account at the matching email', async () => {
+    const repo = new InMemoryAuthRepository();
+    const user = await repo.createUser({
+      email: 'a@x.co',
+      passwordHash: 'attacker',
+      isEmailVerified: false,
+    });
+    await repo.createSession(data(user.id));
+
+    await repo.takeOverUnverifiedAccount(user, {
+      passwordHash: 'rotated',
+      isEmailVerified: true,
+    });
+
+    expect(user.passwordHash).toBe('rotated');
+    expect(repo.sessions).toHaveLength(0);
   });
 });
 

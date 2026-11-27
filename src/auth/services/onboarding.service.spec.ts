@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OnboardingService } from './onboarding.service';
-import { NotFoundException } from '@nestjs/common';
+import { NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { InactiveAccountError } from '../repositories/inactive-account.error';
 import {
   AUTH_REPOSITORY,
   IAuthRepository,
@@ -159,6 +160,23 @@ describe('OnboardingService', () => {
           password: 'password123',
         }),
       ).rejects.toThrow('db down');
+    });
+
+    it('answers 401 when the new account was suspended or deleted before its session was created', async () => {
+      authRepository.findUserByEmail.mockResolvedValue(null);
+      passwordService.hashPassword.mockResolvedValue('hashed_password');
+      authRepository.createUser.mockResolvedValue(mockUser);
+      tokenService.createTokenPair.mockRejectedValue(
+        new InactiveAccountError(),
+      );
+
+      await expect(
+        service.register({
+          fullName: 'Test User',
+          email: 'test@example.com',
+          password: 'password123',
+        }),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
     });
   });
 

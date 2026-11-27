@@ -14,6 +14,7 @@ import { UserDto } from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
 import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
+import { InactiveAccountError } from '../repositories/inactive-account.error';
 import {
   ILoginChallengeRepository,
   LOGIN_CHALLENGE_REPOSITORY,
@@ -266,7 +267,14 @@ export class PasswordlessService {
     ip: string | undefined,
     guestSessionId?: string,
   ): Promise<PasswordlessLoginResult> {
+    const refuseInactive = (): never => {
+      this.logger.warn(
+        `Passwordless login refused for inactive account (challenge ${challengeId ?? 'link'})`,
+      );
+      throw this.invalid();
+    };
     const refuseMovedAccount = (error: unknown): never => {
+      if (error instanceof InactiveAccountError) return refuseInactive();
       if (error instanceof TakeoverTargetChangedError) {
         this.logger.warn(
           `Passwordless login refused for account whose email changed (challenge ${challengeId ?? 'link'})`,
@@ -287,12 +295,7 @@ export class PasswordlessService {
       }
       return refuseMovedAccount(error);
     });
-    if (user.isSuspended || user.isDeleted) {
-      this.logger.warn(
-        `Passwordless login refused for inactive account (challenge ${challengeId ?? 'link'})`,
-      );
-      throw this.invalid();
-    }
+    if (user.isSuspended || user.isDeleted) refuseInactive();
     if (!user.isEmailVerified) {
       this.logger.warn(
         `Passwordless login refused for unverified account (challenge ${challengeId ?? 'link'})`,

@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   CompleteProfileDto,
@@ -14,6 +15,7 @@ import {
 } from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
+import { InactiveAccountError } from '../repositories/inactive-account.error';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EmailVerificationService } from './email-verification.service';
@@ -123,6 +125,9 @@ export class OnboardingService {
     } catch (error) {
       if (error instanceof AccountAlreadyVerifiedError) {
         throw new ResourceAlreadyExistsException('User', 'email', data.email);
+      }
+      if (error instanceof InactiveAccountError) {
+        throw new UnauthorizedException('This account is not available.');
       }
       throw error;
     }
