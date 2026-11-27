@@ -12,7 +12,10 @@ import { PasswordlessThrottleService } from './passwordless-throttle.service';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import { INCR_WITH_EXPIRY } from './passwordless-throttle.service';
-import { PASSWORDLESS_REDIS_TIMEOUT_MS } from './passwordless.constants';
+import {
+  PASSWORDLESS_REDIS_TIMEOUT_MS,
+  PASSWORDLESS_REFUND_RETRY_DELAYS_MS,
+} from './passwordless.constants';
 import { ipBlock } from './ip-block';
 import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
 import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
@@ -109,7 +112,21 @@ const quiet = () => {
 };
 const emailHash = (email: string) =>
   nodeCrypto.createHmac('sha256', PEPPER).update(email).digest('hex');
-const failKey = (email: string) => `pwl:fail:email:${emailHash(email)}`;
+const failKey = (email: string) => `pwl:fail:charges:${emailHash(email)}`;
+const failedAttempts = async (redis: InMemoryRedis, email: string) =>
+  Math.max(0, (await redis.client.hlen(failKey(email))) - 1);
+const seedFailedAttempts = async (
+  throttle: PasswordlessThrottleService,
+  email: string,
+  n: number,
+) => {
+  for (let i = 0; i < n; i++) {
+    await throttle.charge(
+      { key: failKey(email), windowMs: DAY_MS, max: 20 },
+      `seed-${i}`,
+    );
+  }
+};
 const ipHash = (ip: string) =>
   nodeCrypto.createHmac('sha256', PEPPER).update(ip).digest('hex');
 
@@ -394,6 +411,39 @@ describe('PasswordlessService', () => {
           ?.consumedAt,
       ).toBeNull();
     });
+
+    it.each([
+      [
+        'code',
+        (ctx: ReturnType<typeof build>, c: Captured) =>
+          ctx.service.verify(c.email, c.code, '203.0.113.9'),
+      ],
+      [
+        'link',
+        (ctx: ReturnType<typeof build>, c: Captured) =>
+          ctx.service.consume(c.linkToken, '203.0.113.9'),
+      ],
+    ])(
+      'answers 503 before using the %s when the account lookup fails, so a spent budget cannot burn it',
+      async (_path, signInWith) => {
+        quiet();
+        const ctx = build();
+        await spend(ctx, '203.0.113.9');
+        await ctx.service.request('new5@example.com', '203.0.113.9');
+        const challenge = ctx.captured[ctx.captured.length - 1];
+        jest
+          .spyOn(ctx.authRepo, 'findUserByEmailInsensitive')
+          .mockRejectedValueOnce(new Error('db timeout'));
+
+        await expect(signInWith(ctx, challenge)).rejects.toBeInstanceOf(
+          ServiceUnavailableException,
+        );
+
+        const row = ctx.repo.rows.find((r) => r.id === challenge.challengeId);
+        expect(row?.consumedAt).toBeNull();
+        expect(row?.attempts).toBe(0);
+      },
+    );
 
     it('still signs an existing account in from an address that spent its budget', async () => {
       const ctx = build();
@@ -1602,9 +1652,7 @@ describe('PasswordlessService', () => {
         ),
       );
 
-      expect(
-        Number((await redis.client.get(failKey('target@example.com'))) ?? 0),
-      ).toBe(0);
+      expect(await failedAttempts(redis, 'target@example.com')).toBe(0);
     });
 
     it('keeps the daily send backstop from being burned by strangers on a network the owner already signed in from', async () => {
@@ -1640,8 +1688,7 @@ describe('PasswordlessService', () => {
 
       await service.verify('target@example.com', captured[0].code, '41.0.0.1');
 
-      const key = `pwl:fail:email:${nodeCrypto.createHmac('sha256', PEPPER).update('target@example.com').digest('hex')}`;
-      expect(Number((await redis.client.get(key)) ?? 0)).toBe(0);
+      expect(await failedAttempts(redis, 'target@example.com')).toBe(0);
     });
 
     it('keeps signing the owner in after more successful logins than the failed-attempt cap', async () => {
@@ -1697,8 +1744,8 @@ describe('PasswordlessService', () => {
 
     it('keeps the right code working after a refused guess raced a correct one at the last slot', async () => {
       quiet();
-      const { service, captured, redis } = build();
-      await redis.client.set(failKey('target@example.com'), '19', 'PX', DAY_MS);
+      const { service, captured, redis, throttle } = build();
+      await seedFailedAttempts(throttle, 'target@example.com', 19);
       await service.request('target@example.com', '1.1.1.1');
       const real = captured[0].code;
 
@@ -1709,7 +1756,7 @@ describe('PasswordlessService', () => {
           .catch(() => undefined),
       ]);
 
-      expect(await redis.client.get(failKey('target@example.com'))).toBe('19');
+      expect(await failedAttempts(redis, 'target@example.com')).toBe(19);
       jest.advanceTimersByTime(61 * 60_000);
       await service.request('target@example.com', '1.1.1.1');
       await expect(
@@ -1723,8 +1770,8 @@ describe('PasswordlessService', () => {
 
     it('gives the daily slot back when recording the attempt fails', async () => {
       quiet();
-      const { service, captured, redis, repo } = build();
-      await redis.client.set(failKey('target@example.com'), '19', 'PX', DAY_MS);
+      const { service, captured, redis, repo, throttle } = build();
+      await seedFailedAttempts(throttle, 'target@example.com', 19);
       await service.request('target@example.com', '1.1.1.1');
       jest
         .spyOn(repo, 'recordAttempt')
@@ -1734,13 +1781,13 @@ describe('PasswordlessService', () => {
         service.verify('target@example.com', captured[0].code, '41.0.0.1'),
       ).rejects.toThrow('db timeout');
 
-      expect(await redis.client.get(failKey('target@example.com'))).toBe('19');
+      expect(await failedAttempts(redis, 'target@example.com')).toBe(19);
     });
 
     it('spends no challenge attempt and no daily slot on a guess the daily cap refuses', async () => {
       quiet();
-      const { service, captured, redis, repo } = build();
-      await redis.client.set(failKey('target@example.com'), '20', 'PX', DAY_MS);
+      const { service, captured, redis, repo, throttle } = build();
+      await seedFailedAttempts(throttle, 'target@example.com', 20);
       await service.request('target@example.com', '1.1.1.1');
 
       await expectGeneric(
@@ -1752,7 +1799,108 @@ describe('PasswordlessService', () => {
       );
 
       expect(repo.rows[0].attempts).toBe(0);
-      expect(await redis.client.get(failKey('target@example.com'))).toBe('20');
+      expect(await failedAttempts(redis, 'target@example.com')).toBe(20);
+    });
+
+    describe('when giving back the daily slot of a correct code fails', () => {
+      const allRetries = PASSWORDLESS_REFUND_RETRY_DELAYS_MS.reduce(
+        (sum, ms) => sum + ms,
+        0,
+      );
+
+      it('retries the refund so the next correct code still signs in', async () => {
+        quiet();
+        const { service, captured, redis, throttle } = build();
+        await seedFailedAttempts(throttle, 'target@example.com', 19);
+        await service.request('target@example.com', '1.1.1.1');
+        jest
+          .spyOn(redis.client, 'hdel')
+          .mockRejectedValueOnce(new Error('redis down'))
+          .mockRejectedValueOnce(new Error('redis down'));
+
+        await expect(
+          service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+        ).resolves.toBeDefined();
+        await jest.advanceTimersByTimeAsync(allRetries);
+
+        expect(await failedAttempts(redis, 'target@example.com')).toBe(19);
+        jest.advanceTimersByTime(61 * 60_000);
+        await service.request('target@example.com', '1.1.1.1');
+        await expect(
+          service.verify(
+            'target@example.com',
+            captured[captured.length - 1].code,
+            '41.0.0.2',
+          ),
+        ).resolves.toBeDefined();
+      });
+
+      it('does not refund twice when the first refund landed but its reply was lost', async () => {
+        quiet();
+        const { service, captured, redis, throttle } = build();
+        await seedFailedAttempts(throttle, 'target@example.com', 19);
+        await service.request('target@example.com', '1.1.1.1');
+        const hdel = redis.client.hdel;
+        jest
+          .spyOn(redis.client, 'hdel')
+          .mockImplementationOnce(async (...args) => {
+            await hdel(...args);
+            throw new Error('Passwordless Redis call timed out');
+          });
+
+        await service.verify(
+          'target@example.com',
+          captured[0].code,
+          '41.0.0.1',
+        );
+        await jest.advanceTimersByTimeAsync(allRetries);
+
+        expect(await failedAttempts(redis, 'target@example.com')).toBe(19);
+      });
+
+      it('stops after a bounded number of retries and logs only the challenge id', async () => {
+        const errorSpy = quiet();
+        const { service, captured, redis, throttle } = build();
+        await seedFailedAttempts(throttle, 'target@example.com', 3);
+        await service.request('target@example.com', '1.1.1.1');
+        const { challengeId, code } = captured[0];
+        const hdel = jest
+          .spyOn(redis.client, 'hdel')
+          .mockRejectedValue(new Error('redis down'));
+
+        await expect(
+          service.verify('target@example.com', code, '41.0.0.1'),
+        ).resolves.toBeDefined();
+        await jest.advanceTimersByTimeAsync(allRetries * 2);
+
+        expect(hdel).toHaveBeenCalledTimes(
+          1 + PASSWORDLESS_REFUND_RETRY_DELAYS_MS.length,
+        );
+        const logged = errorSpy.mock.calls.map((c) => String(c[0]));
+        expect(logged).toContainEqual(expect.stringContaining(challengeId));
+        expect(logged.join('\n')).not.toContain('target@example.com');
+        expect(logged.join('\n')).not.toContain(code);
+        expect(logged.join('\n')).not.toContain(
+          emailHash('target@example.com'),
+        );
+        hdel.mockRestore();
+        expect(await failedAttempts(redis, 'target@example.com')).toBe(4);
+      });
+    });
+
+    it('keeps the charge for a wrong code and gives back only the correct code charge', async () => {
+      quiet();
+      const { service, captured, redis } = build();
+      await service.request('target@example.com', '1.1.1.1');
+      const real = captured[0].code;
+
+      await expectGeneric(
+        service.verify('target@example.com', wrongCode(real), '41.0.0.1'),
+      );
+      expect(await failedAttempts(redis, 'target@example.com')).toBe(1);
+
+      await service.verify('target@example.com', real, '41.0.0.2');
+      expect(await failedAttempts(redis, 'target@example.com')).toBe(1);
     });
 
     it('lets the right code through before the cap is reached', async () => {

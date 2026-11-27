@@ -38,9 +38,40 @@ end
 return n
 `;
 
+export const CHARGE_WINDOW_FIELD = 'window';
+
+export const CHARGE_WITHIN_LIMIT = `
+if redis.call('HSETNX', KEYS[1], ARGV[3], '1') == 1 and redis.call('PTTL', KEYS[1]) < 0 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+local charged = redis.call('HLEN', KEYS[1]) - 1
+if charged >= tonumber(ARGV[2]) then return 0 end
+redis.call('HSET', KEYS[1], ARGV[4], '1')
+return charged + 1
+`;
+
 @Injectable()
 export class PasswordlessThrottleService {
   constructor(private readonly redis: RedisService) {}
+
+  async charge(budget: ThrottleBudget, token: string): Promise<number> {
+    const count = await withTimeout(
+      this.redis.client.eval(
+        CHARGE_WITHIN_LIMIT,
+        1,
+        budget.key,
+        String(budget.windowMs),
+        String(budget.max),
+        CHARGE_WINDOW_FIELD,
+        token,
+      ),
+    );
+    return Number(count);
+  }
+
+  async refund(key: string, token: string): Promise<boolean> {
+    return (await withTimeout(this.redis.client.hdel(key, token))) === 1;
+  }
 
   async release(key: string, windowMs: number): Promise<void> {
     await withTimeout(

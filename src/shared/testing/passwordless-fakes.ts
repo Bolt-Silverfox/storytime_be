@@ -1,5 +1,6 @@
 import {
   ADMIT_WITHIN_LIMITS,
+  CHARGE_WITHIN_LIMIT,
   DECR_CLAMPED,
   INCR_WITH_EXPIRY,
 } from '@/auth/services/passwordless-throttle.service';
@@ -138,11 +139,16 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
 export class InMemoryRedis {
   private store = new Map<
     string,
-    { n: number; expiresAt: number; text?: string }
+    { n: number; expiresAt: number; text?: string; fields?: Set<string> }
   >();
   down = false;
   hung = false;
   hungCommands: string[] = [];
+
+  private liveFields(key: string): Set<string> | undefined {
+    const cur = this.store.get(key);
+    return cur && cur.expiresAt > Date.now() ? cur.fields : undefined;
+  }
 
   private stalls(command: string): boolean {
     return this.hung || this.hungCommands.includes(command);
@@ -153,9 +159,22 @@ export class InMemoryRedis {
       if (this.stalls('get')) return new Promise(() => undefined);
       if (this.down) return Promise.reject(new Error('redis down'));
       const cur = this.store.get(key);
+      if (cur?.fields && cur.expiresAt > Date.now()) {
+        return Promise.reject(new Error('WRONGTYPE'));
+      }
       return Promise.resolve(
         cur && cur.expiresAt > Date.now() ? (cur.text ?? String(cur.n)) : null,
       );
+    },
+    hlen: (key: string): Promise<number> => {
+      if (this.stalls('hlen')) return new Promise(() => undefined);
+      if (this.down) return Promise.reject(new Error('redis down'));
+      return Promise.resolve(this.liveFields(key)?.size ?? 0);
+    },
+    hdel: (key: string, field: string): Promise<number> => {
+      if (this.stalls('hdel')) return new Promise(() => undefined);
+      if (this.down) return Promise.reject(new Error('redis down'));
+      return Promise.resolve(this.liveFields(key)?.delete(field) ? 1 : 0);
     },
     eval: (
       script: string,
@@ -166,6 +185,18 @@ export class InMemoryRedis {
       if (this.down) return Promise.reject(new Error('redis down'));
       const now = Date.now();
       const [key, ttlMs] = args;
+      if (script === CHARGE_WITHIN_LIMIT) {
+        const [, , max, windowField, token] = args;
+        let fields = this.liveFields(key);
+        if (!fields) {
+          fields = new Set([windowField]);
+          this.store.set(key, { n: 0, expiresAt: now + Number(ttlMs), fields });
+        }
+        const charged = fields.size - 1;
+        if (charged >= Number(max)) return Promise.resolve(0);
+        fields.add(token);
+        return Promise.resolve(charged + 1);
+      }
       if (script === ADMIT_WITHIN_LIMITS) {
         const keys = args.slice(0, numKeys);
         const limits = args.slice(numKeys);

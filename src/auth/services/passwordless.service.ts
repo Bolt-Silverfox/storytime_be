@@ -25,6 +25,7 @@ import {
   PASSWORDLESS_KNOWN_NETWORK_TTL_SECONDS,
   PASSWORDLESS_INVALID_MESSAGE,
   PASSWORDLESS_LIMITS,
+  PASSWORDLESS_REFUND_RETRY_DELAYS_MS,
   PASSWORDLESS_RESEND_AFTER_SECONDS,
 } from './passwordless.constants';
 import { PasswordlessGuestMergeService } from './passwordless-guest-merge.service';
@@ -212,14 +213,16 @@ export class PasswordlessService {
 
     const slot = await this.admitDailyAttempt(emailHash);
     if (!slot.admitted) throw this.invalid();
+    const giveSlotBack = () =>
+      this.refundFailedAttempt(emailHash, slot.charge, challengeId);
     const attempt = await this.challenges
       .recordAttempt(challengeId, now)
       .catch(async (error: unknown) => {
-        if (slot.charged) await this.releaseFailedAttempt(emailHash);
+        await giveSlotBack();
         throw error;
       });
     if (!attempt) {
-      if (slot.charged) await this.releaseFailedAttempt(emailHash);
+      await giveSlotBack();
       this.logger.warn(`Passwordless challenge not usable ${challengeId}`);
       throw this.invalid();
     }
@@ -230,7 +233,7 @@ export class PasswordlessService {
       throw this.invalid();
     }
 
-    if (slot.charged) await this.releaseFailedAttempt(emailHash);
+    await giveSlotBack();
     const reserved = await this.reserveCreationBudget(
       emailNormalized,
       ip,
@@ -479,7 +482,13 @@ export class PasswordlessService {
   ): Promise<boolean> {
     const existing = await this.authRepository
       .findUserByEmailInsensitive(email)
-      .catch(() => true);
+      .catch((error: unknown) => {
+        if (error instanceof AmbiguousEmailAccountError) return true;
+        this.logger.error('Passwordless account lookup failed');
+        throw new ServiceUnavailableException(
+          'Service temporarily unavailable. Please try again.',
+        );
+      });
     if (existing) return false;
     await this.spendCreationBudget(ip);
     return true;
@@ -525,35 +534,53 @@ export class PasswordlessService {
     }
   }
 
+  private failedAttemptKey(emailHash: string): string {
+    return `pwl:fail:charges:${emailHash}`;
+  }
+
   private async admitDailyAttempt(
     emailHash: string,
-  ): Promise<{ admitted: boolean; charged: boolean }> {
+  ): Promise<{ admitted: boolean; charge?: string }> {
     const cap = PASSWORDLESS_LIMITS.failedVerifyPerEmailDay;
+    const charge = crypto.randomUUID();
     try {
-      const attempts = await this.throttle.admit([
-        { key: `pwl:fail:email:${emailHash}`, ...cap },
-      ]);
+      const attempts = await this.throttle.charge(
+        { key: this.failedAttemptKey(emailHash), ...cap },
+        charge,
+      );
       if (attempts === cap.max) {
         this.logger.error(
           `Passwordless failed-attempt cap reached for email hash ${emailHash.slice(0, 12)}`,
         );
       }
-      return { admitted: attempts > 0, charged: attempts > 0 };
+      return attempts > 0 ? { admitted: true, charge } : { admitted: false };
     } catch {
       this.logger.error('Passwordless throttle store unavailable');
-      return { admitted: true, charged: false };
+      return { admitted: true };
     }
   }
 
-  private async releaseFailedAttempt(emailHash: string): Promise<void> {
-    await this.throttle
-      .release(
-        `pwl:fail:email:${emailHash}`,
-        PASSWORDLESS_LIMITS.failedVerifyPerEmailDay.windowMs,
-      )
-      .catch(() => {
-        this.logger.error('Passwordless throttle store unavailable');
-      });
+  private async refundFailedAttempt(
+    emailHash: string,
+    charge: string | undefined,
+    challengeId: string,
+  ): Promise<void> {
+    if (!charge) return;
+    const refund = () =>
+      this.throttle.refund(this.failedAttemptKey(emailHash), charge).then(
+        () => true,
+        () => false,
+      );
+    if (await refund()) return;
+    void (async () => {
+      for (const delayMs of PASSWORDLESS_REFUND_RETRY_DELAYS_MS) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (await refund()) return;
+      }
+      this.logger.error(
+        `Passwordless failed-attempt refund abandoned for challenge ${challengeId}`,
+      );
+    })();
   }
 
   private async refundAttempt(challengeId: string): Promise<void> {
