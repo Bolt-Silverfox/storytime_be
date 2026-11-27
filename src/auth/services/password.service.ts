@@ -27,6 +27,8 @@ import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 const RESET_MAX_FAILED_ATTEMPTS = 5;
 const RESET_ATTEMPT_WINDOW_SECONDS = 60 * 60;
 
+const normalizeEmail = (email: string) => email.toLowerCase().trim();
+
 @Injectable()
 export class PasswordService {
   private readonly logger = new Logger(PasswordService.name);
@@ -41,7 +43,7 @@ export class PasswordService {
 
   private resetAttemptsKey(email: string): string {
     const digest = createHash('sha256')
-      .update(email.toLowerCase().trim())
+      .update(normalizeEmail(email))
       .digest('hex');
     return `password-reset:failed:${digest}`;
   }
@@ -88,7 +90,7 @@ export class PasswordService {
       throw new NotFoundException('Invalid reset token');
     }
 
-    if (resetToken.user.email !== email) {
+    if (normalizeEmail(resetToken.user.email) !== normalizeEmail(email)) {
       const ownerAttempts = await this.recordFailedResetAttempt(
         resetToken.user.email,
       );

@@ -473,6 +473,22 @@ describe('PasswordService', () => {
       expect([...redisStore.values()]).toEqual([3]);
     });
 
+    it('charges a failed guess once when the owner email differs only in casing', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockResetToken,
+        expiresAt: new Date('2020-01-01'),
+        user: { ...mockUser, email: 'Test@Example.com' },
+      });
+
+      await expect(
+        service.validateResetToken('raw-reset-token', 'test@example.com', {
+          token: 'raw-reset-token',
+          email: 'test@example.com',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+      expect([...redisStore.values()]).toEqual([1]);
+    });
+
     it('sets a TTL on the counter in the same atomic operation as the first failure', async () => {
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
       await expect(
@@ -758,6 +774,30 @@ describe('PasswordService', () => {
         expect(authRepository.updateUser).not.toHaveBeenCalled();
         expect(authRepository.deleteAllUserSessions).not.toHaveBeenCalled();
         expect(authRepository.deleteToken).not.toHaveBeenCalled();
+      });
+
+      it('accepts the owner email regardless of the stored casing', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue({
+          ...mockResetToken,
+          user: { ...mockUser, email: 'Test@Example.com' },
+        });
+
+        await expect(
+          service.resetPassword(
+            'raw-reset-token',
+            'test@example.com',
+            'NewPass1#',
+            {
+              token: 'raw-reset-token',
+              email: 'test@example.com',
+              newPassword: 'NewPass1#',
+            },
+          ),
+        ).resolves.toEqual({ message: 'Password has been reset successfully' });
+        expect(authRepository.updateUser).toHaveBeenCalledWith(
+          mockResetToken.userId,
+          { passwordHash: 'hashed-password' },
+        );
       });
     });
 
