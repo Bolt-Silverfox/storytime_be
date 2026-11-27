@@ -323,45 +323,29 @@ describe('PasswordService', () => {
           await request(e);
         }
 
-        expect([...fakeRedis.store.values()]).toEqual([3]);
+        expect(fakeRedis.counts()).toEqual([3]);
       });
 
       it('counts each email separately and sets a TTL with the first request', async () => {
         await request('one@example.com');
         await request('two@example.com');
 
-        expect([...fakeRedis.store.values()]).toEqual([1, 1]);
-        expect([...fakeRedis.ttls.values()]).toEqual([3600, 3600]);
+        expect(fakeRedis.counts()).toEqual([1, 1]);
+        expect([...fakeRedis.ttls.values()]).toEqual([3_600_000, 3_600_000]);
       });
 
       it.each([
-        [
-          'unreachable',
-          () => Promise.reject(new Error('Connection is closed.')),
-        ],
-        [
-          'returning an error reply',
-          () =>
-            Promise.resolve([
-              [null, null],
-              [new Error('ERR value is not an integer or out of range'), null],
-              [null, 3600],
-            ]),
-        ],
-        ['stalled', () => new Promise(() => undefined)],
-      ])(
+        ['unreachable', 'down'],
+        ['returning a non-integer reply', 'garbage'],
+        ['stalled', 'slow'],
+      ] as const)(
         'answers 503 and issues no code while the issuance counter is %s',
-        async (_label, exec) => {
+        async (_label, reply) => {
           jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
           jest
             .spyOn(Logger.prototype, 'error')
             .mockImplementation(() => undefined);
-          const realMulti = fakeRedis.multi;
-          jest.spyOn(fakeRedis, 'multi').mockImplementation(() => {
-            const chain = realMulti();
-            chain.exec = exec as typeof chain.exec;
-            return chain;
-          });
+          fakeRedis.chargeReply = reply;
 
           const outcome = request().catch((error: unknown) => error);
           await jest.advanceTimersByTimeAsync(2000);
@@ -376,6 +360,19 @@ describe('PasswordService', () => {
           jest.restoreAllMocks();
         },
       );
+
+      it('answers 503 without queueing the issuance charge while Redis is reconnecting', async () => {
+        fakeRedis.link = 'offline';
+
+        await expect(request()).rejects.toBeInstanceOf(
+          ServiceUnavailableException,
+        );
+        fakeRedis.reconnect();
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(fakeRedis.applied).toEqual([]);
+        expect(authRepository.createToken).not.toHaveBeenCalled();
+      });
 
       it('leaves the existing code untouched when over the cap', async () => {
         for (let i = 0; i < 5; i++) await request();
@@ -588,7 +585,7 @@ describe('PasswordService', () => {
       ]);
     };
 
-    const counterKeys = () => [...fakeRedis.store.keys()];
+    const counterKeys = () => [...fakeRedis.hashes.keys()];
 
     it('rejects a live token with a wrong email exactly like an unknown token', async () => {
       authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
@@ -717,8 +714,7 @@ describe('PasswordService', () => {
     it('deletes the active token when the pre-lookup counter is already past the cap', async () => {
       stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-      fakeRedis.store.set('password-reset:token-failures:token-1', 5);
-      fakeRedis.ttls.set('password-reset:token-failures:token-1', 3600);
+      fakeRedis.seed('password-reset:token-failures:token-1', 5);
 
       await expect(
         validate('raw-reset-token', 'test@example.com'),
@@ -773,7 +769,7 @@ describe('PasswordService', () => {
       await expect(
         validate('raw-reset-token', 'test@example.com'),
       ).rejects.toThrow(UnauthorizedException);
-      expect([...fakeRedis.store.values()]).toEqual([1]);
+      expect(fakeRedis.counts()).toEqual([1]);
     });
 
     it('sets a TTL on the counter in the same atomic operation as the first failure', async () => {
@@ -782,7 +778,7 @@ describe('PasswordService', () => {
       await expect(validate('x', 'test@example.com')).rejects.toThrow(
         NotFoundException,
       );
-      expect([...fakeRedis.ttls.values()]).toEqual([3600]);
+      expect([...fakeRedis.ttls.values()]).toEqual([3_600_000]);
     });
 
     it('gives a counter with no TTL an expiry on the next attempt', async () => {
@@ -791,13 +787,39 @@ describe('PasswordService', () => {
       await expect(validate('a', 'test@example.com')).rejects.toThrow(
         NotFoundException,
       );
-      fakeRedis.ttls.clear();
+      fakeRedis.seed('password-reset:token-failures:token-1', 1, null);
 
       await expect(validate('b', 'test@example.com')).rejects.toThrow(
         NotFoundException,
       );
 
-      expect([...fakeRedis.ttls.values()]).toEqual([3600]);
+      expect([...fakeRedis.ttls.values()]).toEqual([3_600_000]);
+    });
+
+    it('withdraws the charges already taken when charging a later token fails', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      authRepository.findTokensByUserEmail.mockResolvedValue([
+        makeToken({ id: 'token-1', type: TokenType.PASSWORD_RESET }),
+        makeToken({ id: 'token-2', type: TokenType.PASSWORD_RESET }),
+      ]);
+      fakeRedis.seed('password-reset:token-failures:token-1', 4);
+      const evalOnce = fakeRedis.eval;
+      jest
+        .spyOn(fakeRedis, 'eval')
+        .mockImplementationOnce(evalOnce)
+        .mockImplementationOnce(() =>
+          Promise.reject(new Error('Connection is closed.')),
+        );
+
+      await expect(
+        validate('raw-reset-token', 'test@example.com'),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
+        4,
+      );
+      expect(authRepository.findTokenByHashedToken).not.toHaveBeenCalled();
+      jest.restoreAllMocks();
     });
 
     it('lets concurrent guesses be evaluated at most 5 times', async () => {
@@ -1141,12 +1163,7 @@ describe('PasswordService', () => {
           .mockImplementation(() => undefined);
         authRepository.findUserByEmail.mockResolvedValue(null);
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        const pending = new Promise<never>(() => undefined);
-        jest.spyOn(fakeRedis, 'multi').mockReturnValue({
-          set: () => ({
-            incr: () => ({ ttl: () => ({ exec: () => pending }) }),
-          }),
-        } as unknown as ReturnType<FakeRedisClient['multi']>);
+        fakeRedis.chargeReply = 'slow';
 
         await expect(
           attempt('raw-reset-token', 'other@example.com'),
@@ -1170,7 +1187,7 @@ describe('PasswordService', () => {
             code: 'P1001',
           }),
         );
-        fakeRedis.store.set('password-reset:token-failures:token-1', 4);
+        fakeRedis.seed('password-reset:token-failures:token-1', 4);
         const errorSpy = jest
           .spyOn(Logger.prototype, 'error')
           .mockImplementation(() => undefined);
@@ -1214,7 +1231,7 @@ describe('PasswordService', () => {
 
         await attempt('raw-reset-token');
 
-        expect(fakeRedis.store.size).toBe(0);
+        expect(fakeRedis.hashes.size).toBe(0);
       });
     });
   });
@@ -1222,19 +1239,21 @@ describe('PasswordService', () => {
   describe('reset attempt matrix', () => {
     type Presented =
       | 'own-live'
+      | 'own-at-expiry'
       | 'own-expired'
       | 'unknown'
       | 'foreign-live'
       | 'foreign-expired';
     type CapState = 'first' | 'last' | 'over';
     type Entry = 'validate' | 'reset';
-    type CounterMode = 'up' | 'down' | 'error' | 'slow';
+    type CounterMode = 'up' | 'down' | 'error' | 'slow' | 'late' | 'offline';
     type ClearMode = 'up' | 'down' | 'slow';
     type DbMode =
       'ok' | 'lookup-fails' | 'write-fails' | 'sessions-fail' | 'raced';
     type World = { counter: CounterMode; clear: ClearMode; db: DbMode };
 
     const HEALTHY: World = { counter: 'up', clear: 'up', db: 'ok' };
+    const NOW = new Date('2026-06-01T12:00:00Z').getTime();
     const ownerA = makeUser({ id: 'user-a', email: 'a@example.com' });
     const ownerB = makeUser({ id: 'user-b', email: 'b@example.com' });
     const priorFailures: Record<CapState, number> = {
@@ -1244,6 +1263,7 @@ describe('PasswordService', () => {
     };
     const codeFor: Record<Presented, string> = {
       'own-live': 'a-live',
+      'own-at-expiry': 'a-now',
       'own-expired': 'a-old',
       unknown: 'no-such-code',
       'foreign-live': 'b-live',
@@ -1265,44 +1285,52 @@ describe('PasswordService', () => {
           token: `h:${code}`,
           type: TokenType.PASSWORD_RESET,
           expiresAt: new Date(
-            Date.now() + (code.endsWith('old') ? -1 : 1) * 3600_000,
+            NOW +
+              (code.endsWith('old') ? -3600_000 : 0) +
+              (code.endsWith('live') ? 3600_000 : 0),
           ),
         }),
         user: owner,
       });
 
-    const seedWorld = (presented: Presented) => {
-      tokens = new Map();
-      committed = [];
-      seedToken(presented === 'own-expired' ? 'a-old' : 'a-live', ownerA);
-      seedToken(presented === 'foreign-expired' ? 'b-old' : 'b-live', ownerB);
-    };
     const ownCode = (presented: Presented) =>
-      presented === 'own-expired' ? 'a-old' : 'a-live';
+      presented === 'own-expired'
+        ? 'a-old'
+        : presented === 'own-at-expiry'
+          ? 'a-now'
+          : 'a-live';
     const foreignCode = (presented: Presented) =>
       presented === 'foreign-expired' ? 'b-old' : 'b-live';
 
+    const seedWorld = (presented: Presented) => {
+      tokens = new Map();
+      committed = [];
+      seedToken(ownCode(presented), ownerA);
+      seedToken(presented === 'foreign-expired' ? 'b-old' : 'b-live', ownerB);
+    };
     const flush = async () => {
       for (let i = 0; i < 10; i++) {
         await new Promise((resolve) => setImmediate(resolve));
       }
     };
 
-    const misbehave = <T>(
-      mode: CounterMode | ClearMode,
-      work: () => Promise<T>,
-      errorReply: () => T,
-    ): Promise<T> => {
-      switch (mode) {
-        case 'down':
-          return Promise.reject(new Error('Connection is closed.'));
-        case 'slow':
-          return new Promise(() => undefined);
-        case 'error':
-          return Promise.resolve(errorReply());
-        default:
-          return new Promise((resolve) => setImmediate(() => resolve(work())));
-      }
+    const applyWorld = (w: World) => {
+      world = w;
+      fakeRedis.link =
+        w.counter === 'late' || w.counter === 'offline' ? w.counter : 'up';
+      fakeRedis.chargeReply = (
+        {
+          up: 'ok',
+          down: 'down',
+          error: 'garbage',
+          slow: 'slow',
+          late: 'ok',
+          offline: 'ok',
+        } as const
+      )[w.counter];
+      fakeRedis.writeReply = (
+        { up: 'ok', down: 'down', slow: 'slow' } as const
+      )[w.clear];
     };
 
     beforeEach(() => {
@@ -1395,28 +1423,23 @@ describe('PasswordService', () => {
           }
         }),
       );
-
-      const realMulti = fakeRedis.multi;
-      jest.spyOn(fakeRedis, 'multi').mockImplementation(() => {
-        const chain = realMulti();
-        const exec = chain.exec;
-        chain.exec = () =>
-          misbehave<unknown>(world.counter, exec, () => [
-            [null, null],
-            [new Error('ERR value is not an integer or out of range'), null],
-            [null, 3600],
-          ]) as ReturnType<typeof exec>;
-        return chain;
-      });
-      const realDel = fakeRedis.del;
-      jest.spyOn(fakeRedis, 'del').mockImplementation((...keys: string[]) =>
-        misbehave(
-          world.clear,
-          () => realDel(...keys),
-          () => 0,
-        ),
-      );
     });
+
+    const statusOf = (work: Promise<unknown>) =>
+      work.then(
+        () => 200,
+        (error: unknown) =>
+          error instanceof HttpException ? error.getStatus() : 500,
+      );
+
+    const call = (entry: Entry, code: string, email: string) =>
+      entry === 'validate'
+        ? service.validateResetToken(code, email, { token: code, email })
+        : service.resetPassword(code, email, 'NewPass1#', {
+            token: code,
+            email,
+            newPassword: 'NewPass1#',
+          });
 
     const run = async (
       entry: Entry,
@@ -1426,33 +1449,20 @@ describe('PasswordService', () => {
       w: World = HEALTHY,
       foreignPrior = 0,
     ) => {
-      world = w;
-      seedWorld(presented);
-      fakeRedis.store.clear();
-      fakeRedis.ttls.clear();
-      fakeRedis.store.set(
-        failuresKey(ownCode(presented)),
-        priorFailures[state],
-      );
-      fakeRedis.ttls.set(failuresKey(ownCode(presented)), 3600);
-      if (foreignPrior > 0) {
-        fakeRedis.store.set(failuresKey(foreignCode(presented)), foreignPrior);
-      }
-      repoCalls = [];
-      const code = codeFor[presented];
-      let preResponseCalls: string[] = [];
-      const slow = w.counter === 'slow' || w.clear === 'slow';
-      if (slow) jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+      jest.useFakeTimers({ now: NOW, doNotFake: ['setImmediate', 'nextTick'] });
       try {
-        const call =
-          entry === 'validate'
-            ? service.validateResetToken(code, email, { token: code, email })
-            : service.resetPassword(code, email, 'NewPass1#', {
-                token: code,
-                email,
-                newPassword: 'NewPass1#',
-              });
-        const settled = call.then(
+        applyWorld(w);
+        seedWorld(presented);
+        fakeRedis.reset();
+        fakeRedis.seed(failuresKey(ownCode(presented)), priorFailures[state]);
+        if (foreignPrior > 0) {
+          fakeRedis.seed(failuresKey(foreignCode(presented)), foreignPrior);
+        }
+        repoCalls = [];
+        let preResponseCalls: string[] = [];
+        const timed =
+          ['slow', 'late', 'offline'].includes(w.counter) || w.clear === 'slow';
+        const settled = call(entry, codeFor[presented], email).then(
           (body): { status: number; body: unknown } => {
             preResponseCalls = [...repoCalls];
             return { status: 200, body };
@@ -1468,23 +1478,34 @@ describe('PasswordService', () => {
             return { status: error.getStatus(), body: error.getResponse() };
           },
         );
-        if (slow) {
+        if (timed) {
           await flush();
           await jest.advanceTimersByTimeAsync(5000);
         }
         const outcome = await settled;
+        if (w.counter === 'offline') fakeRedis.reconnect();
         await flush();
-        return {
+        if (timed) await jest.advanceTimersByTimeAsync(5000);
+        await flush();
+        const after = {
           ...outcome,
           preResponseCalls,
+          applied: [...fakeRedis.applied],
           remaining: [...tokens.keys()].sort(),
-          ownFailures: fakeRedis.store.get(failuresKey(ownCode(presented))),
-          foreignFailures: fakeRedis.store.get(
+          ownFailures: fakeRedis.failures(failuresKey(ownCode(presented))),
+          foreignFailures: fakeRedis.failures(
             failuresKey(foreignCode(presented)),
           ),
+          committed: [...committed],
         };
+        applyWorld(HEALTHY);
+        const followUp = await statusOf(
+          call(entry, codeFor['own-live'], 'a@example.com'),
+        );
+        await flush();
+        return { ...after, followUp };
       } finally {
-        if (slow) jest.useRealTimers();
+        jest.useRealTimers();
       }
     };
 
@@ -1505,63 +1526,93 @@ describe('PasswordService', () => {
       ownFailures: number | undefined;
       foreignFailures: number | undefined;
       committed: string[];
+      followUp: number;
     };
 
-    const healthyExpected = (
+    const outcomeFor = (
       entry: Entry,
       emailOwnsA: boolean,
       presented: Presented,
       state: CapState,
-    ): Expected => {
+      w: World,
+    ): Omit<Expected, 'followUp'> => {
       const own = ownCode(presented);
       const foreign = foreignCode(presented);
+      const all = [own, foreign].sort();
       const prior = priorFailures[state];
+      const overCap = prior >= 5;
+      const charged = emailOwnsA && !overCap ? prior + 1 : prior;
       const isForeign = presented.startsWith('foreign');
-      const foreignFailures = isForeign ? 1 : undefined;
-      const failed = (
+      const backgroundLands =
+        w.counter === 'up' || w.counter === 'late' || w.counter === 'offline';
+      const foreignFailures =
+        isForeign && w.db !== 'lookup-fails' && backgroundLands ? 1 : undefined;
+      const presentedCode =
+        presented === 'unknown' ? undefined : isForeign ? foreign : own;
+      const raced = (codes: string[]) =>
+        w.db === 'raced' ? codes.filter((c) => c !== presentedCode) : codes;
+      const result = (
         status: number,
         body: unknown,
         remaining: string[],
-        ownFailures: number,
+        ownFailures: number | undefined,
+        committed: string[] = [],
       ) => ({
         status,
         body,
         remaining,
         ownFailures,
         foreignFailures,
-        committed: [],
+        committed,
       });
+      const refunded = w.clear === 'up' ? prior : charged;
+
+      if (emailOwnsA && w.counter !== 'up') {
+        return {
+          ...result(503, UNAVAILABLE, all, prior),
+          foreignFailures: undefined,
+        };
+      }
+      if (w.db === 'lookup-fails') {
+        return result(
+          500,
+          'db unavailable',
+          all,
+          emailOwnsA ? refunded : prior,
+        );
+      }
       if (!emailOwnsA) {
-        return failed(404, NOT_FOUND, [own, foreign].sort(), prior);
+        return result(404, NOT_FOUND, raced(all), prior);
       }
-      const charged = prior + 1;
-      if (state === 'over') return failed(404, NOT_FOUND, [foreign], charged);
+      if (overCap) return result(404, NOT_FOUND, raced([foreign]), prior);
       if (presented === 'own-live') {
-        return entry === 'validate'
-          ? {
-              status: 200,
-              body: { message: 'Valid reset token' },
-              remaining: [own, foreign].sort(),
-              ownFailures: undefined,
-              foreignFailures: undefined,
-              committed: [],
-            }
-          : {
-              status: 200,
-              body: { message: 'Password has been reset successfully' },
-              remaining: [foreign],
-              ownFailures: undefined,
-              foreignFailures: undefined,
-              committed: ['updateUser', 'deleteAllUserSessions'],
-            };
+        if (entry === 'validate') {
+          return result(
+            200,
+            { message: 'Valid reset token' },
+            raced(all),
+            w.clear === 'up' ? undefined : charged,
+          );
+        }
+        if (w.db === 'raced') return result(404, NOT_FOUND, [foreign], charged);
+        if (w.db === 'write-fails' || w.db === 'sessions-fail') {
+          return result(500, 'db unavailable', all, refunded);
+        }
+        return result(
+          200,
+          { message: 'Password has been reset successfully' },
+          [foreign],
+          w.clear === 'up' ? undefined : charged,
+          ['updateUser', 'deleteAllUserSessions'],
+        );
       }
-      if (presented === 'own-expired') {
-        return failed(401, EXPIRED, [foreign], charged);
+      if (presented === 'own-expired' || presented === 'own-at-expiry') {
+        return result(401, EXPIRED, [foreign], charged);
       }
-      return failed(
+      return result(
         404,
         NOT_FOUND,
-        state === 'last' ? [foreign] : [own, foreign].sort(),
+        raced(charged >= 5 ? [foreign] : all),
         charged,
       );
     };
@@ -1573,48 +1624,12 @@ describe('PasswordService', () => {
       state: CapState,
       w: World,
     ): Expected => {
-      const base = healthyExpected(entry, emailOwnsA, presented, state);
-      const all = [ownCode(presented), foreignCode(presented)].sort();
-      const prior = priorFailures[state];
-      const charged = emailOwnsA ? prior + 1 : prior;
-      const succeeded = base.status === 200;
-      const unchanged = (status: number, body: unknown): Expected => ({
-        status,
-        body,
-        remaining: all,
-        ownFailures: charged,
-        foreignFailures: undefined,
-        committed: [],
-      });
-      if (w.counter !== 'up') {
-        return emailOwnsA
-          ? { ...unchanged(503, UNAVAILABLE), ownFailures: prior }
-          : { ...base, foreignFailures: undefined };
-      }
-      if (w.db === 'lookup-fails') return unchanged(500, 'db unavailable');
-      if (w.db === 'raced') {
-        const presentedCode =
-          presented === 'unknown'
-            ? undefined
-            : presented.startsWith('own')
-              ? ownCode(presented)
-              : foreignCode(presented);
-        const remaining = base.remaining.filter((c) => c !== presentedCode);
-        if (succeeded && entry === 'reset') {
-          return { ...unchanged(404, NOT_FOUND), remaining };
-        }
-        return { ...base, remaining };
-      }
-      if (
-        succeeded &&
-        entry === 'reset' &&
-        (w.db === 'write-fails' || w.db === 'sessions-fail')
-      ) {
-        return unchanged(500, 'db unavailable');
-      }
-      if (succeeded && w.clear !== 'up')
-        return { ...base, ownFailures: charged };
-      return base;
+      const outcome = outcomeFor(entry, emailOwnsA, presented, state, w);
+      const followUp =
+        outcome.remaining.includes('a-live') && (outcome.ownFailures ?? 0) < 5
+          ? 200
+          : 404;
+      return { ...outcome, followUp };
     };
 
     const emails = [
@@ -1632,6 +1647,7 @@ describe('PasswordService', () => {
     ];
     const presentedCases: Presented[] = [
       'own-live',
+      'own-at-expiry',
       'own-expired',
       'unknown',
       'foreign-live',
@@ -1639,17 +1655,28 @@ describe('PasswordService', () => {
     ];
     const entries: Entry[] = ['validate', 'reset'];
     const states: CapState[] = ['first', 'last', 'over'];
+    const dbModes: DbMode[] = [
+      'ok',
+      'lookup-fails',
+      'write-fails',
+      'sessions-fail',
+      'raced',
+    ];
+    const counterModes: CounterMode[] = [
+      'up',
+      'down',
+      'error',
+      'slow',
+      'late',
+      'offline',
+    ];
     const worlds: World[] = [
-      HEALTHY,
-      { ...HEALTHY, counter: 'down' },
-      { ...HEALTHY, counter: 'error' },
-      { ...HEALTHY, counter: 'slow' },
-      { ...HEALTHY, clear: 'down' },
-      { ...HEALTHY, clear: 'slow' },
-      { ...HEALTHY, db: 'lookup-fails' },
-      { ...HEALTHY, db: 'write-fails' },
-      { ...HEALTHY, db: 'sessions-fail' },
-      { ...HEALTHY, db: 'raced' },
+      ...counterModes.flatMap((counter) =>
+        dbModes.map((db): World => ({ counter, clear: 'up', db })),
+      ),
+      ...(['down', 'slow'] as ClearMode[]).flatMap((clear) =>
+        dbModes.map((db): World => ({ counter: 'up', clear, db })),
+      ),
     ];
     const describeWorld = ({ counter, clear, db }: World) =>
       `redis counter ${counter}, redis clear ${clear}, db ${db}`;
@@ -1685,10 +1712,32 @@ describe('PasswordService', () => {
           remaining: result.remaining,
           ownFailures: result.ownFailures,
           foreignFailures: result.foreignFailures,
-          committed,
+          committed: result.committed,
+          followUp: result.followUp,
         }).toEqual(expected);
       },
     );
+
+    it('sends no counter command while the client is reconnecting, so nothing replays on reconnect', async () => {
+      const result = await run('reset', 'a@example.com', 'own-live', 'last', {
+        ...HEALTHY,
+        counter: 'offline',
+      });
+
+      expect(result.status).toBe(503);
+      expect(result.applied).toEqual([]);
+    });
+
+    it('withdraws a counter command that lands after its 503, in send order', async () => {
+      const result = await run('reset', 'a@example.com', 'own-live', 'last', {
+        ...HEALTHY,
+        counter: 'late',
+      });
+
+      expect(result.status).toBe(503);
+      expect(result.applied).toEqual(['eval', 'hdel']);
+      expect(result.ownFailures).toBe(4);
+    });
 
     it.each(
       entries.flatMap((entry) =>

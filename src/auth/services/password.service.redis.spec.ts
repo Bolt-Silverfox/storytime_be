@@ -104,6 +104,12 @@ d('PasswordService reset attempts against a real Redis', () => {
       ],
     ]);
     repository = {
+      findTokensByUserEmail: (owner: string) =>
+        Promise.resolve(
+          [...tokens.values()].filter(
+            (t) => t.user.email.toLowerCase() === owner.toLowerCase(),
+          ),
+        ),
       findTokenByHashedToken: (hash: string) =>
         Promise.resolve(tokens.get(hash) ?? null),
       deleteToken: (id: string) => {
@@ -144,20 +150,23 @@ d('PasswordService reset attempts against a real Redis', () => {
     for (let i = 0; i < 4; i++) expect(await guessWrong()).toBe(404);
   };
 
-  it('allows five attempts per window, answers 429 after, and sets the window TTL', async () => {
+  it('burns the code after five wrong guesses and sets the window TTL', async () => {
     for (let i = 0; i < 5; i++) expect(await guessWrong()).toBe(404);
-    expect(await validate()).toBe(429);
+    expect(tokens.size).toBe(0);
+    expect(await validate()).toBe(404);
     const [key] = await attemptKeys();
     expect(await admin.ttl(key)).toBeGreaterThan(3500);
   });
 
-  it('admits exactly five of twenty concurrent wrong guesses', async () => {
+  it('counts at most five of twenty concurrent wrong guesses against the code', async () => {
     const statuses = await Promise.all(
       Array.from({ length: 20 }, () => guessWrong()),
     );
 
-    expect(statuses.filter((s) => s === 404)).toHaveLength(5);
-    expect(statuses.filter((s) => s === 429)).toHaveLength(15);
+    expect(statuses.every((s) => s === 404)).toBe(true);
+    const [key] = await attemptKeys();
+    expect(await admin.hlen(key)).toBe(6);
+    expect(tokens.size).toBe(0);
   });
 
   it('gives a window left without a TTL an expiry on the next attempt', async () => {

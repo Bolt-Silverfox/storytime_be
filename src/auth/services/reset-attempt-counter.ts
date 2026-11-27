@@ -25,6 +25,7 @@ export class RedisNotReadyError extends Error {
 export interface ResetCharge {
   reservation: string;
   withinLimit: boolean;
+  count: number;
 }
 
 export class ResetAttemptCounter {
@@ -69,7 +70,7 @@ export class ResetAttemptCounter {
     if (!Number.isInteger(count)) {
       throw new Error('Reset attempt counter not recorded');
     }
-    return { reservation, withinLimit: count !== 0 };
+    return { reservation, withinLimit: count !== 0, count: count as number };
   }
 
   async refund(key: string, reservation: string): Promise<void> {

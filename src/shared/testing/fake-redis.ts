@@ -5,11 +5,8 @@ export type FakeReply = 'ok' | 'down' | 'garbage' | 'slow';
 
 export const FAKE_LATE_DELIVERY_MS = 3000;
 
-type Reply = [null, unknown];
-
 export class FakeRedisClient {
   readonly hashes = new Map<string, Map<string, string>>();
-  readonly store = new Map<string, number>();
   readonly ttls = new Map<string, number>();
   readonly applied: string[] = [];
   link: FakeLink = 'up';
@@ -28,12 +25,11 @@ export class FakeRedisClient {
     for (let i = 0; i < failures; i++) hash.set(`seed-${i}`, '1');
     this.forget(key);
     this.hashes.set(key, hash);
-    if (ttlMs !== null) this.expireIn(key, ttlMs);
+    if (ttlMs !== null) this.expire(key, ttlMs);
   }
 
   reset() {
     this.hashes.clear();
-    this.store.clear();
     this.ttls.clear();
     this.deadlines.clear();
     this.applied.length = 0;
@@ -45,7 +41,7 @@ export class FakeRedisClient {
     this.deadlines.delete(key);
   }
 
-  private expireIn(key: string, ttlMs: number) {
+  private expire(key: string, ttlMs: number) {
     this.ttls.set(key, ttlMs);
     this.deadlines.set(key, Date.now() + ttlMs);
   }
@@ -69,46 +65,6 @@ export class FakeRedisClient {
     this.drain();
   }
 
-  multi = () => {
-    const ops: Array<() => unknown> = [];
-    const chain = {
-      set: (
-        key: string,
-        _value: number,
-        _mode: 'EX',
-        ttl: number,
-        nx?: 'NX',
-      ) => {
-        ops.push(() => {
-          if (nx === 'NX' && this.store.has(key)) return null;
-          this.store.set(key, 0);
-          this.ttls.set(key, ttl);
-          return 'OK';
-        });
-        return chain;
-      },
-      incr: (key: string) => {
-        ops.push(() => {
-          const next = (this.store.get(key) ?? 0) + 1;
-          this.store.set(key, next);
-          return next;
-        });
-        return chain;
-      },
-      ttl: (key: string) => {
-        ops.push(() => this.ttls.get(key) ?? -1);
-        return chain;
-      },
-      exec: () => Promise.resolve(ops.map((op): Reply => [null, op()])),
-    };
-    return chain;
-  };
-
-  expire = (key: string, ttl: number) => {
-    this.ttls.set(key, ttl);
-    return Promise.resolve(1);
-  };
-
   eval = (
     script: string,
     numKeys: number,
@@ -129,7 +85,7 @@ export class FakeRedisClient {
         const hash = this.hashes.get(key) ?? new Map<string, string>();
         this.hashes.set(key, hash);
         if (!hash.has(windowField)) hash.set(windowField, '1');
-        if (!this.ttls.has(key)) this.expireIn(key, Number(windowMs));
+        if (!this.ttls.has(key)) this.expire(key, Number(windowMs));
         const charged = hash.size - 1;
         if (charged >= Number(max)) return 0;
         hash.set(reservation, '1');
@@ -159,8 +115,7 @@ export class FakeRedisClient {
       () => {
         let removed = 0;
         for (const key of keys) {
-          if (this.hashes.has(key) || this.store.has(key)) removed++;
-          this.store.delete(key);
+          if (this.hashes.has(key)) removed++;
           this.forget(key);
         }
         return removed;
