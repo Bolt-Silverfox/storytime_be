@@ -175,3 +175,28 @@ describe('GuestSessionService.deleteGuestSessionIfHistoryIs', () => {
     ).toBeDefined();
   });
 });
+
+describe('GuestSessionService.deleteGuestSessionIfHistoryIs without the lock', () => {
+  it('keeps the session when it cannot hold the session lock', async () => {
+    const service = build();
+    const { sessionId } = await service.createGuestSession();
+    await service.recordNewStoryAccess(sessionId, 'story-x');
+    jest.useFakeTimers();
+    try {
+      const chains = (
+        service as unknown as { sessionChains: Map<string, Promise<void>> }
+      ).sessionChains;
+      chains.set(sessionId, new Promise<void>(() => undefined));
+
+      const result = service.deleteGuestSessionIfHistoryIs(sessionId, [
+        'story-x',
+      ]);
+      await jest.advanceTimersByTimeAsync(10_000);
+
+      expect((await result).deleted).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(await service.getGuestSession(sessionId)).not.toBeNull();
+  });
+});

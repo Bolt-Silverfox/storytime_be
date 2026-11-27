@@ -287,7 +287,7 @@ export class GuestSessionService implements OnModuleInit {
    */
   private async withSessionLock<T>(
     sessionId: string,
-    fn: () => Promise<T>,
+    fn: (exclusive: boolean) => Promise<T>,
   ): Promise<T> {
     const prev = this.sessionChains.get(sessionId) ?? Promise.resolve();
     let releaseChain!: () => void;
@@ -297,21 +297,22 @@ export class GuestSessionService implements OnModuleInit {
     const tail = mine;
     this.sessionChains.set(sessionId, tail);
     let waitTimer: NodeJS.Timeout | undefined;
+    let chainHeld: boolean;
     try {
-      await Promise.race([
-        prev,
-        new Promise<void>((resolve) => {
-          waitTimer = setTimeout(resolve, GUEST_FIFO_WAIT_MS);
+      chainHeld = await Promise.race([
+        prev.then(() => true),
+        new Promise<boolean>((resolve) => {
+          waitTimer = setTimeout(() => resolve(false), GUEST_FIFO_WAIT_MS);
         }),
       ]);
     } finally {
       if (waitTimer) clearTimeout(waitTimer);
     }
-    const releaseRedis = await this.acquireRedisLock(sessionId);
+    const redisLock = await this.acquireRedisLock(sessionId);
     try {
-      return await fn();
+      return await fn(chainHeld && redisLock.held);
     } finally {
-      await releaseRedis();
+      await redisLock.release();
       releaseChain();
       if (this.sessionChains.get(sessionId) === tail) {
         this.sessionChains.delete(sessionId);
@@ -321,15 +322,16 @@ export class GuestSessionService implements OnModuleInit {
 
   private async acquireRedisLock(
     sessionId: string,
-  ): Promise<() => Promise<void>> {
+  ): Promise<{ release: () => Promise<void>; held: boolean }> {
     const noop = () => Promise.resolve();
+    const notHeld = { release: noop, held: false };
     const client = this.redisStore?.client as
       | {
           set?: (k: string, v: string, o: unknown) => Promise<unknown>;
           eval?: (script: string, o: unknown) => Promise<unknown>;
         }
       | undefined;
-    if (!client?.set || !client.eval) return noop;
+    if (!client?.set || !client.eval) return { release: noop, held: true };
     const key = `${GUEST_SESSION_LOCK_PREFIX}${sessionId}`;
     const token = randomUUID();
     const deadline = Date.now() + GUEST_LOCK_WAIT_MS;
@@ -340,22 +342,25 @@ export class GuestSessionService implements OnModuleInit {
           PX: GUEST_LOCK_TTL_MS,
         });
         if (ok === 'OK') {
-          return async () => {
-            try {
-              await client.eval!(RELEASE_LOCK_SCRIPT, {
-                keys: [key],
-                arguments: [token],
-              });
-            } catch {
-              // best effort: the TTL frees it
-            }
+          return {
+            held: true,
+            release: async () => {
+              try {
+                await client.eval!(RELEASE_LOCK_SCRIPT, {
+                  keys: [key],
+                  arguments: [token],
+                });
+              } catch {
+                // best effort: the TTL frees it
+              }
+            },
           };
         }
         if (Date.now() >= deadline) {
           this.logger.warn(
             `Session lock for ${this.maskSessionId(sessionId)} still held after ${GUEST_LOCK_WAIT_MS}ms; proceeding without it`,
           );
-          return noop;
+          return notHeld;
         }
         await new Promise((r) => setTimeout(r, GUEST_LOCK_POLL_MS));
       }
@@ -363,7 +368,7 @@ export class GuestSessionService implements OnModuleInit {
       this.logger.warn(
         `Session lock unavailable for ${this.maskSessionId(sessionId)}: ${(err as Error)?.message ?? err}`,
       );
-      return noop;
+      return notHeld;
     }
   }
 
@@ -643,9 +648,12 @@ export class GuestSessionService implements OnModuleInit {
     | { deleted: true }
     | { deleted: false; history: Record<string, StoryProgress> }
   > {
-    return this.withSessionLock(sessionId, async () => {
+    return this.withSessionLock(sessionId, async (exclusive) => {
       const session = await this.getGuestSession(sessionId);
       if (!session) return { deleted: true };
+      if (!exclusive) {
+        return { deleted: false, history: session.readingHistory };
+      }
       const current = Object.keys(session.readingHistory);
       const expected = new Set(storyIds);
       if (
