@@ -855,7 +855,7 @@ describe('PasswordService', () => {
         expect(authRepository.updateUser).not.toHaveBeenCalled();
       });
 
-      it('locks the token owner out from charges made through other emails alone', async () => {
+      it('revokes only the presented code once mismatched emails exceed the owner cap', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
         authRepository.findUserByEmail.mockResolvedValue(mockUser);
         for (let i = 0; i < 5; i++) {
@@ -867,7 +867,7 @@ describe('PasswordService', () => {
             }),
           ).rejects.toThrow(NotFoundException);
         }
-        expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
+        expect(authRepository.deleteToken).not.toHaveBeenCalled();
 
         await expect(
           service.resetPassword('raw-reset-token', 'r5@example.com', 'x', {
@@ -877,10 +877,8 @@ describe('PasswordService', () => {
           }),
         ).rejects.toThrow(NotFoundException);
         await new Promise((resolve) => setImmediate(resolve));
-        expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
-          'user-1',
-          TokenType.PASSWORD_RESET,
-        );
+        expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+        expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
       });
 
       it('answers a mismatched email over the owner cap exactly like an unknown token', async () => {
@@ -928,7 +926,7 @@ describe('PasswordService', () => {
 
       it('logs a failed owner charge without the owner email', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        authRepository.findUserByEmail.mockRejectedValue(
+        authRepository.deleteToken.mockRejectedValue(
           new Error('db unavailable'),
         );
         const errorSpy = jest

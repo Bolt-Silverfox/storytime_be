@@ -22,7 +22,11 @@ import {
 import * as bcrypt from 'bcryptjs';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserPasswordChangedEvent } from '@/shared/events';
-import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import {
+  AUTH_REPOSITORY,
+  IAuthRepository,
+  TokenWithUser,
+} from '../repositories';
 
 const RESET_MAX_FAILED_ATTEMPTS = 5;
 const RESET_ATTEMPT_WINDOW_SECONDS = 60 * 60;
@@ -62,11 +66,15 @@ export class PasswordService {
     return Number(results?.[1]?.[1]);
   }
 
-  private async revokeResetTokensOverCap(
-    email: string,
-    attempts: number,
-  ): Promise<boolean> {
-    if (attempts <= RESET_MAX_FAILED_ATTEMPTS) return false;
+  private async chargeTokenOwner(resetToken: TokenWithUser) {
+    const attempts = await this.recordFailedResetAttempt(resetToken.user.email);
+    if (attempts > RESET_MAX_FAILED_ATTEMPTS) {
+      await this.authRepository.deleteToken(resetToken.id);
+    }
+  }
+
+  private async lockOutIfExceeded(email: string, attempts: number) {
+    if (attempts <= RESET_MAX_FAILED_ATTEMPTS) return;
     const user = await this.authRepository.findUserByEmail(email);
     if (user) {
       await this.authRepository.deleteUserTokensByType(
@@ -74,16 +82,6 @@ export class PasswordService {
         TokenType.PASSWORD_RESET,
       );
     }
-    return true;
-  }
-
-  private async chargeTokenOwner(ownerEmail: string) {
-    const attempts = await this.recordFailedResetAttempt(ownerEmail);
-    await this.revokeResetTokensOverCap(ownerEmail, attempts);
-  }
-
-  private async lockOutIfExceeded(email: string, attempts: number) {
-    if (!(await this.revokeResetTokensOverCap(email, attempts))) return;
     throw new HttpException(
       'Too many failed reset attempts. Try again later.',
       HttpStatus.TOO_MANY_REQUESTS,
@@ -104,7 +102,7 @@ export class PasswordService {
     }
 
     if (normalizeEmail(resetToken.user.email) !== normalizeEmail(email)) {
-      this.chargeTokenOwner(resetToken.user.email).catch((error: unknown) => {
+      this.chargeTokenOwner(resetToken).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.error(`Failed to charge reset token owner: ${message}`);
       });
