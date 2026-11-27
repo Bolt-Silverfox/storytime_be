@@ -75,23 +75,18 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
       })
     ).map((t) => t.token);
 
-  it('deletes only the reset tokens of the account whose email matches in any casing', async () => {
-    await repo.deleteTokensByUserEmail(
-      'rt-owner@rt.test',
-      TokenType.PASSWORD_RESET,
-    );
+  const found = async (email: string) =>
+    (await repo.findTokensByUserEmail(email, TokenType.PASSWORD_RESET))
+      .map((t) => t.token)
+      .sort();
 
-    expect(await remaining()).toEqual(['rt-2', 'rt-3', 'rt-4']);
+  it('finds only the reset tokens of the account whose email matches in any casing', async () => {
+    expect(await found('rt-owner@rt.test')).toEqual(['rt-1']);
   });
 
   it('treats LIKE wildcards in the email literally', async () => {
-    await repo.deleteTokensByUserEmail(
-      'rt_owner@rt.test',
-      TokenType.PASSWORD_RESET,
-    );
-    await repo.deleteTokensByUserEmail('%@rt.test', TokenType.PASSWORD_RESET);
-
-    expect(await remaining()).toEqual(['rt-1', 'rt-2', 'rt-3', 'rt-4']);
+    expect(await found('rt_owner@rt.test')).toEqual([]);
+    expect(await found('%@rt.test')).toEqual([]);
   });
 
   it('consumes a token exactly once', async () => {

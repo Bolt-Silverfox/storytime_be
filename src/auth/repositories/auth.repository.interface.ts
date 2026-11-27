@@ -154,14 +154,10 @@ export interface IAuthRepository {
     hashedToken: string,
     type: TokenType,
   ): Promise<TokenWithUser | null>;
-  findLatestTokenByUserId(
-    userId: string,
-    type: TokenType,
-  ): Promise<Token | null>;
+  findTokensByUserEmail(email: string, type: TokenType): Promise<Token[]>;
   deleteToken(id: string): Promise<void>;
   consumeToken(id: string): Promise<boolean>;
   deleteUserTokensByType(userId: string, type: TokenType): Promise<void>;
-  deleteTokensByUserEmail(email: string, type: TokenType): Promise<void>;
 
   // Profile operations
   updateProfile(

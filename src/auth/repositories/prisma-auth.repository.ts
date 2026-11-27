@@ -284,13 +284,17 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
-  async findLatestTokenByUserId(
-    userId: string,
+  async findTokensByUserEmail(
+    email: string,
     type: TokenType,
-  ): Promise<Token | null> {
-    return this.prisma.token.findFirst({
-      where: { userId, type },
-      orderBy: { createdAt: 'desc' },
+  ): Promise<Token[]> {
+    return this.prisma.token.findMany({
+      where: {
+        type,
+        user: {
+          email: { equals: escapeLikePattern(email), mode: 'insensitive' },
+        },
+      },
     });
   }
 
@@ -301,17 +305,6 @@ export class PrismaAuthRepository implements IAuthRepository {
   async consumeToken(id: string): Promise<boolean> {
     const { count } = await this.prisma.token.deleteMany({ where: { id } });
     return count > 0;
-  }
-
-  async deleteTokensByUserEmail(email: string, type: TokenType): Promise<void> {
-    await this.prisma.token.deleteMany({
-      where: {
-        type,
-        user: {
-          email: { equals: escapeLikePattern(email), mode: 'insensitive' },
-        },
-      },
-    });
   }
 
   async deleteUserTokensByType(userId: string, type: TokenType): Promise<void> {

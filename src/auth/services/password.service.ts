@@ -76,30 +76,29 @@ export class PasswordService {
   }
 
   private async consumeResetAttempt(token: string, email: string) {
-    const user = await this.authRepository.findUserByEmail(email);
-    const activeToken = user
-      ? await this.authRepository.findLatestTokenByUserId(
-          user.id,
-          TokenType.PASSWORD_RESET,
-        )
-      : null;
-    const activeFailures = activeToken
-      ? await this.incrementWindowCounter(this.tokenFailuresKey(activeToken.id))
-      : 0;
-
-    if (activeToken && activeFailures > RESET_MAX_FAILED_ATTEMPTS) {
-      await this.authRepository.deleteToken(activeToken.id);
-      throw new NotFoundException('Invalid reset token');
+    const ownedTokens = await this.authRepository.findTokensByUserEmail(
+      normalizeEmail(email),
+      TokenType.PASSWORD_RESET,
+    );
+    const failuresByTokenId = new Map<string, number>();
+    for (const owned of ownedTokens) {
+      failuresByTokenId.set(
+        owned.id,
+        await this.incrementWindowCounter(this.tokenFailuresKey(owned.id)),
+      );
     }
 
     const resetToken = await this.authRepository.findTokenByHashedToken(
       this.tokenService.hashToken(token),
       TokenType.PASSWORD_RESET,
     );
+    const ownsResetToken =
+      resetToken &&
+      normalizeEmail(resetToken.user.email) === normalizeEmail(email);
 
     if (
-      resetToken &&
-      normalizeEmail(resetToken.user.email) === normalizeEmail(email)
+      ownsResetToken &&
+      (failuresByTokenId.get(resetToken.id) ?? 0) <= RESET_MAX_FAILED_ATTEMPTS
     ) {
       if (resetToken.expiresAt < new Date()) {
         await this.authRepository.deleteToken(resetToken.id);
@@ -109,14 +108,16 @@ export class PasswordService {
       return resetToken;
     }
 
-    if (resetToken) {
+    if (resetToken && !ownsResetToken) {
       this.chargeToken(resetToken.id).catch((error: unknown) => {
         const message = error instanceof Error ? error.message : String(error);
         this.logger.error(`Failed to charge reset token owner: ${message}`);
       });
     }
-    if (activeToken && activeFailures >= RESET_MAX_FAILED_ATTEMPTS) {
-      await this.authRepository.deleteToken(activeToken.id);
+    for (const [tokenId, failures] of failuresByTokenId) {
+      if (failures >= RESET_MAX_FAILED_ATTEMPTS) {
+        await this.authRepository.deleteToken(tokenId);
+      }
     }
     throw new NotFoundException('Invalid reset token');
   }
