@@ -278,6 +278,41 @@ describe('OAuthService', () => {
         expect(data.appleId).toBeNull();
       });
 
+      it('answers 401 without issuing tokens when the account email keeps changing during the takeover', async () => {
+        authRepository.takeOverUnverifiedAccount.mockRejectedValue(
+          new TakeoverTargetChangedError(),
+        );
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toThrow(UnauthorizedException);
+
+        expect(authRepository.takeOverUnverifiedAccount).toHaveBeenCalledTimes(
+          2,
+        );
+        expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      });
+
+      it('answers 401 without issuing tokens when a verified account is renamed during the match', async () => {
+        authRepository.findUserByEmailInsensitive.mockResolvedValue({
+          ...attackerOwned,
+          isEmailVerified: true,
+        });
+        authRepository.findUserByIdWithProfile.mockResolvedValue({
+          ...attackerOwned,
+          email: 'moved@example.com',
+          isEmailVerified: true,
+          profile: null,
+          avatar: null,
+        });
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toThrow(UnauthorizedException);
+
+        expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      });
+
       it('leaves sessions and password alone for an already verified account', async () => {
         authRepository.findUserByEmailInsensitive.mockResolvedValue({
           ...attackerOwned,

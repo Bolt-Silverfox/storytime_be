@@ -193,7 +193,10 @@ export class OAuthService {
           appleId,
         },
       ).catch((error: unknown) => {
-        if (error instanceof AmbiguousEmailAccountError) {
+        if (
+          error instanceof AmbiguousEmailAccountError ||
+          error instanceof TakeoverTargetChangedError
+        ) {
           throw new UnauthorizedException('This account is not available.');
         }
         throw error;
