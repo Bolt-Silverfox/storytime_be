@@ -261,14 +261,14 @@ export class PrismaAuthRepository implements IAuthRepository {
     boundEmail?: string,
   ): Promise<{ count: number }> {
     return this.prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ email: string }>>`
-        SELECT "email" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
-      if (
-        boundEmail !== undefined &&
-        locked[0]?.email.toLowerCase() !== boundEmail.toLowerCase()
-      ) {
-        return { count: 0 };
-      }
+      const email = boundEmail ?? null;
+      const locked = await tx.$queryRaw<
+        Array<{ id: string }>
+      >`SELECT "id" FROM "users"
+        WHERE "id" = ${userId}
+          AND (${email}::text IS NULL OR lower("email") = lower(${email}::text))
+        FOR UPDATE`;
+      if (locked.length === 0) return { count: 0 };
       return tx.user.updateMany({
         where: {
           id: userId,
