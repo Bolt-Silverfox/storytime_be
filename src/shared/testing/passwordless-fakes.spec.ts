@@ -438,6 +438,19 @@ describe('InMemoryAuthRepository inactive accounts', () => {
     },
   );
 
+  it.each(['isSuspended', 'isDeleted'] as const)(
+    'does not link a provider to a %s account',
+    async (flag) => {
+      const repo = new InMemoryAuthRepository();
+      const user = await seed(repo, flag, true);
+
+      await expect(
+        repo.linkGoogleAccountIfUnset(user.id, 'g1'),
+      ).resolves.toEqual({ count: 0 });
+      expect(user.googleId).toBeNull();
+    },
+  );
+
   it('still takes over an active unverified account at the matching email', async () => {
     const repo = new InMemoryAuthRepository();
     const user = await repo.createUser({

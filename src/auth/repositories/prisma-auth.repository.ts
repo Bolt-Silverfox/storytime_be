@@ -274,6 +274,7 @@ export class PrismaAuthRepository implements IAuthRepository {
         where: {
           id: userId,
           [field]: null,
+          isSuspended: false,
           isDeleted: false,
           isEmailVerified: true,
           ...(sessionId

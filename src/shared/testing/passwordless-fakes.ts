@@ -351,6 +351,7 @@ export class InMemoryAuthRepository {
       !u ||
       u[field] ||
       !u.isEmailVerified ||
+      u.isSuspended ||
       u.isDeleted ||
       sessionMissing ||
       emailMoved

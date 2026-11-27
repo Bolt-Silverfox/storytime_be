@@ -486,6 +486,32 @@ maybe('PasswordlessService against Postgres', () => {
     ).toEqual({ count: 1 });
   });
 
+  it.each([
+    ['suspended', { isSuspended: true }],
+    ['deleted', { isDeleted: true }],
+  ])('does not link a provider to a %s account', async (_label, flag) => {
+    const authRepo = new PrismaAuthRepository(prisma as never);
+    const stamp = `${run}-${++n}`;
+    const user = await prisma.user.create({
+      data: {
+        email: `pwl-it-in-${stamp}@example.com`,
+        passwordHash: 'h',
+        isEmailVerified: true,
+        ...flag,
+      },
+    });
+
+    expect(
+      await authRepo.linkGoogleAccountIfUnset(user.id, `pwl-it-g-${stamp}`),
+    ).toEqual({ count: 0 });
+    expect(
+      await authRepo.linkAppleAccountIfUnset(user.id, `pwl-it-a-${stamp}`),
+    ).toEqual({ count: 0 });
+    expect(
+      await prisma.user.findUniqueOrThrow({ where: { id: user.id } }),
+    ).toMatchObject({ googleId: null, appleId: null });
+  });
+
   it('refuses a link tied to a session that no longer exists', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
     const stamp = `${run}-${++n}`;
