@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   GUEST_STORY_LIMIT,
@@ -24,6 +25,12 @@ class DelayedKeyv {
   }
   delete(key: string): Promise<boolean> {
     return Promise.resolve(this.data.delete(key));
+  }
+  _getKeyPrefix(key: string): string {
+    return key;
+  }
+  serializeData(data: unknown): Promise<string> {
+    return Promise.resolve(JSON.stringify(data));
   }
 }
 
@@ -74,7 +81,7 @@ describe('GuestSessionService — concurrent read-modify-write', () => {
     );
   });
 
-  it('fails open (never throws) when the Redis lock errors', async () => {
+  it('refuses to save a new story with a 503 when the Redis lock errors, and saves nothing', async () => {
     const service = build();
     (service as unknown as { redisStore: unknown }).redisStore = {
       client: {
@@ -86,28 +93,83 @@ describe('GuestSessionService — concurrent read-modify-write', () => {
     const { sessionId } = await service.createGuestSession();
     await expect(
       service.recordNewStoryAccess(sessionId, 'story-z'),
-    ).resolves.toEqual({ recorded: true });
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(await service.getGuestReadingHistory(sessionId)).toEqual({});
   });
 
-  it('takes and releases a Redis lock keyed by session id when Redis-backed', async () => {
+  it('still records progress (fails open) when the Redis lock errors', async () => {
+    const service = build();
+    const { sessionId } = await service.createGuestSession();
+    await service.recordNewStoryAccess(sessionId, 'story-z');
+    (service as unknown as { redisStore: unknown }).redisStore = {
+      client: {
+        isReady: true,
+        set: jest.fn().mockRejectedValue(new Error('redis down')),
+        eval: jest.fn().mockRejectedValue(new Error('redis down')),
+      },
+    };
+    await service.updateGuestProgress(sessionId, 'story-z', 40);
+    expect(
+      (await service.getGuestReadingHistory(sessionId))?.['story-z'].progress,
+    ).toBe(40);
+  });
+
+  it('takes a Redis lock keyed by session id, saves only while holding it, then releases it', async () => {
     const service = build();
     const set = jest.fn().mockResolvedValue('OK');
     const evalFn = jest.fn().mockResolvedValue(1);
     (service as unknown as { redisStore: unknown }).redisStore = {
       client: { isReady: true, set, eval: evalFn },
+      createKeyPrefix: (key: string) => key,
+      namespace: undefined,
     };
     const { sessionId } = await service.createGuestSession();
-    await service.recordNewStoryAccess(sessionId, 'story-z');
+    await expect(
+      service.recordNewStoryAccess(sessionId, 'story-z'),
+    ).resolves.toEqual({ recorded: true });
 
     expect(set).toHaveBeenCalledWith(
       expect.stringContaining(sessionId),
       expect.any(String),
       expect.objectContaining({ NX: true }),
     );
-    expect(evalFn).toHaveBeenCalledTimes(1);
+    const [lockKey, token] = set.mock.calls[0] as [string, string];
+    expect(evalFn).toHaveBeenCalledTimes(2);
+    const [saveScript, save] = evalFn.mock.calls[0] as [
+      string,
+      { keys: string[]; arguments: string[] },
+    ];
+    expect(saveScript).toContain("'set', KEYS[2]");
+    expect(save.keys).toEqual([lockKey, `guest:session:${sessionId}`]);
+    expect(save.arguments[0]).toBe(token);
+    expect(JSON.parse(save.arguments[1]).value.readingHistory).toHaveProperty(
+      'story-z',
+    );
+    expect(evalFn.mock.calls[1][1]).toEqual({
+      keys: [lockKey],
+      arguments: [token],
+    });
   });
 
-  it('does not wait forever on a never-settling predecessor and leaks no map entry', async () => {
+  it('answers 503 when the lock expired before the save', async () => {
+    const service = build();
+    (service as unknown as { redisStore: unknown }).redisStore = {
+      client: {
+        isReady: true,
+        set: jest.fn().mockResolvedValue('OK'),
+        eval: jest.fn().mockResolvedValue(0),
+      },
+      createKeyPrefix: (key: string) => key,
+      namespace: undefined,
+    };
+    const { sessionId } = await service.createGuestSession();
+
+    await expect(
+      service.recordNewStoryAccess(sessionId, 'story-z'),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('answers 503 instead of waiting forever on a never-settling predecessor and leaks no map entry', async () => {
     const service = build();
     const { sessionId } = await service.createGuestSession();
     jest.useFakeTimers();
@@ -118,8 +180,9 @@ describe('GuestSessionService — concurrent read-modify-write', () => {
       chains.set(sessionId, new Promise<void>(() => undefined));
 
       const p = service.recordNewStoryAccess(sessionId, 'story-q');
+      p.catch(() => undefined);
       await jest.advanceTimersByTimeAsync(10_000);
-      await expect(p).resolves.toEqual({ recorded: true });
+      await expect(p).rejects.toBeInstanceOf(ServiceUnavailableException);
       expect(chains.has(sessionId)).toBe(false);
     } finally {
       jest.useRealTimers();

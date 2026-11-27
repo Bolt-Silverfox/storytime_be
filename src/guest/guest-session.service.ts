@@ -83,6 +83,27 @@ const GUEST_LOCK_POLL_MS = 25;
 const GUEST_FIFO_WAIT_MS = 5_000;
 const RELEASE_LOCK_SCRIPT =
   "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end";
+const SET_IF_LOCK_OWNED_SCRIPT =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('set', KEYS[2], ARGV[2], 'PX', ARGV[3]) return 1 else return 0 end";
+const DELETE_IF_LOCK_OWNED_SCRIPT =
+  "if redis.call('get', KEYS[1]) == ARGV[1] then redis.call('del', KEYS[2]) return 1 else return 0 end";
+
+interface LockFence {
+  client: {
+    eval: (
+      script: string,
+      options: { keys: string[]; arguments: string[] },
+    ) => Promise<unknown>;
+  };
+  lockKey: string;
+  token: string;
+}
+
+interface HeldSessionLock {
+  exclusive: boolean;
+  persist: (session: GuestSession) => Promise<boolean>;
+  remove: () => Promise<boolean>;
+}
 
 /**
  * Service for managing guest sessions and tracking reading progress.
@@ -245,6 +266,15 @@ export class GuestSessionService implements OnModuleInit {
     );
   }
 
+  private sessionBusy(sessionId: string): ServiceUnavailableException {
+    this.logger.warn(
+      `Not recording a new story for ${this.maskSessionId(sessionId)} without the session lock`,
+    );
+    return new ServiceUnavailableException(
+      'Guest session is busy. Please try again.',
+    );
+  }
+
   /**
    * Guard for write paths (update/record): if Redis went down around the
    * `set`, the write is not durable and we cannot silently report success —
@@ -282,12 +312,12 @@ export class GuestSessionService implements OnModuleInit {
    * single JSON blob, so interleaved cycles lose updates and can overshoot the
    * story quota). Two layers: an in-process FIFO chain per session id, plus a
    * short Redis NX lock across instances when Redis-backed. NEVER throws from
-   * the locking itself: a Redis error or an exhausted wait budget fails open
-   * to the previous (unlocked) behaviour. Errors from `fn` propagate.
+   * the locking itself: a Redis error or an exhausted wait budget runs `fn`
+   * with `exclusive` false. Errors from `fn` propagate.
    */
   private async withSessionLock<T>(
     sessionId: string,
-    fn: (exclusive: boolean) => Promise<T>,
+    fn: (lock: HeldSessionLock) => Promise<T>,
   ): Promise<T> {
     const prev = this.sessionChains.get(sessionId) ?? Promise.resolve();
     let releaseChain!: () => void;
@@ -310,7 +340,21 @@ export class GuestSessionService implements OnModuleInit {
     }
     const redisLock = await this.acquireRedisLock(sessionId);
     try {
-      return await fn(chainHeld && redisLock.held);
+      return await fn({
+        exclusive: chainHeld && redisLock.held,
+        persist: (session) =>
+          redisLock.fence
+            ? this.persistIfLockOwned(redisLock.fence, session, sessionId)
+            : this.persistSession(
+                this.getSessionKey(sessionId),
+                session,
+                sessionId,
+              ).then(() => true),
+        remove: () =>
+          redisLock.fence
+            ? this.deleteIfLockOwned(redisLock.fence, sessionId)
+            : this.deleteGuestSession(sessionId).then(() => true),
+      });
     } finally {
       await redisLock.release();
       releaseChain();
@@ -320,9 +364,57 @@ export class GuestSessionService implements OnModuleInit {
     }
   }
 
-  private async acquireRedisLock(
+  private async persistIfLockOwned(
+    fence: LockFence,
+    session: GuestSession,
     sessionId: string,
-  ): Promise<{ release: () => Promise<void>; held: boolean }> {
+  ): Promise<boolean> {
+    let stored: unknown;
+    try {
+      const value = await this.keyv.serializeData({
+        value: session,
+        expires: Date.now() + GUEST_SESSION_TTL_MS,
+      });
+      stored = await fence.client.eval(SET_IF_LOCK_OWNED_SCRIPT, {
+        keys: [fence.lockKey, this.storeKey(this.getSessionKey(sessionId))],
+        arguments: [
+          fence.token,
+          typeof value === 'string' ? value : JSON.stringify(value),
+          String(GUEST_SESSION_TTL_MS),
+        ],
+      });
+    } catch (err) {
+      throw this.storageOutage(sessionId, 'persisting', err);
+    }
+    this.assertWritePersisted(sessionId);
+    return Number(stored) === 1;
+  }
+
+  private async deleteIfLockOwned(
+    fence: LockFence,
+    sessionId: string,
+  ): Promise<boolean> {
+    try {
+      const removed = await fence.client.eval(DELETE_IF_LOCK_OWNED_SCRIPT, {
+        keys: [fence.lockKey, this.storeKey(this.getSessionKey(sessionId))],
+        arguments: [fence.token],
+      });
+      return Number(removed) === 1;
+    } catch (err) {
+      throw this.storageOutage(sessionId, 'deleting', err);
+    }
+  }
+
+  private storeKey(key: string): string {
+    const store = this.redisStore!;
+    return store.createKeyPrefix(this.keyv._getKeyPrefix(key), store.namespace);
+  }
+
+  private async acquireRedisLock(sessionId: string): Promise<{
+    release: () => Promise<void>;
+    held: boolean;
+    fence?: LockFence;
+  }> {
     const noop = () => Promise.resolve();
     const notHeld = { release: noop, held: false };
     const client = this.redisStore?.client as
@@ -332,6 +424,7 @@ export class GuestSessionService implements OnModuleInit {
         }
       | undefined;
     if (!client?.set || !client.eval) return { release: noop, held: true };
+    const evalScript = client.eval.bind(client) as LockFence['client']['eval'];
     const key = `${GUEST_SESSION_LOCK_PREFIX}${sessionId}`;
     const token = randomUUID();
     const deadline = Date.now() + GUEST_LOCK_WAIT_MS;
@@ -344,6 +437,7 @@ export class GuestSessionService implements OnModuleInit {
         if (ok === 'OK') {
           return {
             held: true,
+            fence: { client: { eval: evalScript }, lockKey: key, token },
             release: async () => {
               try {
                 await client.eval!(RELEASE_LOCK_SCRIPT, {
@@ -648,23 +742,27 @@ export class GuestSessionService implements OnModuleInit {
     | { deleted: true }
     | { deleted: false; history: Record<string, StoryProgress> }
   > {
-    return this.withSessionLock(sessionId, async (exclusive) => {
+    const outcome = await this.withSessionLock(sessionId, async (lock) => {
       const session = await this.getGuestSession(sessionId);
-      if (!session) return { deleted: true };
-      if (!exclusive) {
-        return { deleted: false, history: session.readingHistory };
-      }
+      if (!session) return { deleted: true as const };
+      const kept = { deleted: false as const, history: session.readingHistory };
+      if (!lock.exclusive) return kept;
       const current = Object.keys(session.readingHistory);
       const expected = new Set(storyIds);
       if (
         current.length !== expected.size ||
         current.some((storyId) => !expected.has(storyId))
       ) {
-        return { deleted: false, history: session.readingHistory };
+        return kept;
       }
-      await this.deleteGuestSession(sessionId);
-      return { deleted: true };
+      return (await lock.remove()) ? { deleted: true as const } : null;
     });
+    if (outcome) return outcome;
+    this.logger.warn(
+      `Session lock for ${this.maskSessionId(sessionId)} expired before the delete; keeping the session`,
+    );
+    const history = await this.getGuestReadingHistory(sessionId);
+    return history ? { deleted: false, history } : { deleted: true };
   }
 
   /**
@@ -680,7 +778,7 @@ export class GuestSessionService implements OnModuleInit {
     sessionId: string,
     storyId: string,
   ): Promise<GuestStoryAccessResult> {
-    return this.withSessionLock(sessionId, async () => {
+    return this.withSessionLock(sessionId, async (lock) => {
       const session = await this.getGuestSession(sessionId);
 
       if (!session) {
@@ -700,6 +798,8 @@ export class GuestSessionService implements OnModuleInit {
         return { recorded: false, reason: 'quota_exceeded' };
       }
 
+      if (!lock.exclusive) throw this.sessionBusy(sessionId);
+
       // This is a new story - increment counter
       session.uniqueStoriesRead += 1;
 
@@ -712,9 +812,7 @@ export class GuestSessionService implements OnModuleInit {
       // Update last active timestamp
       session.lastActiveAt = new Date();
 
-      // Save back to cache with TTL refresh
-      const key = this.getSessionKey(sessionId);
-      await this.persistSession(key, session, sessionId);
+      if (!(await lock.persist(session))) throw this.sessionBusy(sessionId);
 
       this.logger.debug(
         `Recorded new story access for session ${this.maskSessionId(sessionId)}, story ${storyId}. Total: ${session.uniqueStoriesRead}`,
