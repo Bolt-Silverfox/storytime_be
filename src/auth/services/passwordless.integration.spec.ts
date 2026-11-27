@@ -32,7 +32,11 @@ const LOCK_OBSERVATION_MS = 10_000;
 maybe('PasswordlessService against Postgres', () => {
   jest.setTimeout(LOCK_OBSERVATION_MS * 3);
   let prisma: PrismaClient;
-  const captured: Array<{ code: string; linkToken: string }> = [];
+  const captured: Array<{
+    challengeId: string;
+    code: string;
+    linkToken: string;
+  }> = [];
   let service: PasswordlessService;
   let n = 0;
   const run = crypto.randomBytes(6).toString('hex');
@@ -117,13 +121,10 @@ maybe('PasswordlessService against Postgres', () => {
   const blockedBeforeSettled = async (
     operation: Promise<unknown>,
     queryLike: string,
+    timeoutMs = LOCK_OBSERVATION_MS,
   ) => {
     const stop = new AbortController();
-    const observer = waitForBlockedStatement(
-      queryLike,
-      LOCK_OBSERVATION_MS,
-      stop.signal,
-    );
+    const observer = waitForBlockedStatement(queryLike, timeoutMs, stop.signal);
     const settledFirst = operation.then((outcome) => {
       throw new Error(
         `operation settled before blocking on a lock: ${String(outcome)}`,
@@ -135,6 +136,18 @@ maybe('PasswordlessService against Postgres', () => {
     } finally {
       stop.abort();
       await observer.catch(() => undefined);
+    }
+  };
+
+  const drainOnFailure = async (
+    holder: Promise<unknown>,
+    contender: () => Promise<unknown>,
+  ) => {
+    try {
+      await holder;
+    } catch (error) {
+      await contender().catch(() => undefined);
+      throw error;
     }
   };
 
@@ -181,7 +194,8 @@ maybe('PasswordlessService against Postgres', () => {
     const events = new EventEmitter2();
     events.on(
       'passwordless.requested',
-      (p: { code: string; linkToken: string }) => captured.push(p),
+      (p: { challengeId: string; code: string; linkToken: string }) =>
+        captured.push(p),
     );
     const authRepo = new PrismaAuthRepository(prisma as never);
     service = new PasswordlessService(
@@ -199,13 +213,16 @@ maybe('PasswordlessService against Postgres', () => {
   });
 
   afterAll(async () => {
-    await prisma.loginChallenge.deleteMany({
-      where: { emailNormalized: { contains: run, mode: 'insensitive' } },
-    });
-    await prisma.user.deleteMany({
-      where: { email: { contains: run, mode: 'insensitive' } },
-    });
-    await prisma.$disconnect();
+    try {
+      await prisma.loginChallenge.deleteMany({
+        where: { emailNormalized: { contains: run, mode: 'insensitive' } },
+      });
+      await prisma.user.deleteMany({
+        where: { email: { contains: run, mode: 'insensitive' } },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   it('has the login_challenges table with the unique link hash index', async () => {
@@ -360,8 +377,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   it('keeps only the newest open challenge per email', async () => {
     const email = emailFor();
-    await issue(email);
-    const first = await rowFor(email);
+    const first = await issue(email);
     jest.useFakeTimers({
       now: Date.now() + 61_000,
       doNotFake: [
@@ -377,15 +393,22 @@ maybe('PasswordlessService against Postgres', () => {
         'hrtime',
       ],
     });
+    let second: (typeof captured)[number];
     try {
-      await issue(email);
+      second = await issue(email);
     } finally {
       jest.useRealTimers();
     }
     const old = await prisma.loginChallenge.findUniqueOrThrow({
-      where: { id: first.id },
+      where: { id: first.challengeId },
     });
     expect(old.invalidatedAt).not.toBeNull();
+    expect(second.challengeId).not.toBe(first.challengeId);
+    const open = await prisma.loginChallenge.findMany({
+      where: { emailNormalized: email, invalidatedAt: null, consumedAt: null },
+      select: { id: true },
+    });
+    expect(open).toEqual([{ id: second.challengeId }]);
   });
 
   it('finds a mixed-case stored account without creating a duplicate', async () => {
@@ -701,19 +724,25 @@ maybe('PasswordlessService against Postgres', () => {
     });
 
     let link: Promise<{ count: number }> = Promise.resolve({ count: -1 });
-    await prisma.$transaction(async (tx) => {
-      await tx.session.deleteMany({ where: { userId: user.id } });
-      await tx.user.update({
-        where: { id: user.id },
-        data: { biometricsEnabled: false },
-      });
-      link = authRepo.linkGoogleAccountIfUnset(
-        user.id,
-        `pwl-it-wait-g-${stamp}`,
-        session.id,
-      );
-      await waitForBlockedStatement('SELECT "id" FROM "users"%FOR UPDATE%');
-    });
+    await drainOnFailure(
+      prisma.$transaction(async (tx) => {
+        await tx.session.deleteMany({ where: { userId: user.id } });
+        await tx.user.update({
+          where: { id: user.id },
+          data: { biometricsEnabled: false },
+        });
+        link = authRepo.linkGoogleAccountIfUnset(
+          user.id,
+          `pwl-it-wait-g-${stamp}`,
+          session.id,
+        );
+        await blockedBeforeSettled(
+          link,
+          'SELECT "id" FROM "users"%FOR UPDATE%',
+        );
+      }),
+      () => link,
+    );
 
     expect(await link).toEqual({ count: 0 });
   });
@@ -1440,19 +1469,22 @@ maybe('PasswordlessService against Postgres', () => {
       const { user, renamed } = await seedRenamable();
       let takeover: Promise<unknown> = Promise.resolve();
 
-      await prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { email: renamed },
-        });
-        takeover = authRepo
-          .takeOverUnverifiedAccount(user, {
-            passwordHash: 'rotated',
-            isEmailVerified: true,
-          })
-          .catch((error: unknown) => error);
-        await waitForBlockedStatement('%FOR NO KEY UPDATE%');
-      });
+      await drainOnFailure(
+        prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { id: user.id },
+            data: { email: renamed },
+          });
+          takeover = authRepo
+            .takeOverUnverifiedAccount(user, {
+              passwordHash: 'rotated',
+              isEmailVerified: true,
+            })
+            .catch((error: unknown) => error);
+          await blockedBeforeSettled(takeover, '%FOR NO KEY UPDATE%');
+        }),
+        () => takeover,
+      );
 
       expect(await takeover).toBeInstanceOf(TakeoverTargetChangedError);
       await expectUntouched(user.id);
@@ -1503,21 +1535,24 @@ maybe('PasswordlessService against Postgres', () => {
       const { user, session } = await seedAttacker('cpw');
 
       let change: Promise<unknown> = Promise.resolve();
-      await prisma.$transaction(async (tx) => {
-        await tx.session.deleteMany({ where: { userId: user.id } });
-        await tx.user.update({
-          where: { id: user.id },
-          data: { passwordHash: 'victim-owned-hash', isEmailVerified: true },
-        });
-        change = passwords
-          .changePassword(
-            user.id,
-            { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
-            session.id,
-          )
-          .catch((error: unknown) => error);
-        await waitForBlockedStatement('UPDATE%"users"%');
-      });
+      await drainOnFailure(
+        prisma.$transaction(async (tx) => {
+          await tx.session.deleteMany({ where: { userId: user.id } });
+          await tx.user.update({
+            where: { id: user.id },
+            data: { passwordHash: 'victim-owned-hash', isEmailVerified: true },
+          });
+          change = passwords
+            .changePassword(
+              user.id,
+              { oldPassword: 'AttackerOld1#', newPassword: 'AttackerNew1#' },
+              session.id,
+            )
+            .catch((error: unknown) => error);
+          await blockedBeforeSettled(change, 'UPDATE%"users"%');
+        }),
+        () => change,
+      );
       const outcome = await change;
 
       const after = await prisma.user.findUniqueOrThrow({
@@ -2121,21 +2156,24 @@ maybe('PasswordlessService against Postgres', () => {
       const user = await unverifiedUser();
       let create: Promise<unknown> = Promise.resolve();
 
-      await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${user.id} FOR NO KEY UPDATE`;
-        create = authRepo
-          .createSessionForUnverifiedUser(sessionData(user.id))
-          .then(
-            () => null,
-            (e: unknown) => e,
-          );
-        await waitForBlockedStatement('%FOR SHARE%');
-        await tx.session.deleteMany({ where: { userId: user.id } });
-        await tx.user.update({
-          where: { id: user.id },
-          data: { isEmailVerified: true },
-        });
-      });
+      await drainOnFailure(
+        prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${user.id} FOR NO KEY UPDATE`;
+          create = authRepo
+            .createSessionForUnverifiedUser(sessionData(user.id))
+            .then(
+              () => null,
+              (e: unknown) => e,
+            );
+          await blockedBeforeSettled(create, '%FOR SHARE%');
+          await tx.session.deleteMany({ where: { userId: user.id } });
+          await tx.user.update({
+            where: { id: user.id },
+            data: { isEmailVerified: true },
+          });
+        }),
+        () => create,
+      );
 
       expect(await create).toBeInstanceOf(AccountAlreadyVerifiedError);
       expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
@@ -2148,15 +2186,18 @@ maybe('PasswordlessService against Postgres', () => {
       const user = await unverifiedUser();
       let takeover: Promise<unknown> = Promise.resolve();
 
-      await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${user.id} FOR SHARE`;
-        takeover = authRepo.takeOverUnverifiedAccount(user, {
-          passwordHash: 'rotated',
-          isEmailVerified: true,
-        });
-        await waitForBlockedStatement('%FOR NO KEY UPDATE%');
-        await tx.session.create({ data: sessionData(user.id) });
-      });
+      await drainOnFailure(
+        prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${user.id} FOR SHARE`;
+          takeover = authRepo.takeOverUnverifiedAccount(user, {
+            passwordHash: 'rotated',
+            isEmailVerified: true,
+          });
+          await blockedBeforeSettled(takeover, '%FOR NO KEY UPDATE%');
+          await tx.session.create({ data: sessionData(user.id) });
+        }),
+        () => takeover,
+      );
       await takeover;
 
       expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
@@ -2183,26 +2224,29 @@ maybe('PasswordlessService against Postgres', () => {
       const { user, renamed } = await verifiedUser();
       let create: Promise<unknown> = Promise.resolve();
 
-      await prisma.$transaction(async (tx) => {
-        await tx.user.update({
-          where: { id: user.id },
-          data: { email: renamed },
-        });
-        create = authRepo
-          .createSessionForEmail(
-            {
-              userId: user.id,
-              token: crypto.randomUUID(),
-              expiresAt: new Date(Date.now() + 3_600_000),
-            },
-            user.email.toUpperCase(),
-          )
-          .then(
-            () => null,
-            (e: unknown) => e,
-          );
-        await waitForBlockedStatement('%FOR SHARE%');
-      });
+      await drainOnFailure(
+        prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { id: user.id },
+            data: { email: renamed },
+          });
+          create = authRepo
+            .createSessionForEmail(
+              {
+                userId: user.id,
+                token: crypto.randomUUID(),
+                expiresAt: new Date(Date.now() + 3_600_000),
+              },
+              user.email.toUpperCase(),
+            )
+            .then(
+              () => null,
+              (e: unknown) => e,
+            );
+          await blockedBeforeSettled(create, '%FOR SHARE%');
+        }),
+        () => create,
+      );
 
       expect(await create).toBeInstanceOf(TakeoverTargetChangedError);
       expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
@@ -2303,16 +2347,19 @@ maybe('PasswordlessService against Postgres', () => {
         const user = await activeUser(true);
         let create: Promise<unknown> = Promise.resolve();
 
-        await prisma.$transaction(async (tx) => {
-          await tx.user.update({ where: { id: user.id }, data: change });
-          create = authRepo
-            .createSessionForEmail(sessionData(user.id), user.email)
-            .then(
-              () => null,
-              (e: unknown) => e,
-            );
-          await waitForBlockedStatement('%FOR SHARE%');
-        });
+        await drainOnFailure(
+          prisma.$transaction(async (tx) => {
+            await tx.user.update({ where: { id: user.id }, data: change });
+            create = authRepo
+              .createSessionForEmail(sessionData(user.id), user.email)
+              .then(
+                () => null,
+                (e: unknown) => e,
+              );
+            await blockedBeforeSettled(create, '%FOR SHARE%');
+          }),
+          () => create,
+        );
 
         expect(await create).toBeInstanceOf(InactiveAccountError);
         expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
@@ -2401,16 +2448,21 @@ maybe('PasswordlessService against Postgres', () => {
       });
       let revoke: Promise<unknown> = Promise.resolve();
 
-      await prisma.$transaction(async (tx) => {
-        expect(await repo.lockLiveSession(session.id, user.id, tx)).toBe(true);
-        revoke = prisma.session
-          .updateMany({
-            where: { userId: user.id },
-            data: { isDeleted: true, deletedAt: new Date() },
-          })
-          .then((result) => result);
-        await waitForBlockedStatement('%UPDATE%sessions%', 3_000);
-      });
+      await drainOnFailure(
+        prisma.$transaction(async (tx) => {
+          expect(await repo.lockLiveSession(session.id, user.id, tx)).toBe(
+            true,
+          );
+          revoke = prisma.session
+            .updateMany({
+              where: { userId: user.id },
+              data: { isDeleted: true, deletedAt: new Date() },
+            })
+            .then((result) => result);
+          await blockedBeforeSettled(revoke, '%UPDATE%sessions%', 3_000);
+        }),
+        () => revoke,
+      );
       await revoke;
 
       expect(
