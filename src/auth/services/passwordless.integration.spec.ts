@@ -26,8 +26,10 @@ import { DeviceTokenService } from '@/notification/services/device-token.service
 
 const url = process.env.PASSWORDLESS_TEST_DATABASE_URL;
 const maybe = isThrowawayDatabaseUrl(url) ? describe : describe.skip;
+const LOCK_OBSERVATION_MS = 10_000;
 
 maybe('PasswordlessService against Postgres', () => {
+  jest.setTimeout(LOCK_OBSERVATION_MS * 3);
   let prisma: PrismaClient;
   const captured: Array<{ code: string; linkToken: string }> = [];
   let service: PasswordlessService;
@@ -47,7 +49,7 @@ maybe('PasswordlessService against Postgres', () => {
 
   const waitForBlockedStatement = async (
     queryLike: string,
-    timeoutMs = 10_000,
+    timeoutMs = LOCK_OBSERVATION_MS,
   ) => {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -127,6 +129,7 @@ maybe('PasswordlessService against Postgres', () => {
     pooled.searchParams.set('connection_limit', '10');
     prisma = new PrismaClient({
       datasources: { db: { url: pooled.toString() } },
+      transactionOptions: { timeout: LOCK_OBSERVATION_MS * 2 },
     });
     const events = new EventEmitter2();
     events.on(
@@ -1228,13 +1231,17 @@ maybe('PasswordlessService against Postgres', () => {
   it('refuses to reset an account that was verified between the read and the takeover', async () => {
     const authRepo = new PrismaAuthRepository(prisma as never);
     const stamp = `${run}-${++n}`;
-    const user = await prisma.user.create({
+    const unverifiedSnapshot = await prisma.user.create({
       data: {
         email: `pwl-it-late${stamp}@example.com`,
         passwordHash: 'owner-hash',
-        isEmailVerified: true,
+        isEmailVerified: false,
         pinHash: 'owner-pin',
       },
+    });
+    const user = await prisma.user.update({
+      where: { id: unverifiedSnapshot.id },
+      data: { isEmailVerified: true },
     });
     await prisma.session.create({
       data: {
@@ -1245,7 +1252,7 @@ maybe('PasswordlessService against Postgres', () => {
     });
 
     await expect(
-      authRepo.takeOverUnverifiedAccount(user, {
+      authRepo.takeOverUnverifiedAccount(unverifiedSnapshot, {
         passwordHash: 'rotated',
         hasLocalPassword: false,
         pinHash: null,
