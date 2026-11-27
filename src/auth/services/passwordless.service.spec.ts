@@ -127,6 +127,10 @@ describe('PasswordlessService', () => {
     it('gives the same response for unknown and known emails, enqueues one email each and creates no user', async () => {
       const { service, authRepo, captured } = build();
       const findSpy = jest.spyOn(authRepo, 'findUserByEmail');
+      const findInsensitiveSpy = jest.spyOn(
+        authRepo,
+        'findUserByEmailInsensitive',
+      );
       await authRepo.createUser({
         email: 'known@example.com',
         passwordHash: 'h',
@@ -134,6 +138,7 @@ describe('PasswordlessService', () => {
       });
       authRepo.created.length = 0;
       findSpy.mockClear();
+      findInsensitiveSpy.mockClear();
 
       const known = await service.request('known@example.com', '1.1.1.1');
       const unknown = await service.request('nobody@example.com', '2.2.2.2');
@@ -148,6 +153,7 @@ describe('PasswordlessService', () => {
       expect(authRepo.users).toHaveLength(1);
       expect(authRepo.created).toHaveLength(0);
       expect(findSpy).not.toHaveBeenCalled();
+      expect(findInsensitiveSpy).not.toHaveBeenCalled();
     });
 
     it('emits a 6-digit code and a 43 char base64url link token', async () => {
