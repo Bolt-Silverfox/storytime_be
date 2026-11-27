@@ -13,7 +13,9 @@ function build(history: Record<string, unknown> | null) {
         Promise.resolve(ids.filter((i) => i !== 'gone').map((id) => ({ id }))),
       ),
     createUserStoryProgressIfAbsent: jest.fn().mockResolvedValue(undefined),
-    deleteGuestSession: jest.fn().mockResolvedValue(undefined),
+    deleteGuestSessionIfHistoryIs: jest
+      .fn()
+      .mockResolvedValue({ deleted: true }),
   };
   const service = new PasswordlessGuestMergeService(
     guestSessions as never,
@@ -46,7 +48,10 @@ describe('PasswordlessGuestMergeService', () => {
     const { service, guestSessions } = build({ s1: {} });
     await service.carryOver('u1', GUEST.toUpperCase(), true);
     expect(guestSessions.getGuestReadingHistory).toHaveBeenCalledWith(GUEST);
-    expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
+    expect(guestSessions.deleteGuestSessionIfHistoryIs).toHaveBeenCalledWith(
+      GUEST,
+      ['s1'],
+    );
     expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledTimes(
       1,
     );
@@ -72,11 +77,14 @@ describe('PasswordlessGuestMergeService', () => {
     );
     await service.carryOver('u2', GUEST, true);
     await service.carryOver('u2', GUEST, false);
-    expect(guestSessions.deleteGuestSession).not.toHaveBeenCalled();
+    expect(guestSessions.deleteGuestSessionIfHistoryIs).not.toHaveBeenCalled();
 
     await service.carryOver('u1', GUEST, false);
 
-    expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
+    expect(guestSessions.deleteGuestSessionIfHistoryIs).toHaveBeenCalledWith(
+      GUEST,
+      ['s1', 's2'],
+    );
     expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledWith(
       'u1',
       's2',
@@ -153,12 +161,54 @@ describe('PasswordlessGuestMergeService', () => {
   it('retires the guest session after carrying it over so it cannot be claimed again', async () => {
     const { service, guestSessions } = build({ s1: {} });
     await service.carryOver('u1', GUEST, true);
-    expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
+    expect(guestSessions.deleteGuestSessionIfHistoryIs).toHaveBeenCalledWith(
+      GUEST,
+      ['s1'],
+    );
   });
 
   it('still retires the session when nothing is left to copy', async () => {
     const { service, guestSessions } = build({});
     await service.carryOver('u1', GUEST, true);
-    expect(guestSessions.deleteGuestSession).toHaveBeenCalledWith(GUEST);
+    expect(guestSessions.deleteGuestSessionIfHistoryIs).toHaveBeenCalledWith(
+      GUEST,
+      [],
+    );
+  });
+
+  it('copies a story saved during the carry-over before it retires the session', async () => {
+    const { service, guestSessions, redis } = build({ s1: {} });
+    guestSessions.deleteGuestSessionIfHistoryIs.mockResolvedValueOnce({
+      deleted: false,
+      history: { s1: {}, s2: {} },
+    });
+
+    await service.carryOver('u1', GUEST, true);
+
+    expect(guestSessions.createUserStoryProgressIfAbsent).toHaveBeenCalledWith(
+      'u1',
+      's2',
+    );
+    expect(
+      guestSessions.deleteGuestSessionIfHistoryIs,
+    ).toHaveBeenLastCalledWith(GUEST, ['s1', 's2']);
+    expect(await redis.client.get(`pwl:guest-claim:${GUEST}`)).toBe('u1:done');
+  });
+
+  it('keeps a session whose history keeps changing and lets the same user resume later', async () => {
+    const { service, guestSessions, redis } = build({ s1: {} });
+    let round = 0;
+    guestSessions.deleteGuestSessionIfHistoryIs.mockImplementation(() =>
+      Promise.resolve({
+        deleted: false,
+        history: { s1: {}, [`s${++round + 1}`]: {} },
+      }),
+    );
+
+    await service.carryOver('u1', GUEST, true);
+
+    expect(await redis.client.get(`pwl:guest-claim:${GUEST}`)).toBe(
+      'u1:pending',
+    );
   });
 });

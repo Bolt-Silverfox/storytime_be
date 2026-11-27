@@ -126,3 +126,52 @@ describe('GuestSessionService — concurrent read-modify-write', () => {
     }
   });
 });
+
+describe('GuestSessionService.deleteGuestSessionIfHistoryIs', () => {
+  it('deletes the session when its history still lists exactly the copied stories', async () => {
+    const service = build();
+    const { sessionId } = await service.createGuestSession();
+    await service.recordNewStoryAccess(sessionId, 'story-x');
+
+    await expect(
+      service.deleteGuestSessionIfHistoryIs(sessionId, ['story-x']),
+    ).resolves.toEqual({ deleted: true });
+
+    expect(await service.getGuestSession(sessionId)).toBeNull();
+  });
+
+  it('keeps the session and returns the current history when a story was opened after the copy', async () => {
+    const service = build();
+    const { sessionId } = await service.createGuestSession();
+    await service.recordNewStoryAccess(sessionId, 'story-x');
+    await service.recordNewStoryAccess(sessionId, 'story-y');
+
+    const result = await service.deleteGuestSessionIfHistoryIs(sessionId, [
+      'story-x',
+    ]);
+
+    expect(result.deleted).toBe(false);
+    expect(Object.keys(result.deleted ? {} : result.history).sort()).toEqual([
+      'story-x',
+      'story-y',
+    ]);
+    expect(await service.getGuestSession(sessionId)).not.toBeNull();
+  });
+
+  it('waits for an open already in flight and keeps the story it saved', async () => {
+    const service = build();
+    const { sessionId } = await service.createGuestSession();
+    await service.recordNewStoryAccess(sessionId, 'story-x');
+
+    const [rec, result] = await Promise.all([
+      service.recordNewStoryAccess(sessionId, 'story-y'),
+      service.deleteGuestSessionIfHistoryIs(sessionId, ['story-x']),
+    ]);
+
+    expect(rec).toEqual({ recorded: true });
+    expect(result.deleted).toBe(false);
+    expect(
+      (await service.getGuestSession(sessionId))?.readingHistory['story-y'],
+    ).toBeDefined();
+  });
+});

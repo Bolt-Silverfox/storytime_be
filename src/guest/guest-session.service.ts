@@ -636,6 +636,29 @@ export class GuestSessionService implements OnModuleInit {
     );
   }
 
+  async deleteGuestSessionIfHistoryIs(
+    sessionId: string,
+    storyIds: readonly string[],
+  ): Promise<
+    | { deleted: true }
+    | { deleted: false; history: Record<string, StoryProgress> }
+  > {
+    return this.withSessionLock(sessionId, async () => {
+      const session = await this.getGuestSession(sessionId);
+      if (!session) return { deleted: true };
+      const current = Object.keys(session.readingHistory);
+      const expected = new Set(storyIds);
+      if (
+        current.length !== expected.size ||
+        current.some((storyId) => !expected.has(storyId))
+      ) {
+        return { deleted: false, history: session.readingHistory };
+      }
+      await this.deleteGuestSession(sessionId);
+      return { deleted: true };
+    });
+  }
+
   /**
    * Records that a guest accessed a new unique story.
    * Performs quota check and consumption in a single read-modify-write cycle.

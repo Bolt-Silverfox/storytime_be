@@ -44,10 +44,43 @@ export class PasswordlessGuestMergeService {
       return;
     }
 
-    const history = await this.guestSessions.getGuestReadingHistory(sid);
+    let history = await this.guestSessions.getGuestReadingHistory(sid);
     if (!history) return;
 
-    const storyIds = Object.keys(history).slice(0, GUEST_STORY_LIMIT);
+    const carried = new Set<string>();
+    for (let round = 0; round <= GUEST_STORY_LIMIT; round++) {
+      await this.copyStories(userId, history, carried);
+      const retired = await this.guestSessions.deleteGuestSessionIfHistoryIs(
+        sid,
+        Object.keys(history),
+      );
+      if (retired.deleted) {
+        await this.redis.client.set(
+          claimKey,
+          `${userId}:done`,
+          'EX',
+          CLAIM_TTL_SECONDS,
+        );
+        this.logger.log(
+          `Carried over ${carried.size} guest stories for user ${userId.slice(0, 8)}`,
+        );
+        return;
+      }
+      history = retired.history;
+    }
+    this.logger.warn(
+      `Guest history kept changing; carry-over left pending for user ${userId.slice(0, 8)}`,
+    );
+  }
+
+  private async copyStories(
+    userId: string,
+    history: Record<string, unknown>,
+    carried: Set<string>,
+  ): Promise<void> {
+    const storyIds = Object.keys(history)
+      .slice(0, GUEST_STORY_LIMIT)
+      .filter((storyId) => !carried.has(storyId));
     const existing =
       storyIds.length > 0
         ? await this.guestSessions.getStoryDetailsByIds(storyIds)
@@ -57,16 +90,7 @@ export class PasswordlessGuestMergeService {
         userId,
         story.id,
       );
+      carried.add(story.id);
     }
-    await this.guestSessions.deleteGuestSession(sid);
-    await this.redis.client.set(
-      claimKey,
-      `${userId}:done`,
-      'EX',
-      CLAIM_TTL_SECONDS,
-    );
-    this.logger.log(
-      `Carried over ${existing.length} guest stories for user ${userId.slice(0, 8)}`,
-    );
   }
 }
