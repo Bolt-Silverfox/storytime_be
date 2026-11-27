@@ -113,13 +113,31 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
     expect(await remaining()).toEqual(['rt-2', 'rt-3', 'rt-4']);
   });
 
-  it('keeps the token when the password write fails inside the transaction', async () => {
+  it('keeps a claimed token when the password write fails, so a retry can still use it', async () => {
     const { id } = await prisma.token.findUniqueOrThrow({
       where: { token: 'rt-1' },
     });
+    let claimedBeforeFailure = false;
 
-    await expect(claimAndWrite(id, 'no-such-user')).rejects.toThrow();
+    await expect(
+      repo.transaction(async (tx) => {
+        claimedBeforeFailure = await tx.consumeToken(id);
+        await tx.updateUser('no-such-user', { passwordHash: 'new' });
+      }),
+    ).rejects.toThrow();
 
+    expect(claimedBeforeFailure).toBe(true);
+    expect(await remaining()).toEqual(['rt-1', 'rt-2', 'rt-3', 'rt-4']);
+    await expect(claimAndWrite(id, 'rt-owner')).resolves.toBe(true);
+  });
+
+  it('does not claim a token that expired before the transaction', async () => {
+    const { id } = await prisma.token.update({
+      where: { token: 'rt-1' },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    await expect(claimAndWrite(id, 'rt-owner')).resolves.toBe(false);
     expect(await remaining()).toEqual(['rt-1', 'rt-2', 'rt-3', 'rt-4']);
   });
 
