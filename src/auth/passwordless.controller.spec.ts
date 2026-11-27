@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import type { Server } from 'http';
 import request from 'supertest';
 import { PasswordlessController } from './passwordless.controller';
 import { PasswordlessService } from './services/passwordless.service';
@@ -155,30 +156,32 @@ describe('PasswordlessController throttle buckets per route', () => {
   });
   afterEach(() => app.close());
 
+  const post = (path: string, body: object) =>
+    request(app.getHttpServer() as Server)
+      .post(path)
+      .send(body);
+
   const spendRequestBudget = async (email: string) => {
     for (let i = 0; i < limit; i += 1)
-      await request(app.getHttpServer())
-        .post('/auth/passwordless/request')
-        .send({ email })
-        .expect(200);
+      await post('/auth/passwordless/request', { email }).expect(200);
   };
 
   it('still lets the same email sign in with a password after spending its passwordless request budget', async () => {
     await spendRequestBudget('shared@example.com');
 
-    await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ email: 'shared@example.com', password: 'secret' })
-      .expect(200);
+    await post('/auth/login', {
+      email: 'shared@example.com',
+      password: 'secret',
+    }).expect(200);
   });
 
   it('still lets the same email verify a code after spending its passwordless request budget', async () => {
     await spendRequestBudget('shared@example.com');
 
-    await request(app.getHttpServer())
-      .post('/auth/passwordless/verify')
-      .send({ email: 'shared@example.com', code: '123456' })
-      .expect(200);
+    await post('/auth/passwordless/verify', {
+      email: 'shared@example.com',
+      code: '123456',
+    }).expect(200);
   });
 });
 
