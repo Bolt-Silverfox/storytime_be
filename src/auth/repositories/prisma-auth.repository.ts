@@ -446,8 +446,15 @@ export class PrismaAuthRepository implements IAuthRepository {
   ): Promise<T> {
     return this.prisma.$transaction(async (prisma) => {
       const tx: IAuthRepositoryTransaction = {
+        consumeToken: async (id) => {
+          const { count } = await prisma.token.deleteMany({ where: { id } });
+          return count > 0;
+        },
         updateUser: async (id, data) => {
           return prisma.user.update({ where: { id }, data });
+        },
+        deleteAllUserSessions: async (userId) => {
+          await prisma.session.deleteMany({ where: { userId } });
         },
         deleteOtherSessions: async (userId, exceptSessionId) => {
           await prisma.session.deleteMany({

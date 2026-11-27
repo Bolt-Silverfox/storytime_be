@@ -1530,7 +1530,9 @@ describe('PasswordService', () => {
       authRepository.findUserById.mockResolvedValue(mockUser);
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
+          consumeToken: jest.fn(),
           updateUser: jest.fn().mockResolvedValue(makeUser()),
+          deleteAllUserSessions: jest.fn(),
           deleteOtherSessions: jest.fn().mockResolvedValue(undefined),
           findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
           unlinkProviderField: jest.fn().mockResolvedValue(undefined),
@@ -1555,7 +1557,9 @@ describe('PasswordService', () => {
       authRepository.findUserById.mockResolvedValue(mockUser);
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
+          consumeToken: jest.fn(),
           updateUser: jest.fn().mockResolvedValue(makeUser()),
+          deleteAllUserSessions: jest.fn(),
           deleteOtherSessions: jest.fn().mockResolvedValue(undefined),
           findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
           unlinkProviderField: jest.fn().mockResolvedValue(undefined),
@@ -1641,7 +1645,9 @@ describe('PasswordService', () => {
       const mockTxDeleteOtherSessions = jest.fn().mockResolvedValue(undefined);
       authRepository.transaction.mockImplementation(async (fn) => {
         const tx: jest.Mocked<IAuthRepositoryTransaction> = {
+          consumeToken: jest.fn(),
           updateUser: mockTxUpdateUser,
+          deleteAllUserSessions: jest.fn(),
           deleteOtherSessions: mockTxDeleteOtherSessions,
           findActiveUserLinkedProviderFields: jest.fn().mockResolvedValue(null),
           unlinkProviderField: jest.fn().mockResolvedValue(undefined),

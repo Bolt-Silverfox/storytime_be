@@ -204,7 +204,9 @@ export interface IAuthRepository {
 }
 
 export interface IAuthRepositoryTransaction {
+  consumeToken(id: string): Promise<boolean>;
   updateUser(id: string, data: { passwordHash: string }): Promise<User>;
+  deleteAllUserSessions(userId: string): Promise<void>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
   findActiveUserLinkedProviderFields(
     userId: string,
