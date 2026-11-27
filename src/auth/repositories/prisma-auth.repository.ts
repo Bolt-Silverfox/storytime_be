@@ -296,6 +296,12 @@ export class PrismaAuthRepository implements IAuthRepository {
     await this.prisma.token.deleteMany({ where: { id } });
   }
 
+  async deleteTokensByUserEmail(email: string, type: TokenType): Promise<void> {
+    await this.prisma.token.deleteMany({
+      where: { type, user: { email: { equals: email, mode: 'insensitive' } } },
+    });
+  }
+
   async deleteUserTokensByType(userId: string, type: TokenType): Promise<void> {
     await this.prisma.token.deleteMany({
       where: { userId, type },
