@@ -239,14 +239,16 @@ export class PasswordService {
   ): Promise<{ message: string }> {
     const resetToken = await this.consumeResetAttempt(token, email);
 
+    if (!(await this.authRepository.consumeToken(resetToken.id))) {
+      throw new NotFoundException('Invalid reset token');
+    }
+
     // Hash new password and update user
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.authRepository.updateUser(resetToken.userId, {
       passwordHash: hashedPassword,
     });
 
-    // Clean up: delete token and invalidate all sessions
-    await this.authRepository.deleteToken(resetToken.id);
     await this.authRepository.deleteAllUserSessions(resetToken.userId);
 
     // The reset succeeded with a token delivered to the account's email, so the
