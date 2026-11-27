@@ -7,9 +7,11 @@ import {
   Inject,
   HttpException,
   HttpStatus,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { RedisService } from '@/redis/redis.service';
+import { withHealthTimeout } from '@/health/indicators/health-timeout';
 import { TokenService } from './token.service';
 import { generateToken } from '@/shared/utils/generate-token';
 import {
@@ -30,6 +32,7 @@ import {
 
 const RESET_MAX_FAILED_ATTEMPTS = 5;
 const RESET_ATTEMPT_WINDOW_SECONDS = 60 * 60;
+const RESET_REDIS_TIMEOUT_MS = 2000;
 
 const normalizeEmail = (email: string) => email.toLowerCase().trim();
 
@@ -54,16 +57,52 @@ export class PasswordService {
 
   private async recordFailedResetAttempt(email: string): Promise<number> {
     const key = this.resetAttemptsKey(email);
-    const results = await this.redis.client
-      .multi()
-      .set(key, 0, 'EX', RESET_ATTEMPT_WINDOW_SECONDS, 'NX')
-      .incr(key)
-      .ttl(key)
-      .exec();
-    if (results?.[2]?.[1] === -1) {
-      await this.redis.client.expire(key, RESET_ATTEMPT_WINDOW_SECONDS);
+    return withHealthTimeout(
+      (async () => {
+        const results = await this.redis.client
+          .multi()
+          .set(key, 0, 'EX', RESET_ATTEMPT_WINDOW_SECONDS, 'NX')
+          .incr(key)
+          .ttl(key)
+          .exec();
+        const [incrError, attempts] = results?.[1] ?? [];
+        if (incrError || !Number.isInteger(attempts)) {
+          throw incrError ?? new Error('Reset attempt counter not recorded');
+        }
+        if (results?.[2]?.[1] === -1) {
+          await this.redis.client.expire(key, RESET_ATTEMPT_WINDOW_SECONDS);
+        }
+        return attempts as number;
+      })(),
+      RESET_REDIS_TIMEOUT_MS,
+    );
+  }
+
+  private async countResetAttempt(email: string): Promise<number> {
+    try {
+      return await this.recordFailedResetAttempt(email);
+    } catch (error) {
+      this.logFailure('Failed to count reset attempt', error);
+      throw new ServiceUnavailableException(
+        'Password reset is temporarily unavailable. Try again later.',
+      );
     }
-    return Number(results?.[1]?.[1]);
+  }
+
+  private async clearResetAttempts(email: string) {
+    try {
+      await withHealthTimeout(
+        this.redis.client.del(this.resetAttemptsKey(email)),
+        RESET_REDIS_TIMEOUT_MS,
+      );
+    } catch (error) {
+      this.logFailure('Failed to clear reset attempts', error);
+    }
+  }
+
+  private logFailure(context: string, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    this.logger.error(`${context}: ${message}`);
   }
 
   private async chargeTokenOwner(resetToken: TokenWithUser) {
@@ -73,16 +112,27 @@ export class PasswordService {
     }
   }
 
-  private async revokePresentedCode(resetToken: TokenWithUser) {
-    await this.recordFailedResetAttempt(resetToken.user.email);
-    await this.authRepository.deleteToken(resetToken.id);
+  private async revokeForeignCode(token: string, email: string) {
+    const presented = await this.findPresentedCode(token);
+    if (!presented || this.isOwnedBy(presented, email)) return;
+    const [charge, revoke] = await Promise.allSettled([
+      this.recordFailedResetAttempt(presented.user.email),
+      this.authRepository.deleteToken(presented.id),
+    ]);
+    if (charge.status === 'rejected') {
+      this.logFailure('Failed to charge reset token owner', charge.reason);
+    }
+    if (revoke.status === 'rejected') {
+      this.logFailure('Failed to revoke presented reset code', revoke.reason);
+    }
   }
 
-  private inBackground(task: Promise<void>) {
-    task.catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Failed to charge reset token owner: ${message}`);
-    });
+  private inBackground(task: Promise<void>, context: string) {
+    task.catch((error: unknown) => this.logFailure(context, error));
+  }
+
+  private isOwnedBy(resetToken: TokenWithUser, email: string) {
+    return normalizeEmail(resetToken.user.email) === normalizeEmail(email);
   }
 
   private findPresentedCode(token: string) {
@@ -93,16 +143,12 @@ export class PasswordService {
   }
 
   private async consumeResetAttempt(token: string, email: string) {
-    const attempts = await this.recordFailedResetAttempt(email);
+    const attempts = await this.countResetAttempt(email);
     if (attempts > RESET_MAX_FAILED_ATTEMPTS) {
-      await this.authRepository.deleteTokensByUserEmail(
-        normalizeEmail(email),
-        TokenType.PASSWORD_RESET,
+      this.inBackground(
+        this.revokeForeignCode(token, email),
+        'Failed to resolve presented reset code',
       );
-      const presented = await this.findPresentedCode(token);
-      if (presented) {
-        this.inBackground(this.revokePresentedCode(presented));
-      }
       throw new HttpException(
         'Too many failed reset attempts. Try again later.',
         HttpStatus.TOO_MANY_REQUESTS,
@@ -115,8 +161,11 @@ export class PasswordService {
       throw new NotFoundException('Invalid reset token');
     }
 
-    if (normalizeEmail(resetToken.user.email) !== normalizeEmail(email)) {
-      this.inBackground(this.chargeTokenOwner(resetToken));
+    if (!this.isOwnedBy(resetToken, email)) {
+      this.inBackground(
+        this.chargeTokenOwner(resetToken),
+        'Failed to charge reset token owner',
+      );
       throw new NotFoundException('Invalid reset token');
     }
 
@@ -209,7 +258,7 @@ export class PasswordService {
   ): Promise<{ message: string }> {
     await this.consumeResetAttempt(token, email);
 
-    await this.redis.client.del(this.resetAttemptsKey(email));
+    await this.clearResetAttempts(email);
 
     return { message: 'Valid reset token' };
   }
@@ -228,19 +277,16 @@ export class PasswordService {
   ): Promise<{ message: string }> {
     const resetToken = await this.consumeResetAttempt(token, email);
 
-    await this.redis.client.del(this.resetAttemptsKey(email));
-
-    if (!(await this.authRepository.consumeToken(resetToken.id))) {
-      throw new NotFoundException('Invalid reset token');
-    }
-
-    // Hash new password and update user
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.authRepository.updateUser(resetToken.userId, {
-      passwordHash: hashedPassword,
+    await this.authRepository.transaction(async (tx) => {
+      if (!(await tx.consumeToken(resetToken.id))) {
+        throw new NotFoundException('Invalid reset token');
+      }
+      await tx.updateUser(resetToken.userId, { passwordHash: hashedPassword });
+      await tx.deleteAllUserSessions(resetToken.userId);
     });
 
-    await this.authRepository.deleteAllUserSessions(resetToken.userId);
+    await this.clearResetAttempts(email);
 
     // The reset succeeded with a token delivered to the account's email, so the
     // requester has proven control of the account. Only now is it safe to trust

@@ -155,9 +155,7 @@ export interface IAuthRepository {
     type: TokenType,
   ): Promise<TokenWithUser | null>;
   deleteToken(id: string): Promise<void>;
-  consumeToken(id: string): Promise<boolean>;
   deleteUserTokensByType(userId: string, type: TokenType): Promise<void>;
-  deleteTokensByUserEmail(email: string, type: TokenType): Promise<void>;
 
   // Profile operations
   updateProfile(
@@ -204,7 +202,9 @@ export interface IAuthRepository {
 }
 
 export interface IAuthRepositoryTransaction {
+  consumeToken(id: string): Promise<boolean>;
   updateUser(id: string, data: { passwordHash: string }): Promise<User>;
+  deleteAllUserSessions(userId: string): Promise<void>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
   findActiveUserLinkedProviderFields(
     userId: string,
