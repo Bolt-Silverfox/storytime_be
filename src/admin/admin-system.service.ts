@@ -11,7 +11,11 @@ import {
   ADMIN_CONTENT_REPOSITORY,
 } from './repositories';
 import { ActivityLogDto, SubscriptionDto } from './dto/admin-responses.dto';
-import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
+import { captureMessage } from '../sentry-setup';
+import {
+  ElevenLabsAuthError,
+  ElevenLabsTTSProvider,
+} from '../voice/providers/eleven-labs-tts.provider';
 import {
   categories,
   themes,
@@ -191,8 +195,43 @@ export class AdminSystemService {
     };
   }
 
+  private lastInvalidKeyAlertAt = 0;
+
+  /**
+   * A rejected key is no longer a Sentry error per poll, so a revoked prod key
+   * would go unnoticed. Emit one message per process per hour instead.
+   */
+  private notifyInvalidElevenLabsKey() {
+    const now = Date.now();
+    if (now - this.lastInvalidKeyAlertAt < 60 * 60 * 1000) return;
+    this.lastInvalidKeyAlertAt = now;
+    captureMessage(
+      'ElevenLabs API key was rejected (401/403, not a permission issue)',
+    );
+  }
+
   async getElevenLabsBalance() {
-    return this.elevenLabsProvider.getSubscriptionInfo();
+    try {
+      return await this.elevenLabsProvider.getSubscriptionInfo();
+    } catch (error) {
+      // A rejected key is an expected, operator-fixable condition. Report it in
+      // the payload so the dashboard can show it, instead of a 502 that is
+      // captured to Sentry on every poll.
+      if (error instanceof ElevenLabsAuthError) {
+        if (error.reason === 'invalid_key') {
+          this.notifyInvalidElevenLabsKey();
+        }
+        return {
+          available: false as const,
+          reason: error.reason,
+          message:
+            error.reason === 'insufficient_key_permission'
+              ? 'ElevenLabs balance unavailable: the API key lacks the user_read permission.'
+              : 'ElevenLabs balance unavailable: ElevenLabs rejected the key (invalid, disabled or restricted).',
+        };
+      }
+      throw error;
+    }
   }
 
   createBackup(): { message: string; timestamp: Date } {

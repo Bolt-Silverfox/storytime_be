@@ -71,4 +71,19 @@ export function captureException(exception: unknown, hint?: Sentry.EventHint) {
   }
 }
 
+/** Capture a message in Sentry. No-op when Sentry is disabled; never throws. */
+export function captureMessage(
+  message: string,
+  level: Sentry.SeverityLevel = 'warning',
+) {
+  if (!isSentryEnabled) {
+    return;
+  }
+  try {
+    Sentry.captureMessage(message, level);
+  } catch {
+    // Telemetry must never break the request/response path.
+  }
+}
+
 export { Sentry };

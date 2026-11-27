@@ -1,3 +1,4 @@
+import { captureMessage } from '../sentry-setup';
 import { Test, TestingModule } from '@nestjs/testing';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { AdminSystemService } from './admin-system.service';
@@ -9,9 +10,17 @@ import {
   ADMIN_CONTENT_REPOSITORY,
   PrismaAdminContentRepository,
 } from './repositories';
-import { ElevenLabsTTSProvider } from '../voice/providers/eleven-labs-tts.provider';
+import {
+  ElevenLabsAuthError,
+  ElevenLabsTTSProvider,
+} from '../voice/providers/eleven-labs-tts.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { ValidationException } from '@/shared/exceptions';
+
+jest.mock('../sentry-setup', () => ({
+  ...jest.requireActual('../sentry-setup'),
+  captureMessage: jest.fn(),
+}));
 
 describe('AdminSystemService', () => {
   let service: AdminSystemService;
@@ -475,6 +484,74 @@ describe('AdminSystemService', () => {
 
       expect(result).toEqual(subscriptionInfo);
       expect(elevenLabsProvider.getSubscriptionInfo).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns an unavailable payload (not a 502) when the key lacks user_read', async () => {
+      elevenLabsProvider.getSubscriptionInfo.mockRejectedValue(
+        new ElevenLabsAuthError('insufficient_key_permission'),
+      );
+
+      const result = await service.getElevenLabsBalance();
+
+      expect(result).toEqual({
+        available: false,
+        reason: 'insufficient_key_permission',
+        message: expect.stringContaining('user_read'),
+      });
+    });
+
+    it('returns an unavailable payload when the key is invalid', async () => {
+      elevenLabsProvider.getSubscriptionInfo.mockRejectedValue(
+        new ElevenLabsAuthError('invalid_key'),
+      );
+
+      const result = await service.getElevenLabsBalance();
+
+      expect(result).toMatchObject({
+        available: false,
+        reason: 'invalid_key',
+        message:
+          'ElevenLabs balance unavailable: ElevenLabs rejected the key (invalid, disabled or restricted).',
+      });
+    });
+
+    it('alerts Sentry at most once per hour for invalid_key, never for missing permission', async () => {
+      jest.useFakeTimers();
+      try {
+        (captureMessage as jest.Mock).mockClear();
+        elevenLabsProvider.getSubscriptionInfo.mockRejectedValue(
+          new ElevenLabsAuthError('insufficient_key_permission'),
+        );
+        await service.getElevenLabsBalance();
+        expect(captureMessage).not.toHaveBeenCalled();
+
+        elevenLabsProvider.getSubscriptionInfo.mockRejectedValue(
+          new ElevenLabsAuthError('invalid_key'),
+        );
+        await service.getElevenLabsBalance();
+        await service.getElevenLabsBalance();
+        expect(captureMessage).toHaveBeenCalledTimes(1);
+
+        jest.advanceTimersByTime(59 * 60 * 1000);
+        await service.getElevenLabsBalance();
+        expect(captureMessage).toHaveBeenCalledTimes(1);
+
+        jest.advanceTimersByTime(2 * 60 * 1000);
+        await service.getElevenLabsBalance();
+        expect(captureMessage).toHaveBeenCalledTimes(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('still rethrows unexpected provider failures', async () => {
+      elevenLabsProvider.getSubscriptionInfo.mockRejectedValue(
+        new Error('socket hang up'),
+      );
+
+      await expect(service.getElevenLabsBalance()).rejects.toThrow(
+        'socket hang up',
+      );
     });
   });
 
