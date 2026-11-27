@@ -56,7 +56,9 @@ maybe('PasswordlessThrottleService against real Redis', () => {
 
     expect(await throttle.hit(key, 60_000)).toBe(1);
 
-    expect(await client.pttl(key)).toBeLessThanOrEqual(5_000);
+    const ttl = await client.pttl(key);
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThanOrEqual(5_000);
   });
 
   it('admits up to the limit and refuses without counting the refused call', async () => {
