@@ -1,5 +1,6 @@
 import { HttpException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { createServer, connect, Server, Socket } from 'net';
 import { Redis } from 'ioredis';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
@@ -28,6 +29,15 @@ d('PasswordService reset attempts against a real Redis', () => {
   let service: PasswordService;
   let tokens: Map<string, TokenWithUser>;
   let failWrites: boolean;
+  let repository: IAuthRepository;
+
+  const serviceOn = (redisClient: Redis) =>
+    new PasswordService(
+      repository,
+      { emit: jest.fn() } as unknown as EventEmitter2,
+      { hashToken: (code: string) => `h:${code}` } as unknown as TokenService,
+      { client: redisClient } as unknown as RedisService,
+    );
 
   const statusOf = async (work: Promise<unknown>) =>
     work.then(
@@ -93,7 +103,7 @@ d('PasswordService reset attempts against a real Redis', () => {
         },
       ],
     ]);
-    const repository = {
+    repository = {
       findTokenByHashedToken: (hash: string) =>
         Promise.resolve(tokens.get(hash) ?? null),
       deleteToken: (id: string) => {
@@ -123,12 +133,7 @@ d('PasswordService reset attempts against a real Redis', () => {
       findKnownUserIP: () => Promise.resolve(null),
       recordUserIP: () => Promise.resolve(),
     } as unknown as IAuthRepository;
-    service = new PasswordService(
-      repository,
-      { emit: jest.fn() } as unknown as EventEmitter2,
-      { hashToken: (code: string) => `h:${code}` } as unknown as TokenService,
-      { client } as unknown as RedisService,
-    );
+    service = serviceOn(client);
   });
 
   afterEach(() => {
@@ -203,4 +208,60 @@ d('PasswordService reset attempts against a real Redis', () => {
     await client.ping();
     expect(await validate()).toBe(200);
   }, 15_000);
+
+  it('does not keep a charge Redis applied when its reply was lost and the 503 went out', async () => {
+    const upstream = new URL(url!);
+    let swallowReplies = false;
+    const sockets: Socket[] = [];
+    const proxy: Server = createServer((downstream) => {
+      const server = connect(Number(upstream.port || 6379), upstream.hostname);
+      sockets.push(downstream, server);
+      downstream.on('data', (chunk) => server.write(chunk));
+      server.on('data', (chunk) => {
+        if (!swallowReplies) downstream.write(chunk);
+      });
+      downstream.on('close', () => server.destroy());
+      server.on('close', () => downstream.destroy());
+      downstream.on('error', () => undefined);
+      server.on('error', () => undefined);
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+    const { port } = proxy.address() as { port: number };
+    const proxied = new Redis({
+      host: '127.0.0.1',
+      port,
+      db: Number(upstream.pathname.slice(1) || 0),
+      enableOfflineQueue: true,
+      maxRetriesPerRequest: null,
+      retryStrategy: () => 300,
+    });
+    try {
+      await proxied.ping();
+      service = serviceOn(proxied);
+      await fourWrongGuesses();
+      const [key] = await attemptKeys();
+      swallowReplies = true;
+
+      const pending = validate();
+      let applied = 0;
+      for (let i = 0; i < 100 && applied < 6; i++) {
+        applied = await admin.hlen(key);
+        if (applied < 6) await new Promise((r) => setTimeout(r, 10));
+      }
+      expect(applied).toBe(6);
+      expect(await pending).toBe(503);
+
+      swallowReplies = false;
+      sockets.forEach((socket) => socket.destroy());
+      await waitFor(() => proxied.status !== 'ready');
+      await waitFor(() => proxied.status === 'ready');
+      await proxied.ping();
+
+      expect(await admin.hlen(key)).toBe(5);
+      expect(await validate()).toBe(200);
+    } finally {
+      proxied.disconnect();
+      await new Promise((resolve) => proxy.close(resolve));
+    }
+  }, 30_000);
 });
