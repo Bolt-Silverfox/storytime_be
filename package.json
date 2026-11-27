@@ -43,7 +43,7 @@
     "@bull-board/express": "^9.11.0",
     "@bull-board/nestjs": "^9.11.0",
     "@deepgram/sdk": "^5.17.0",
-    "@google/genai": "^2.32.0",
+    "@google/genai": "^3.6.1",
     "@google/generative-ai": "^0.24.1",
     "@gradio/client": "^2.7.2",
     "@hng-sdk/email": "^0.0.0",
