@@ -156,7 +156,6 @@ export interface IAuthRepository {
   ): Promise<TokenWithUser | null>;
   findTokensByUserEmail(email: string, type: TokenType): Promise<Token[]>;
   deleteToken(id: string): Promise<void>;
-  consumeToken(id: string): Promise<boolean>;
   deleteUserTokensByType(userId: string, type: TokenType): Promise<void>;
 
   // Profile operations
