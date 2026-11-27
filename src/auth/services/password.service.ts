@@ -101,8 +101,14 @@ export class PasswordService {
   }
 
   private logFailure(context: string, error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    this.logger.error(`${context}: ${message}`);
+    const code = (error as { code?: unknown } | null)?.code;
+    const kind =
+      typeof code === 'string'
+        ? code
+        : error instanceof Error
+          ? error.name
+          : typeof error;
+    this.logger.error(`${context} (${kind})`);
   }
 
   private async chargeTokenOwner(resetToken: TokenWithUser) {

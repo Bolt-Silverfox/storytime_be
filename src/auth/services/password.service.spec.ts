@@ -976,7 +976,7 @@ describe('PasswordService', () => {
         await new Promise((resolve) => setImmediate(resolve));
 
         expect(errorSpy).toHaveBeenCalledWith(
-          'Failed to charge reset token owner: db unavailable',
+          'Failed to charge reset token owner (Error)',
         );
         expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
           mockUser.email,
@@ -1020,7 +1020,7 @@ describe('PasswordService', () => {
         await jest.advanceTimersByTimeAsync(2000);
 
         expect(errorSpy).toHaveBeenCalledWith(
-          'Failed to charge reset token owner: timeout after 2000ms',
+          'Failed to charge reset token owner (HealthCheckTimeoutError)',
         );
         errorSpy.mockRestore();
         jest.useRealTimers();
@@ -1586,13 +1586,17 @@ describe('PasswordService', () => {
       expect(result.status).toBe(429);
       expect(result.remaining).toEqual(without('b-live'));
       expect(errorSpy).toHaveBeenCalledWith(
-        'Failed to charge reset token owner: Connection is closed.',
+        'Failed to charge reset token owner (Error)',
       );
       errorSpy.mockRestore();
     });
 
     it('logs a failed revocation over the cap without changing the 429', async () => {
-      authRepository.deleteToken.mockRejectedValue(new Error('db unavailable'));
+      authRepository.deleteToken.mockRejectedValue(
+        Object.assign(new Error('db unavailable for b@example.com'), {
+          code: 'P1001',
+        }),
+      );
       const errorSpy = jest
         .spyOn(Logger.prototype, 'error')
         .mockImplementation(() => undefined);
@@ -1608,7 +1612,7 @@ describe('PasswordService', () => {
       expect(result.body).toEqual(LOCKED);
       expect(result.counterB).toBe(1);
       expect(errorSpy).toHaveBeenCalledWith(
-        'Failed to revoke presented reset code: db unavailable',
+        'Failed to revoke presented reset code (P1001)',
       );
       errorSpy.mockRestore();
     });
@@ -1623,7 +1627,9 @@ describe('PasswordService', () => {
       const deleteToken = authRepository.deleteToken.getMockImplementation()!;
       authRepository.deleteToken.mockImplementation((id: string) =>
         id.startsWith('id-b')
-          ? Promise.reject(new Error('db unavailable'))
+          ? Promise.reject(
+              new Error('db unavailable for b@example.com, code b-live'),
+            )
           : deleteToken(id),
       );
 
@@ -1642,7 +1648,7 @@ describe('PasswordService', () => {
       ]) {
         expect(logged).not.toContain(secret);
       }
-      expect(logged).toContain('db unavailable');
+      expect(logged).toContain('Failed to revoke presented reset code (Error)');
       expect(logged).toContain('Failed to clear reset attempts');
       spies.forEach((spy) => spy.mockRestore());
     });
