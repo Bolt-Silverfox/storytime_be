@@ -536,20 +536,37 @@ describe('PasswordlessService', () => {
       await expect(outcome).resolves.toMatchObject({ isNewUser: false });
     });
 
-    it('returns the login once the guest carry-over has waited a call timeout', async () => {
+    it('returns a new account login once the guest carry-over has waited a call timeout', async () => {
       const ctx = build();
-      const code = await existingOwner(ctx);
+      const guest = '3f2b8c1e-5a4d-4c6b-9e7a-1d2c3b4a5f60';
+      await ctx.service.request('fresh@example.com', '203.0.113.9');
+      const { code } = ctx.captured[ctx.captured.length - 1];
       ctx.guestMerge.carryOver.mockReturnValue(new Promise(() => undefined));
+      const settled = jest.fn();
       const outcome = ctx.service.verify(
-        'owner@example.com',
+        'fresh@example.com',
         code,
         '203.0.113.9',
-        '3f2b8c1e-5a4d-4c6b-9e7a-1d2c3b4a5f60',
+        guest,
       );
+      void outcome.then(settled, settled);
 
-      await jest.advanceTimersByTimeAsync(T);
+      await jest.advanceTimersByTimeAsync(T - 1);
 
-      await expect(outcome).resolves.toMatchObject({ isNewUser: false });
+      const user = ctx.authRepo.users.find(
+        (u) => u.email === 'fresh@example.com',
+      );
+      expect(user).toBeDefined();
+      expect(ctx.guestMerge.carryOver).toHaveBeenCalledWith(
+        user?.id,
+        guest,
+        true,
+      );
+      expect(settled).not.toHaveBeenCalled();
+
+      await jest.advanceTimersByTimeAsync(1);
+
+      await expect(outcome).resolves.toMatchObject({ isNewUser: true });
     });
 
     it('does not make the login wait for the known-network marker', async () => {
