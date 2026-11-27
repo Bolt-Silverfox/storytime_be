@@ -3,6 +3,7 @@ import {
   NotFoundException,
   UnauthorizedException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PasswordService } from './password.service';
@@ -1059,6 +1060,44 @@ describe('PasswordService', () => {
 
         expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
         expect(authRepository.updateUser).not.toHaveBeenCalled();
+      });
+
+      it('answers a mismatched email without waiting on the token owner charge', async () => {
+        authRepository.findUserByEmail.mockResolvedValue(null);
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        const pending = new Promise<never>(() => undefined);
+        jest.spyOn(fakeRedis, 'multi').mockReturnValue({
+          set: () => ({
+            incr: () => ({ ttl: () => ({ exec: () => pending }) }),
+          }),
+        } as unknown as ReturnType<FakeRedisClient['multi']>);
+
+        await expect(
+          attempt('raw-reset-token', 'other@example.com'),
+        ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+      });
+
+      it('logs a failed token owner charge without the email or token', async () => {
+        authRepository.findUserByEmail.mockResolvedValue(null);
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        authRepository.deleteToken.mockRejectedValue(new Error('db down'));
+        fakeRedis.store.set('password-reset:token-failures:token-1', 4);
+        const errorSpy = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+
+        await expect(
+          attempt('raw-reset-token', 'other@example.com'),
+        ).rejects.toThrow(NotFoundException);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Failed to charge reset token owner: db down',
+        );
+        const logged = JSON.stringify(errorSpy.mock.calls);
+        expect(logged).not.toContain(mockUser.email);
+        expect(logged).not.toContain('raw-reset-token');
+        errorSpy.mockRestore();
       });
 
       it('lets concurrent guesses be evaluated at most 5 times', async () => {

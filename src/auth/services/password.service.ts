@@ -66,14 +66,13 @@ export class PasswordService {
     return Number(results?.[1]?.[1]);
   }
 
-  private async chargeToken(tokenId: string): Promise<number> {
+  private async chargeToken(tokenId: string) {
     const failures = await this.incrementWindowCounter(
       this.tokenFailuresKey(tokenId),
     );
     if (failures >= RESET_MAX_FAILED_ATTEMPTS) {
       await this.authRepository.deleteToken(tokenId);
     }
-    return failures;
   }
 
   private async consumeResetAttempt(token: string, email: string) {
@@ -110,7 +109,12 @@ export class PasswordService {
       return resetToken;
     }
 
-    if (resetToken) await this.chargeToken(resetToken.id);
+    if (resetToken) {
+      this.chargeToken(resetToken.id).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.error(`Failed to charge reset token owner: ${message}`);
+      });
+    }
     if (activeToken && activeFailures >= RESET_MAX_FAILED_ATTEMPTS) {
       await this.authRepository.deleteToken(activeToken.id);
     }
