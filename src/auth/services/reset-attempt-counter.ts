@@ -35,30 +35,41 @@ export class ResetAttemptCounter {
     private readonly timeoutMs: number,
   ) {}
 
-  async charge(key: string): Promise<ResetCharge> {
+  async reserve(key: string): Promise<ResetCharge> {
     if (this.client.status !== 'ready') throw new RedisNotReadyError();
     const reservation = randomUUID();
     try {
-      const count = await withHealthTimeout(
-        this.client.eval(
-          CHARGE_WITHIN_LIMIT,
-          1,
-          key,
-          String(this.windowMs),
-          String(this.max),
-          WINDOW_FIELD,
-          reservation,
-        ),
-        this.timeoutMs,
-      );
-      if (!Number.isInteger(count)) {
-        throw new Error('Reset attempt counter not recorded');
-      }
-      return { reservation, withinLimit: count !== 0 };
+      return await this.chargeWith(key, reservation);
     } catch (error) {
       this.client.hdel(key, reservation).catch(() => undefined);
       throw error;
     }
+  }
+
+  record(key: string): Promise<ResetCharge> {
+    return this.chargeWith(key, randomUUID());
+  }
+
+  private async chargeWith(
+    key: string,
+    reservation: string,
+  ): Promise<ResetCharge> {
+    const count = await withHealthTimeout(
+      this.client.eval(
+        CHARGE_WITHIN_LIMIT,
+        1,
+        key,
+        String(this.windowMs),
+        String(this.max),
+        WINDOW_FIELD,
+        reservation,
+      ),
+      this.timeoutMs,
+    );
+    if (!Number.isInteger(count)) {
+      throw new Error('Reset attempt counter not recorded');
+    }
+    return { reservation, withinLimit: count !== 0 };
   }
 
   async refund(key: string, reservation: string): Promise<void> {

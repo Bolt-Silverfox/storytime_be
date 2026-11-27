@@ -66,7 +66,7 @@ export class PasswordService {
 
   private async countResetAttempt(email: string): Promise<ResetCharge> {
     try {
-      return await this.attempts.charge(this.resetAttemptsKey(email));
+      return await this.attempts.reserve(this.resetAttemptsKey(email));
     } catch (error) {
       this.logFailure('Failed to count reset attempt', error);
       throw new ServiceUnavailableException(
@@ -114,7 +114,7 @@ export class PasswordService {
   }
 
   private async chargeTokenOwner(resetToken: TokenWithUser) {
-    const charge = await this.attempts.charge(
+    const charge = await this.attempts.record(
       this.resetAttemptsKey(resetToken.user.email),
     );
     if (!charge.withinLimit) {
@@ -126,7 +126,7 @@ export class PasswordService {
     const presented = await this.findPresentedCode(token);
     if (!presented || this.isOwnedBy(presented, email)) return;
     const [charge, revoke] = await Promise.allSettled([
-      this.attempts.charge(this.resetAttemptsKey(presented.user.email)),
+      this.attempts.record(this.resetAttemptsKey(presented.user.email)),
       this.authRepository.deleteToken(presented.id),
     ]);
     if (charge.status === 'rejected') {

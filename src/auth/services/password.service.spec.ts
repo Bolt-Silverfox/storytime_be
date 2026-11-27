@@ -1509,6 +1509,40 @@ describe('PasswordService', () => {
       expect(result.counter).toBe(4);
     });
 
+    it.each(['late', 'offline'] as const)(
+      'keeps the background owner charge for a foreign code when the link goes %s after the caller was charged',
+      async (link) => {
+        jest.useFakeTimers({
+          now: NOW,
+          doNotFake: ['setImmediate', 'nextTick'],
+        });
+        try {
+          const evalOnce = redis.eval;
+          jest
+            .spyOn(redis, 'eval')
+            .mockImplementationOnce(evalOnce)
+            .mockImplementationOnce((...args) => {
+              redis.link = link;
+              return evalOnce(...args);
+            });
+
+          const status = await statusOf(
+            call('validate', codeFor['foreign-live'], 'a@example.com'),
+          );
+          await flush();
+          await jest.advanceTimersByTimeAsync(5000);
+          if (link === 'offline') redis.reconnect();
+          await flush();
+
+          expect(status).toBe(404);
+          expect(redis.failures(counterKey('a@example.com'))).toBe(1);
+          expect(redis.failures(counterKey('b@example.com'))).toBe(1);
+        } finally {
+          jest.useRealTimers();
+        }
+      },
+    );
+
     it.each(
       (['validate', 'reset'] as Entry[]).flatMap((entry) =>
         emails.flatMap(({ label, email }) =>
