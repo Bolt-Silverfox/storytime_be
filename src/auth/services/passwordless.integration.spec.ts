@@ -425,6 +425,29 @@ maybe('PasswordlessService against Postgres', () => {
     ).toBe(0);
   });
 
+  it('refunds one attempt on an open challenge and none on a consumed one', async () => {
+    const repo = new PrismaLoginChallengeRepository(prisma as never);
+    const email = emailFor();
+    await issue(email);
+    const { id } = await prisma.loginChallenge.findFirstOrThrow({
+      where: { emailNormalized: email },
+    });
+    const now = new Date();
+    for (let i = 0; i < 5; i += 1) {
+      expect(await repo.recordAttempt(id, now)).not.toBeNull();
+    }
+    expect(await repo.recordAttempt(id, now)).toBeNull();
+
+    await repo.refundAttempt(id);
+
+    expect(await repo.recordAttempt(id, now)).not.toBeNull();
+    await repo.consumeById(id, now);
+    await repo.refundAttempt(id);
+    expect(
+      await prisma.loginChallenge.findUniqueOrThrow({ where: { id } }),
+    ).toMatchObject({ attempts: 5 });
+  });
+
   it('strips every credential an attacker planted on an unverified account and keeps the kids', async () => {
     const stamp = `${run}-${++n}`;
     const email = `pwl-it-victim-${stamp}@example.com`;

@@ -84,6 +84,19 @@ export class InMemoryLoginChallengeRepository implements ILoginChallengeReposito
     return Promise.resolve({ codeHash: r.codeHash });
   }
 
+  refundAttempt(id: string): Promise<void> {
+    const r = this.rows.find((x) => x.id === id);
+    if (
+      r &&
+      r.consumedAt === null &&
+      r.invalidatedAt === null &&
+      r.attempts > 0
+    ) {
+      r.attempts -= 1;
+    }
+    return Promise.resolve();
+  }
+
   consumeById(id: string, now: Date): Promise<string | null> {
     const r = this.rows.find((x) => x.id === id);
     if (

@@ -246,6 +246,34 @@ describe('PasswordlessService', () => {
       ).toBeNull();
     });
 
+    it('keeps the last code attempt usable after the creation quota refuses it', async () => {
+      const ctx = build();
+      await spend(ctx, '203.0.113.9');
+      await ctx.service.request('new4@example.com', '203.0.113.9');
+      const { code } = ctx.captured[ctx.captured.length - 1];
+      for (let i = 0; i < 4; i += 1) {
+        await expectGeneric(
+          ctx.service.verify(
+            'new4@example.com',
+            wrongCode(code),
+            '203.0.113.9',
+          ),
+        );
+      }
+
+      await expectTooMany(
+        ctx.service.verify('new4@example.com', code, '203.0.113.9'),
+      );
+
+      expect(
+        ctx.repo.rows.find((r) => r.emailNormalized === 'new4@example.com')
+          ?.attempts,
+      ).toBe(4);
+      await expect(
+        ctx.service.verify('new4@example.com', code, '198.51.100.7'),
+      ).resolves.toMatchObject({ isNewUser: true });
+    });
+
     it.each(['code', 'link'] as const)(
       'refuses through the %s without charging the network or consuming the challenge when the address budget fills just before the charge',
       async (via) => {

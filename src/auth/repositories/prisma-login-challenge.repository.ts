@@ -70,6 +70,16 @@ export class PrismaLoginChallengeRepository implements ILoginChallengeRepository
     return rows[0] ?? null;
   }
 
+  async refundAttempt(id: string): Promise<void> {
+    await this.prisma.$executeRaw`
+      UPDATE "login_challenges"
+      SET "attempts" = "attempts" - 1
+      WHERE "id" = ${id}
+        AND "consumedAt" IS NULL
+        AND "invalidatedAt" IS NULL
+        AND "attempts" > 0`;
+  }
+
   async consumeById(id: string, now: Date): Promise<string | null> {
     const rows = await this.prisma.$queryRaw<
       Array<{ emailNormalized: string }>

@@ -231,7 +231,13 @@ export class PasswordlessService {
     }
 
     if (slot.charged) await this.releaseFailedAttempt(emailHash);
-    const reserved = await this.reserveCreationBudget(emailNormalized, ip);
+    const reserved = await this.reserveCreationBudget(
+      emailNormalized,
+      ip,
+    ).catch(async (error: unknown) => {
+      await this.refundAttempt(challengeId);
+      throw error;
+    });
     const consumedEmail = await this.consumeOrRelease(
       () => this.challenges.consumeById(challengeId, new Date()),
       reserved,
@@ -542,6 +548,12 @@ export class PasswordlessService {
       .catch(() => {
         this.logger.error('Passwordless throttle store unavailable');
       });
+  }
+
+  private async refundAttempt(challengeId: string): Promise<void> {
+    await this.challenges.refundAttempt(challengeId).catch(() => {
+      this.logger.error(`Passwordless attempt refund failed ${challengeId}`);
+    });
   }
 
   private async releaseGlobal(): Promise<void> {
