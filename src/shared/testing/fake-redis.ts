@@ -1,0 +1,139 @@
+import { CHARGE_WITHIN_LIMIT } from '@/auth/services/reset-attempt-counter';
+
+export type FakeLink = 'up' | 'late' | 'offline';
+export type FakeReply = 'ok' | 'down' | 'garbage' | 'slow';
+
+export const FAKE_LATE_DELIVERY_MS = 3000;
+
+export class FakeRedisClient {
+  readonly hashes = new Map<string, Map<string, string>>();
+  readonly ttls = new Map<string, number>();
+  readonly applied: string[] = [];
+  link: FakeLink = 'up';
+  chargeReply: FakeReply = 'ok';
+  writeReply: FakeReply = 'ok';
+  private backlog: Array<() => void> = [];
+  private lateTimer: NodeJS.Timeout | undefined;
+
+  get status() {
+    return this.link === 'offline' ? 'reconnecting' : 'ready';
+  }
+
+  seed(key: string, failures: number, ttlMs: number | null = 3_600_000) {
+    const hash = new Map([['window', '1']]);
+    for (let i = 0; i < failures; i++) hash.set(`seed-${i}`, '1');
+    this.hashes.set(key, hash);
+    if (ttlMs === null) this.ttls.delete(key);
+    else this.ttls.set(key, ttlMs);
+  }
+
+  failures(key: string): number | undefined {
+    const hash = this.hashes.get(key);
+    return hash ? hash.size - 1 : undefined;
+  }
+
+  counts(): number[] {
+    return [...this.hashes.keys()].map((key) => this.failures(key)!);
+  }
+
+  reconnect() {
+    this.link = 'up';
+    this.drain();
+  }
+
+  eval = (
+    script: string,
+    numKeys: number,
+    key: string,
+    windowMs: string,
+    max: string,
+    windowField: string,
+    reservation: string,
+  ): Promise<unknown> => {
+    if (script !== CHARGE_WITHIN_LIMIT || numKeys !== 1) {
+      return Promise.reject(new Error('NOSCRIPT unexpected script'));
+    }
+    return this.send(
+      'eval',
+      this.chargeReply,
+      () => {
+        const hash = this.hashes.get(key) ?? new Map<string, string>();
+        this.hashes.set(key, hash);
+        if (!hash.has(windowField)) hash.set(windowField, '1');
+        if (!this.ttls.has(key)) this.ttls.set(key, Number(windowMs));
+        const charged = hash.size - 1;
+        if (charged >= Number(max)) return 0;
+        hash.set(reservation, '1');
+        return charged + 1;
+      },
+      () => null,
+    );
+  };
+
+  hdel = (key: string, field: string): Promise<number> =>
+    this.send(
+      'hdel',
+      this.writeReply,
+      () => {
+        const removed = this.hashes.get(key)?.delete(field) ? 1 : 0;
+        if (this.hashes.get(key)?.size === 0) this.hashes.delete(key);
+        return removed;
+      },
+      () => 0,
+    );
+
+  del = (...keys: string[]): Promise<number> =>
+    this.send(
+      'del',
+      this.writeReply,
+      () => {
+        let removed = 0;
+        for (const key of keys) {
+          if (this.hashes.delete(key)) removed++;
+          this.ttls.delete(key);
+        }
+        return removed;
+      },
+      () => 0,
+    );
+
+  private send<T>(
+    name: string,
+    reply: FakeReply,
+    apply: () => T,
+    garbage: () => T,
+  ): Promise<T> {
+    const run = (resolve: (value: T) => void, reject: (e: Error) => void) => {
+      switch (reply) {
+        case 'down':
+          return reject(new Error('Connection is closed.'));
+        case 'slow':
+          return undefined;
+        case 'garbage':
+          return resolve(garbage());
+        default:
+          this.applied.push(name);
+          return resolve(apply());
+      }
+    };
+    return new Promise<T>((resolve, reject) => {
+      if (this.link === 'up' && this.backlog.length === 0) {
+        setImmediate(() => run(resolve, reject));
+        return;
+      }
+      this.backlog.push(() => run(resolve, reject));
+      if (this.link === 'late' && !this.lateTimer) {
+        this.lateTimer = setTimeout(() => {
+          this.lateTimer = undefined;
+          this.drain();
+        }, FAKE_LATE_DELIVERY_MS);
+      }
+    });
+  }
+
+  private drain() {
+    const queued = this.backlog;
+    this.backlog = [];
+    queued.forEach((command) => command());
+  }
+}
