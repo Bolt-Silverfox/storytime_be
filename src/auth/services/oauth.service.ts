@@ -17,6 +17,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserEmailVerifiedEvent } from '@/shared/events/app-events';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
+import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
 import {
   AUTH_REPOSITORY,
   IAuthRepository,
@@ -161,6 +162,7 @@ export class OAuthService {
     const { googleId, appleId, email, picture, name, emailVerified } = payload;
 
     let user: UserWithProfileAndAvatar | null = null;
+    let boundEmail: string | undefined;
 
     // 1. Try find by googleId or appleId
     if (googleId) {
@@ -196,6 +198,7 @@ export class OAuthService {
         throw error;
       });
       ({ user } = resolved);
+      boundEmail = email;
       if (resolved.newlyVerified) {
         this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, {
           userId: user.id,
@@ -239,7 +242,14 @@ export class OAuthService {
     const numberOfKids = await this.authRepository.countKidsByParentId(user.id);
 
     const userDto = new UserDto({ ...user, numberOfKids });
-    const tokenData = await this.tokenService.createTokenPair(userDto);
+    const tokenData = await this.tokenService
+      .createTokenPair(userDto, boundEmail ? { boundEmail } : undefined)
+      .catch((error: unknown) => {
+        if (error instanceof TakeoverTargetChangedError) {
+          throw new UnauthorizedException('This account is not available.');
+        }
+        throw error;
+      });
 
     return {
       user: userDto,

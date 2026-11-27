@@ -2055,6 +2055,118 @@ maybe('PasswordlessService against Postgres', () => {
     });
   });
 
+  describe('verified account renamed during sign-in', () => {
+    const verifiedUser = async () => {
+      const stamp = `${run}-${++n}`;
+      const user = await prisma.user.create({
+        data: {
+          email: `pwl-it-bd-${stamp}@example.com`,
+          passwordHash: 'owner-hash',
+          isEmailVerified: true,
+        },
+      });
+      return { user, renamed: `pwl-it-bd-renamed-${stamp}@example.com` };
+    };
+
+    it('refuses a session paused behind an email change that then commits', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user, renamed } = await verifiedUser();
+      let create: Promise<unknown> = Promise.resolve();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.user.update({
+          where: { id: user.id },
+          data: { email: renamed },
+        });
+        create = authRepo
+          .createSessionForEmail(
+            {
+              userId: user.id,
+              token: crypto.randomUUID(),
+              expiresAt: new Date(Date.now() + 3_600_000),
+            },
+            user.email.toUpperCase(),
+          )
+          .then(
+            () => null,
+            (e: unknown) => e,
+          );
+        await waitForBlockedStatement('%FOR SHARE%');
+      });
+
+      expect(await create).toBeInstanceOf(TakeoverTargetChangedError);
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        0,
+      );
+    });
+
+    it('does not link a provider to the account once its email moved', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user, renamed } = await verifiedUser();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { email: renamed },
+      });
+
+      await expect(
+        authRepo.linkGoogleAccountIfUnset(
+          user.id,
+          `pwl-it-bd-g-${run}-${n}`,
+          undefined,
+          user.email,
+        ),
+      ).resolves.toEqual({ count: 0 });
+
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: user.id } }))
+          .googleId,
+      ).toBeNull();
+    });
+
+    it('signs the code holder into a fresh account, not the renamed one', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user, renamed } = await verifiedUser();
+      const racingRepo = Object.create(authRepo) as PrismaAuthRepository;
+      let moved = false;
+      racingRepo.findUserByIdWithProfile = async (id: string) => {
+        if (!moved && id === user.id) {
+          moved = true;
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { email: renamed },
+          });
+        }
+        return authRepo.findUserByIdWithProfile(id);
+      };
+      const events = new EventEmitter2();
+      const codes: string[] = [];
+      events.on('passwordless.requested', (p: { code: string }) =>
+        codes.push(p.code),
+      );
+      const racing = new PasswordlessService(
+        {
+          get: (k: string) => ({ PASSWORDLESS_PEPPER: 'p'.repeat(40) })[k],
+        } as never,
+        new PrismaLoginChallengeRepository(prisma as never),
+        new PasswordlessThrottleService(new InMemoryRedis() as never),
+        racingRepo,
+        new TokenService(new JwtService({ secret: 's' }), racingRepo),
+        { hashPassword: () => Promise.resolve('hashed-random') } as never,
+        events,
+        { carryOver: () => Promise.resolve() } as never,
+      );
+      await racing.request(user.email, '10.9.9.9');
+
+      const res = await racing.verify(user.email, codes[0], '10.9.9.9');
+
+      expect(res.user.id).not.toBe(user.id);
+      expect(res.user.email).toBe(user.email);
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        0,
+      );
+    });
+  });
+
   describe('device-token live-session lock', () => {
     it('blocks a soft revocation of the session until the registering transaction ends', async () => {
       const repo = new PrismaDeviceTokenRepository(prisma as never);

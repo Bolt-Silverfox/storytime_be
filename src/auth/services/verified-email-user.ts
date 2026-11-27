@@ -102,16 +102,30 @@ async function resolveParent(
     }
 
     if (googleId) {
-      await authRepository.linkGoogleAccountIfUnset(current.id, googleId);
+      await authRepository.linkGoogleAccountIfUnset(
+        current.id,
+        googleId,
+        undefined,
+        email,
+      );
     }
     if (appleId) {
-      await authRepository.linkAppleAccountIfUnset(current.id, appleId);
+      await authRepository.linkAppleAccountIfUnset(
+        current.id,
+        appleId,
+        undefined,
+        email,
+      );
     }
     const user = (await authRepository.findUserByIdWithProfile(current.id)) ?? {
       ...current,
       profile: null,
       avatar: null,
     };
+    if (user.email.toLowerCase() !== email.toLowerCase()) {
+      if (canRetry) return resolveParent(deps, input, false);
+      throw new TakeoverTargetChangedError();
+    }
     return { user, isNewUser: false, newlyVerified: false };
   }
 

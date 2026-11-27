@@ -261,6 +261,15 @@ export class PasswordlessService {
     ip: string | undefined,
     guestSessionId?: string,
   ): Promise<PasswordlessLoginResult> {
+    const refuseMovedAccount = (error: unknown): never => {
+      if (error instanceof TakeoverTargetChangedError) {
+        this.logger.warn(
+          `Passwordless login refused for account whose email changed (challenge ${challengeId ?? 'link'})`,
+        );
+        throw this.invalid();
+      }
+      throw error;
+    };
     const { user, isNewUser, newlyVerified } = await this.findOrCreateUser(
       emailNormalized,
       ip,
@@ -271,13 +280,7 @@ export class PasswordlessService {
         );
         throw this.invalid();
       }
-      if (error instanceof TakeoverTargetChangedError) {
-        this.logger.warn(
-          `Passwordless login refused for account whose email changed (challenge ${challengeId ?? 'link'})`,
-        );
-        throw this.invalid();
-      }
-      throw error;
+      return refuseMovedAccount(error);
     });
     if (user.isSuspended || user.isDeleted) {
       this.logger.warn(
@@ -294,7 +297,9 @@ export class PasswordlessService {
 
     const numberOfKids = await this.authRepository.countKidsByParentId(user.id);
     const userDto = new UserDto({ ...user, numberOfKids });
-    const tokenData = await this.tokenService.createTokenPair(userDto);
+    const tokenData = await this.tokenService
+      .createTokenPair(userDto, { boundEmail: emailNormalized })
+      .catch(refuseMovedAccount);
 
     void this.throttle
       .mark(

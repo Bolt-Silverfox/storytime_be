@@ -312,19 +312,22 @@ export class InMemoryAuthRepository {
     userId: string,
     googleId: string,
     sessionId?: string,
-  ) => this.linkIfUnset(userId, 'googleId', googleId, sessionId);
+    boundEmail?: string,
+  ) => this.linkIfUnset(userId, 'googleId', googleId, sessionId, boundEmail);
 
   linkAppleAccountIfUnset = (
     userId: string,
     appleId: string,
     sessionId?: string,
-  ) => this.linkIfUnset(userId, 'appleId', appleId, sessionId);
+    boundEmail?: string,
+  ) => this.linkIfUnset(userId, 'appleId', appleId, sessionId, boundEmail);
 
   private linkIfUnset(
     userId: string,
     field: 'googleId' | 'appleId',
     value: string,
     sessionId?: string,
+    boundEmail?: string,
   ) {
     const u = this.users.find((x) => x.id === userId);
     const sessionMissing =
@@ -332,7 +335,17 @@ export class InMemoryAuthRepository {
       !this.sessions.some(
         (s) => s.id === sessionId && s.userId === userId && !s.isDeleted,
       );
-    if (!u || u[field] || !u.isEmailVerified || u.isDeleted || sessionMissing) {
+    const emailMoved =
+      boundEmail !== undefined &&
+      u?.email.toLowerCase() !== boundEmail.toLowerCase();
+    if (
+      !u ||
+      u[field] ||
+      !u.isEmailVerified ||
+      u.isDeleted ||
+      sessionMissing ||
+      emailMoved
+    ) {
       return Promise.resolve({ count: 0 });
     }
     u[field] = value;
@@ -395,6 +408,17 @@ export class InMemoryAuthRepository {
     const u = this.users.find((x) => x.id === data.userId);
     if (!u || u.isEmailVerified) {
       return Promise.reject(new AccountAlreadyVerifiedError());
+    }
+    return this.createSession(data);
+  };
+
+  createSessionForEmail = (
+    data: { userId: string; token: string; expiresAt: Date },
+    email: string,
+  ) => {
+    const u = this.users.find((x) => x.id === data.userId);
+    if (!u || u.email.toLowerCase() !== email.toLowerCase()) {
+      return Promise.reject(new TakeoverTargetChangedError());
     }
     return this.createSession(data);
   };

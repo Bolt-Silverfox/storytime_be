@@ -117,11 +117,13 @@ export interface IAuthRepository {
     userId: string,
     googleId: string,
     sessionId?: string,
+    boundEmail?: string,
   ): Promise<{ count: number }>;
   linkAppleAccountIfUnset(
     userId: string,
     appleId: string,
     sessionId?: string,
+    boundEmail?: string,
   ): Promise<{ count: number }>;
 
   // Session operations
@@ -135,6 +137,10 @@ export interface IAuthRepository {
     token: string;
     expiresAt: Date;
   }): Promise<Session>;
+  createSessionForEmail(
+    data: { userId: string; token: string; expiresAt: Date },
+    email: string,
+  ): Promise<Session>;
   /**
    * Stamp User.lastLoginAt = now for an active (not suspended / deleted) user.
    * Callers treat this as best-effort.

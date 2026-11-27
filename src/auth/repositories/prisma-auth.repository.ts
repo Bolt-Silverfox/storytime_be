@@ -227,16 +227,30 @@ export class PrismaAuthRepository implements IAuthRepository {
     userId: string,
     googleId: string,
     sessionId?: string,
+    boundEmail?: string,
   ): Promise<{ count: number }> {
-    return this.linkProviderIfUnset(userId, 'googleId', googleId, sessionId);
+    return this.linkProviderIfUnset(
+      userId,
+      'googleId',
+      googleId,
+      sessionId,
+      boundEmail,
+    );
   }
 
   async linkAppleAccountIfUnset(
     userId: string,
     appleId: string,
     sessionId?: string,
+    boundEmail?: string,
   ): Promise<{ count: number }> {
-    return this.linkProviderIfUnset(userId, 'appleId', appleId, sessionId);
+    return this.linkProviderIfUnset(
+      userId,
+      'appleId',
+      appleId,
+      sessionId,
+      boundEmail,
+    );
   }
 
   private linkProviderIfUnset(
@@ -244,9 +258,17 @@ export class PrismaAuthRepository implements IAuthRepository {
     field: 'googleId' | 'appleId',
     value: string,
     sessionId?: string,
+    boundEmail?: string,
   ): Promise<{ count: number }> {
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const locked = await tx.$queryRaw<Array<{ email: string }>>`
+        SELECT "email" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      if (
+        boundEmail !== undefined &&
+        locked[0]?.email.toLowerCase() !== boundEmail.toLowerCase()
+      ) {
+        return { count: 0 };
+      }
       return tx.user.updateMany({
         where: {
           id: userId,
@@ -283,6 +305,20 @@ export class PrismaAuthRepository implements IAuthRepository {
         where: { id: data.userId, isEmailVerified: false },
       });
       if (unverified === 0) throw new AccountAlreadyVerifiedError();
+      return tx.session.create({ data });
+    });
+  }
+
+  async createSessionForEmail(
+    data: { userId: string; token: string; expiresAt: Date },
+    email: string,
+  ): Promise<Session> {
+    return this.prisma.$transaction(async (tx) => {
+      const bound = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "users"
+        WHERE "id" = ${data.userId} AND lower("email") = lower(${email})
+        FOR SHARE`;
+      if (bound.length === 0) throw new TakeoverTargetChangedError();
       return tx.session.create({ data });
     });
   }

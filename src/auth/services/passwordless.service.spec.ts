@@ -1090,6 +1090,67 @@ describe('PasswordlessService', () => {
     );
   });
 
+  describe('session bound to the proven email', () => {
+    it('issues no session when the account email changes after the lookup and before the session', async () => {
+      quiet();
+      const { service, captured, authRepo } = build();
+      const owner = await authRepo.createUser({
+        email: 'target@example.com',
+        passwordHash: 'h',
+        isEmailVerified: true,
+        role: 'parent',
+      });
+      jest.spyOn(authRepo, 'countKidsByParentId').mockImplementation(() => {
+        owner.email = 'moved@example.com';
+        return Promise.resolve(0);
+      });
+      await service.request('target@example.com', '1.1.1.1');
+
+      await expectGeneric(
+        service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+      );
+
+      expect(authRepo.sessions).toHaveLength(0);
+    });
+
+    it('does the same through the link', async () => {
+      quiet();
+      const { service, captured, authRepo } = build();
+      const owner = await authRepo.createUser({
+        email: 'target@example.com',
+        passwordHash: 'h',
+        isEmailVerified: true,
+        role: 'parent',
+      });
+      jest.spyOn(authRepo, 'countKidsByParentId').mockImplementation(() => {
+        owner.email = 'moved@example.com';
+        return Promise.resolve(0);
+      });
+      await service.request('target@example.com', '1.1.1.1');
+
+      await expectGeneric(service.consume(captured[0].linkToken, '41.0.0.1'));
+
+      expect(authRepo.sessions).toHaveLength(0);
+    });
+
+    it('still signs a mixed-case stored account in', async () => {
+      const { service, captured, authRepo } = build();
+      await authRepo.createUser({
+        email: 'Target@Example.com',
+        passwordHash: 'h',
+        isEmailVerified: true,
+        role: 'parent',
+      });
+      await service.request('target@example.com', '1.1.1.1');
+
+      await expect(
+        service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+      ).resolves.toMatchObject({ isNewUser: false });
+
+      expect(authRepo.sessions).toHaveLength(1);
+    });
+  });
+
   describe('email case', () => {
     it('signs a mixed-case stored account in without creating a duplicate', async () => {
       const { service, captured, authRepo } = build();

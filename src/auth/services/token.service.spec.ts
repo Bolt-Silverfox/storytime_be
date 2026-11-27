@@ -58,6 +58,7 @@ describe('TokenService', () => {
     const mockAuthRepository: Partial<jest.Mocked<IAuthRepository>> = {
       createSession: jest.fn(),
       createSessionForUnverifiedUser: jest.fn(),
+      createSessionForEmail: jest.fn(),
       recordLastLogin: jest.fn().mockResolvedValue(undefined),
       findSessionByToken: jest.fn(),
       findSessionById: jest.fn(),
@@ -88,6 +89,18 @@ describe('TokenService', () => {
       await service.createTokenPair(mockUser, { requireUnverified: true });
 
       expect(authRepository.createSessionForUnverifiedUser).toHaveBeenCalled();
+      expect(authRepository.createSession).not.toHaveBeenCalled();
+    });
+
+    it('creates the session only for an account still at the bound email', async () => {
+      authRepository.createSessionForEmail.mockResolvedValue(mockSession);
+
+      await service.createTokenPair(mockUser, { boundEmail: 'a@example.com' });
+
+      expect(authRepository.createSessionForEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: mockUser.id }),
+        'a@example.com',
+      );
       expect(authRepository.createSession).not.toHaveBeenCalled();
     });
 

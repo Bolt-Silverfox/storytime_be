@@ -1,6 +1,7 @@
 import { InMemoryAuthRepository } from '@/shared/testing/passwordless-fakes';
 import type { IAuthRepository } from '../repositories';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
+import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
 
 const passwordService = { hashPassword: jest.fn().mockResolvedValue('hash') };
 
@@ -154,6 +155,52 @@ describe('findOrCreateParentByVerifiedEmail', () => {
     expect(result.user.id).not.toBe(renamed.id);
     expect(result.user.email).toBe('a@x.co');
     expect(result.isNewUser).toBe(true);
+  });
+
+  it('does not link or return a verified account whose email changed after the lookup', async () => {
+    const repo = new InMemoryAuthRepository();
+    const moved = await seed(repo);
+    const lookup = repo.findUserByEmailInsensitive;
+    repo.findUserByEmailInsensitive = (async (email: string) => {
+      const found = await lookup(email);
+      if (found?.id !== moved.id) return found;
+      moved.email = 'moved@x.co';
+      return { ...found, email: 'a@x.co' };
+    }) as typeof lookup;
+
+    const result = await findOrCreateParentByVerifiedEmail(
+      { authRepository: asRepo(repo), passwordService },
+      {
+        email: 'a@x.co',
+        emailVerified: true,
+        googleId: 'g-attacker',
+        matchEmailCaseInsensitively: true,
+      },
+    );
+
+    expect(moved.googleId).toBeNull();
+    expect(result.user.id).not.toBe(moved.id);
+    expect(result.user.email).toBe('a@x.co');
+  });
+
+  it('refuses with TakeoverTargetChangedError when the matched verified account keeps moving away', async () => {
+    const repo = new InMemoryAuthRepository();
+    const moved = await seed(repo);
+    repo.findUserByEmailInsensitive = () => {
+      moved.email = `moved-${Math.random()}@x.co`;
+      return Promise.resolve({ ...moved, email: 'a@x.co' });
+    };
+
+    await expect(
+      findOrCreateParentByVerifiedEmail(
+        { authRepository: asRepo(repo), passwordService },
+        {
+          email: 'a@x.co',
+          emailVerified: true,
+          matchEmailCaseInsensitively: true,
+        },
+      ),
+    ).rejects.toBeInstanceOf(TakeoverTargetChangedError);
   });
 
   it.each([
