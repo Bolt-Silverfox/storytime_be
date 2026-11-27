@@ -704,6 +704,20 @@ describe('PasswordService', () => {
       expect(authRepository.deleteToken).not.toHaveBeenCalled();
     });
 
+    it('charges the token once when the owner email differs only in casing', async () => {
+      stubActiveToken();
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockResetToken,
+        expiresAt: new Date('2020-01-01'),
+        user: { ...mockUser, email: 'Test@Example.com' },
+      });
+
+      await expect(
+        validate('raw-reset-token', 'test@example.com'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect([...fakeRedis.store.values()]).toEqual([1]);
+    });
+
     it('sets a TTL on the counter in the same atomic operation as the first failure', async () => {
       stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
