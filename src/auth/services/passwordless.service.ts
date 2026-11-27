@@ -211,7 +211,12 @@ export class PasswordlessService {
 
     const slot = await this.admitDailyAttempt(emailHash);
     if (!slot.admitted) throw this.invalid();
-    const attempt = await this.challenges.recordAttempt(challengeId, now);
+    const attempt = await this.challenges
+      .recordAttempt(challengeId, now)
+      .catch(async (error: unknown) => {
+        if (slot.charged) await this.releaseFailedAttempt(emailHash);
+        throw error;
+      });
     if (!attempt) {
       if (slot.charged) await this.releaseFailedAttempt(emailHash);
       this.logger.warn(`Passwordless challenge not usable ${challengeId}`);

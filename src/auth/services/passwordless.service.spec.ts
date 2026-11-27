@@ -1565,6 +1565,22 @@ describe('PasswordlessService', () => {
       ).resolves.toBeDefined();
     });
 
+    it('gives the daily slot back when recording the attempt fails', async () => {
+      quiet();
+      const { service, captured, redis, repo } = build();
+      await redis.client.set(failKey('target@example.com'), '19', 'PX', DAY_MS);
+      await service.request('target@example.com', '1.1.1.1');
+      jest
+        .spyOn(repo, 'recordAttempt')
+        .mockRejectedValueOnce(new Error('db timeout'));
+
+      await expect(
+        service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+      ).rejects.toThrow('db timeout');
+
+      expect(await redis.client.get(failKey('target@example.com'))).toBe('19');
+    });
+
     it('spends no challenge attempt and no daily slot on a guess the daily cap refuses', async () => {
       quiet();
       const { service, captured, redis, repo } = build();
