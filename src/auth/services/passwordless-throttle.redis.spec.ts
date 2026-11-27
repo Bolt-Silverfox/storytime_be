@@ -48,6 +48,17 @@ maybe('PasswordlessThrottleService against real Redis', () => {
     expect(await client.pttl(key)).toBeGreaterThan(0);
   });
 
+  it('keeps the window expiry when a live counter released to zero is hit again', async () => {
+    const key = `${prefix}rezero`;
+    await throttle.hit(key, 60_000);
+    await client.pexpire(key, 5_000);
+    await throttle.release(key, 60_000);
+
+    expect(await throttle.hit(key, 60_000)).toBe(1);
+
+    expect(await client.pttl(key)).toBeLessThanOrEqual(5_000);
+  });
+
   it('keeps the exact count when releases race with hits', async () => {
     const key = `${prefix}race`;
     for (let i = 0; i < 50; i++) await throttle.hit(key, 60_000);

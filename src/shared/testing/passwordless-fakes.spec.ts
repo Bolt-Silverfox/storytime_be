@@ -270,7 +270,7 @@ describe('InMemoryAuthRepository sessions', () => {
 describe('InMemoryRedis expiry', () => {
   afterEach(() => jest.useRealTimers());
 
-  it('starts a fresh window when a released counter goes from 0 back to 1', async () => {
+  it('keeps the live window when a released counter goes from 0 back to 1, like the Lua script', async () => {
     jest.useFakeTimers({ now: NOW });
     const { client } = new InMemoryRedis();
     await client.eval(INCR_WITH_EXPIRY, 1, 'k', '1000');
@@ -280,7 +280,7 @@ describe('InMemoryRedis expiry', () => {
 
     jest.advanceTimersByTime(200);
 
-    expect(await client.get('k')).toBe('1');
+    expect(await client.get('k')).toBeNull();
   });
 });
 

@@ -56,6 +56,21 @@ describe('PasswordlessThrottleService.release', () => {
   });
 });
 
+describe('PasswordlessThrottleService.hit', () => {
+  it('keeps the original window when a counter released to zero is hit again', async () => {
+    const redis = new InMemoryRedis();
+    const throttle = new PasswordlessThrottleService(redis as never);
+    await throttle.hit('k', HOUR_MS);
+    jest.advanceTimersByTime(HOUR_MS - 60_000);
+    await throttle.release('k', HOUR_MS);
+
+    await throttle.hit('k', HOUR_MS);
+    jest.advanceTimersByTime(60_000);
+
+    expect(await throttle.peek('k')).toBe(0);
+  });
+});
+
 describe('PasswordlessThrottleService against a stalled connection', () => {
   const stalled = () => {
     const redis = new InMemoryRedis();
