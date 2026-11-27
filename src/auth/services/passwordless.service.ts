@@ -239,7 +239,13 @@ export class PasswordlessService {
       throw error;
     });
     const consumedEmail = await this.consumeOrRelease(
-      () => this.challenges.consumeById(challengeId, new Date()),
+      () =>
+        this.challenges
+          .consumeById(challengeId, new Date())
+          .catch(async (error: unknown) => {
+            await this.refundAttempt(challengeId);
+            throw error;
+          }),
       reserved,
       ip,
     );

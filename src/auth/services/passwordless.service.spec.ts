@@ -274,6 +274,42 @@ describe('PasswordlessService', () => {
       ).resolves.toMatchObject({ isNewUser: true });
     });
 
+    it('keeps the last code attempt usable when consuming the challenge fails', async () => {
+      const ctx = build();
+      await ctx.authRepo.createUser({
+        email: 'known5@example.com',
+        passwordHash: 'h',
+        role: 'parent',
+        isEmailVerified: true,
+      });
+      await ctx.service.request('known5@example.com', '203.0.113.9');
+      const { code } = ctx.captured[ctx.captured.length - 1];
+      for (let i = 0; i < 4; i += 1) {
+        await expectGeneric(
+          ctx.service.verify(
+            'known5@example.com',
+            wrongCode(code),
+            '203.0.113.9',
+          ),
+        );
+      }
+      jest
+        .spyOn(ctx.repo, 'consumeById')
+        .mockRejectedValueOnce(new Error('connection reset'));
+
+      await expect(
+        ctx.service.verify('known5@example.com', code, '203.0.113.9'),
+      ).rejects.toThrow('connection reset');
+
+      expect(
+        ctx.repo.rows.find((r) => r.emailNormalized === 'known5@example.com')
+          ?.attempts,
+      ).toBe(4);
+      await expect(
+        ctx.service.verify('known5@example.com', code, '203.0.113.9'),
+      ).resolves.toMatchObject({ isNewUser: false });
+    });
+
     it.each(['code', 'link'] as const)(
       'refuses through the %s without charging the network or consuming the challenge when the address budget fills just before the charge',
       async (via) => {
