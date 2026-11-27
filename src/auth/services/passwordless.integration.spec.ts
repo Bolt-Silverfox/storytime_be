@@ -1307,6 +1307,25 @@ maybe('PasswordlessService against Postgres', () => {
       await expectUntouched(user.id);
     });
 
+    it('reports the changed email, not a verified account, when the rename also verified it', async () => {
+      const authRepo = new PrismaAuthRepository(prisma as never);
+      const { user, renamed } = await seedRenamable();
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { email: renamed, isEmailVerified: true },
+      });
+
+      await expect(
+        authRepo.takeOverUnverifiedAccount(user, {
+          passwordHash: 'rotated',
+          isEmailVerified: true,
+        }),
+      ).rejects.toBeInstanceOf(TakeoverTargetChangedError);
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(
+        1,
+      );
+    });
+
     it('refuses the takeover when the rename commits while the takeover waits on the row', async () => {
       const authRepo = new PrismaAuthRepository(prisma as never);
       const { user, renamed } = await seedRenamable();
