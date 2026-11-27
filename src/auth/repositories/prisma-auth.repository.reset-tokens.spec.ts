@@ -127,6 +127,28 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
     expect(await remaining()).toEqual(['rt-1', 'rt-2', 'rt-3', 'rt-4']);
   });
 
+  it('claims a verification token once across concurrent verifications and marks the email verified', async () => {
+    const { id } = await prisma.token.findUniqueOrThrow({
+      where: { token: 'rt-2' },
+    });
+    const verify = () =>
+      repo.transaction(async (tx) => {
+        if (!(await tx.consumeToken(id))) return false;
+        await tx.markEmailVerified('rt-owner');
+        return true;
+      });
+
+    const results = await Promise.all([verify(), verify()]);
+
+    expect(results.sort()).toEqual([false, true]);
+    expect(await remaining()).toEqual(['rt-1', 'rt-3', 'rt-4']);
+    const owner = await prisma.user.findUniqueOrThrow({
+      where: { id: 'rt-owner' },
+    });
+    expect(owner.isEmailVerified).toBe(true);
+    expect(owner.onboardingStatus).toBe('email_verified');
+  });
+
   it('deletes a token that is already gone without failing', async () => {
     const { id } = await prisma.token.findUniqueOrThrow({
       where: { token: 'rt-1' },

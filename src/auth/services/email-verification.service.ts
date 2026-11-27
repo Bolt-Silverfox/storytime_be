@@ -10,7 +10,7 @@ import { generateToken } from '@/shared/utils/generate-token';
 import { TokenType } from '../dto/auth.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserEmailVerifiedEvent } from '@/shared/events';
-import { OnboardingStatus } from '@prisma/client';
+import { isTokenExpired } from './token-expiry';
 
 @Injectable()
 export class EmailVerificationService {
@@ -64,17 +64,19 @@ export class EmailVerificationService {
       throw new InvalidTokenException('verification token');
     }
 
-    if (verificationToken.expiresAt < new Date()) {
+    if (isTokenExpired(verificationToken)) {
       await this.authRepository.deleteToken(verificationToken.id);
       throw new TokenExpiredException();
     }
 
-    await this.authRepository.updateUser(verificationToken.userId, {
-      isEmailVerified: true,
-      onboardingStatus: OnboardingStatus.email_verified,
+    const verified = await this.authRepository.transaction(async (tx) => {
+      if (!(await tx.consumeToken(verificationToken.id))) return false;
+      await tx.markEmailVerified(verificationToken.userId);
+      return true;
     });
-
-    await this.authRepository.deleteToken(verificationToken.id);
+    if (!verified) {
+      throw new InvalidTokenException('verification token');
+    }
 
     this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, {
       userId: verificationToken.user.id,

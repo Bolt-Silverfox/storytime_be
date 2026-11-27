@@ -9,6 +9,7 @@ import type {
   LearningExpectation,
   UserIP,
 } from '@prisma/client';
+import { OnboardingStatus } from '@prisma/client';
 import { TokenType } from '../dto/auth.dto';
 import {
   IAuthRepository,
@@ -433,6 +434,15 @@ export class PrismaAuthRepository implements IAuthRepository {
         },
         updateUser: async (id, data) => {
           return prisma.user.update({ where: { id }, data });
+        },
+        markEmailVerified: async (userId) => {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              isEmailVerified: true,
+              onboardingStatus: OnboardingStatus.email_verified,
+            },
+          });
         },
         deleteAllUserSessions: async (userId) => {
           await prisma.session.deleteMany({ where: { userId } });
