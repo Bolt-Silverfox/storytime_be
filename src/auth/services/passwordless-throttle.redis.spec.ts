@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Redis } from 'ioredis';
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
 
@@ -7,7 +8,13 @@ const maybe = url ? describe : describe.skip;
 maybe('PasswordlessThrottleService against real Redis', () => {
   let client: Redis;
   let throttle: PasswordlessThrottleService;
-  const prefix = `pwl-it-${process.pid}:`;
+  const prefix = `pwl-it-${randomUUID()}:`;
+  const used = new Set<string>();
+  const fixtureKey = (name: string) => {
+    const key = `${prefix}${name}`;
+    used.add(key);
+    return key;
+  };
 
   beforeAll(() => {
     client = new Redis(url as string);
@@ -15,13 +22,15 @@ maybe('PasswordlessThrottleService against real Redis', () => {
   });
 
   afterAll(async () => {
-    const keys = await client.keys(`${prefix}*`);
-    if (keys.length) await client.del(...keys);
-    await client.quit();
+    try {
+      if (used.size) await client.del([...used]);
+    } finally {
+      await client.quit().catch(() => client.disconnect());
+    }
   });
 
   it('counts hits and expires the window', async () => {
-    const key = `${prefix}hit`;
+    const key = fixtureKey('hit');
     expect(await throttle.hit(key, 60_000)).toBe(1);
     expect(await throttle.hit(key, 60_000)).toBe(2);
     const ttl = await client.pttl(key);
@@ -30,7 +39,7 @@ maybe('PasswordlessThrottleService against real Redis', () => {
   });
 
   it('releases one from a live counter', async () => {
-    const key = `${prefix}live`;
+    const key = fixtureKey('live');
     await throttle.hit(key, 60_000);
     await throttle.hit(key, 60_000);
 
@@ -40,7 +49,7 @@ maybe('PasswordlessThrottleService against real Redis', () => {
   });
 
   it('leaves 0 with a ttl, not -1 without one, when the key already expired', async () => {
-    const key = `${prefix}gone`;
+    const key = fixtureKey('gone');
 
     await throttle.release(key, 60_000);
 
@@ -49,7 +58,7 @@ maybe('PasswordlessThrottleService against real Redis', () => {
   });
 
   it('keeps the window expiry when a live counter released to zero is hit again', async () => {
-    const key = `${prefix}rezero`;
+    const key = fixtureKey('rezero');
     await throttle.hit(key, 60_000);
     await client.pexpire(key, 5_000);
     await throttle.release(key, 60_000);
@@ -62,7 +71,7 @@ maybe('PasswordlessThrottleService against real Redis', () => {
   });
 
   it('admits up to the limit and refuses without counting the refused call', async () => {
-    const key = `${prefix}admit`;
+    const key = fixtureKey('admit');
     const budget = [{ key, windowMs: 60_000, max: 2 }];
 
     expect(await throttle.admit(budget)).toBe(1);
@@ -76,8 +85,8 @@ maybe('PasswordlessThrottleService against real Redis', () => {
   });
 
   it('charges no budget when any one of them is spent', async () => {
-    const open = `${prefix}admit-open`;
-    const spent = `${prefix}admit-spent`;
+    const open = fixtureKey('admit-open');
+    const spent = fixtureKey('admit-spent');
     await client.set(spent, '3', 'PX', 60_000);
 
     expect(
@@ -92,7 +101,7 @@ maybe('PasswordlessThrottleService against real Redis', () => {
   });
 
   it('admits exactly the limit when admissions run concurrently', async () => {
-    const key = `${prefix}admit-race`;
+    const key = fixtureKey('admit-race');
     const results = await Promise.all(
       Array.from({ length: 30 }, () =>
         throttle.admit([{ key, windowMs: 60_000, max: 20 }]),
@@ -104,7 +113,7 @@ maybe('PasswordlessThrottleService against real Redis', () => {
   });
 
   it('keeps the exact count when releases race with hits', async () => {
-    const key = `${prefix}race`;
+    const key = fixtureKey('race');
     for (let i = 0; i < 50; i++) await throttle.hit(key, 60_000);
 
     await Promise.all(

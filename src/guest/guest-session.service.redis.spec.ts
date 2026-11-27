@@ -36,10 +36,17 @@ maybe('GuestSessionService against real Redis', () => {
   });
 
   afterAll(async () => {
-    for (const service of services) {
-      await (service as unknown as { keyv: Keyv }).keyv.disconnect();
+    try {
+      const closed = await Promise.allSettled(
+        services.map((service) =>
+          (service as unknown as { keyv: Keyv }).keyv.disconnect(),
+        ),
+      );
+      const failed = closed.find((r) => r.status === 'rejected');
+      if (failed) throw failed.reason;
+    } finally {
+      await client.quit().catch(() => client.disconnect());
     }
-    await client.quit();
   });
 
   it('round-trips a story saved under the lock through the session store', async () => {
