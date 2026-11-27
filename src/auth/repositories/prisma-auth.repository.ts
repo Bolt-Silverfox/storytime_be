@@ -21,6 +21,8 @@ import {
   UserLinkedAccountInfo,
 } from './auth.repository.interface';
 
+const escapeLikePattern = (value: string) => value.replace(/[\\%_]/g, '\\$&');
+
 @Injectable()
 export class PrismaAuthRepository implements IAuthRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -286,9 +288,19 @@ export class PrismaAuthRepository implements IAuthRepository {
     await this.prisma.token.delete({ where: { id } });
   }
 
+  async consumeToken(id: string): Promise<boolean> {
+    const { count } = await this.prisma.token.deleteMany({ where: { id } });
+    return count > 0;
+  }
+
   async deleteTokensByUserEmail(email: string, type: TokenType): Promise<void> {
     await this.prisma.token.deleteMany({
-      where: { type, user: { email: { equals: email, mode: 'insensitive' } } },
+      where: {
+        type,
+        user: {
+          email: { equals: escapeLikePattern(email), mode: 'insensitive' },
+        },
+      },
     });
   }
 

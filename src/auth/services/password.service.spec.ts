@@ -78,6 +78,7 @@ describe('PasswordService', () => {
       createToken: jest.fn(),
       findTokenByHashedToken: jest.fn(),
       deleteToken: jest.fn(),
+      consumeToken: jest.fn().mockResolvedValue(true),
       updateUser: jest.fn(),
       deleteAllUserSessions: jest.fn(),
       transaction: jest.fn(),
@@ -570,7 +571,7 @@ describe('PasswordService', () => {
       expect(authRepository.updateUser).toHaveBeenCalledWith('user-1', {
         passwordHash: expect.any(String),
       });
-      expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+      expect(authRepository.consumeToken).toHaveBeenCalledWith('token-1');
       expect(authRepository.deleteAllUserSessions).toHaveBeenCalledWith(
         'user-1',
       );
@@ -754,6 +755,21 @@ describe('PasswordService', () => {
         ),
       ).rejects.toThrow(NotFoundException);
       expect(authRepository.deleteToken).not.toHaveBeenCalled();
+    });
+
+    it('leaves the password and sessions untouched when the code is consumed concurrently', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.consumeToken.mockResolvedValue(false);
+
+      await expect(
+        service.resetPassword('raw-reset-token', 'test@example.com', 'x', {
+          token: 'raw-reset-token',
+          email: 'test@example.com',
+          newPassword: 'x',
+        }),
+      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+      expect(authRepository.updateUser).not.toHaveBeenCalled();
+      expect(authRepository.deleteAllUserSessions).not.toHaveBeenCalled();
     });
 
     describe('email binding', () => {
@@ -1120,6 +1136,13 @@ describe('PasswordService', () => {
           return before === tokens.size
             ? Promise.reject(new Error('Record to delete does not exist.'))
             : Promise.resolve();
+        }),
+      );
+      authRepository.consumeToken.mockImplementation(
+        record('consumeToken', (id: string) => {
+          const before = tokens.size;
+          removeWhere((t) => t.id === id);
+          return Promise.resolve(before !== tokens.size);
         }),
       );
       authRepository.deleteUserTokensByType.mockImplementation(
