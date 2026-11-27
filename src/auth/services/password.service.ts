@@ -98,7 +98,10 @@ export class PasswordService {
       TokenType.PASSWORD_RESET,
     );
 
-    if (resetToken && resetToken.user.email === email) {
+    if (
+      resetToken &&
+      normalizeEmail(resetToken.user.email) === normalizeEmail(email)
+    ) {
       if (resetToken.expiresAt < new Date()) {
         await this.authRepository.deleteToken(resetToken.id);
         throw new UnauthorizedException('Reset token has expired');

@@ -241,6 +241,21 @@ describe('PasswordService', () => {
 
         expect(authRepository.createToken).toHaveBeenCalledTimes(1);
       });
+
+      it('does not retry Prisma errors other than a unique violation', async () => {
+        authRepository.createToken.mockRejectedValue(
+          new Prisma.PrismaClientKnownRequestError('Foreign key failed', {
+            code: 'P2003',
+            clientVersion: 'test',
+          }),
+        );
+
+        await expect(
+          service.requestPasswordReset({ email: 'test@example.com' }),
+        ).rejects.toThrow('Foreign key failed');
+
+        expect(authRepository.createToken).toHaveBeenCalledTimes(1);
+      });
     });
 
     describe('issuance cap', () => {
