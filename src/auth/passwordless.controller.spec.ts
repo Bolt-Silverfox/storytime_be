@@ -1,11 +1,19 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  Controller,
+  HttpCode,
+  INestApplication,
+  Post,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import request from 'supertest';
 import { PasswordlessController } from './passwordless.controller';
 import { PasswordlessService } from './services/passwordless.service';
 import { PasswordlessEnabledGuard } from './guards/passwordless-enabled.guard';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { PasswordlessThrottleGuard } from './guards/passwordless-throttle.guard';
+import { Throttle, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
 import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
@@ -37,7 +45,7 @@ async function makeApp(enabled: boolean) {
       },
     ],
   })
-    .overrideGuard(AuthThrottleGuard)
+    .overrideGuard(PasswordlessThrottleGuard)
     .useValue({ canActivate: () => true })
     .compile();
   const app: INestApplication = moduleRef.createNestApplication();
@@ -70,7 +78,7 @@ describe('PasswordlessController with the real throttle guard', () => {
           useValue: { request: jest.fn().mockResolvedValue({ message: 'ok' }) },
         },
         PasswordlessEnabledGuard,
-        AuthThrottleGuard,
+        PasswordlessThrottleGuard,
         {
           provide: ConfigService,
           useValue: { get: () => true },
@@ -99,6 +107,81 @@ describe('PasswordlessController with the real throttle guard', () => {
   });
 });
 
+@Controller('auth')
+class PasswordLoginStubController {
+  @Post('login')
+  @HttpCode(200)
+  @UseGuards(AuthThrottleGuard)
+  @Throttle({
+    short: {
+      limit: THROTTLE_LIMITS.AUTH_LOGIN.limit,
+      ttl: THROTTLE_LIMITS.AUTH_LOGIN.ttl,
+    },
+  })
+  login() {
+    return { ok: true };
+  }
+}
+
+describe('PasswordlessController throttle buckets per route', () => {
+  let app: INestApplication;
+  const limit = THROTTLE_LIMITS.AUTH_PASSWORDLESS_REQUEST.limit;
+
+  beforeEach(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        ThrottlerModule.forRoot([{ name: 'short', ttl: 60_000, limit: 1000 }]),
+      ],
+      controllers: [PasswordlessController, PasswordLoginStubController],
+      providers: [
+        {
+          provide: PasswordlessService,
+          useValue: {
+            request: jest.fn().mockResolvedValue({ message: 'ok' }),
+            verify: jest.fn().mockResolvedValue({ jwt: 'j' }),
+          },
+        },
+        PasswordlessEnabledGuard,
+        AuthThrottleGuard,
+        PasswordlessThrottleGuard,
+        { provide: ConfigService, useValue: { get: () => true } },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
+    await app.init();
+  });
+  afterEach(() => app.close());
+
+  const spendRequestBudget = async (email: string) => {
+    for (let i = 0; i < limit; i += 1)
+      await request(app.getHttpServer())
+        .post('/auth/passwordless/request')
+        .send({ email })
+        .expect(200);
+  };
+
+  it('still lets the same email sign in with a password after spending its passwordless request budget', async () => {
+    await spendRequestBudget('shared@example.com');
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email: 'shared@example.com', password: 'secret' })
+      .expect(200);
+  });
+
+  it('still lets the same email verify a code after spending its passwordless request budget', async () => {
+    await spendRequestBudget('shared@example.com');
+
+    await request(app.getHttpServer())
+      .post('/auth/passwordless/verify')
+      .send({ email: 'shared@example.com', code: '123456' })
+      .expect(200);
+  });
+});
+
 describe('PasswordlessController consume with the global throttle guard enabled', () => {
   let app: INestApplication;
   const limit = THROTTLE_LIMITS.AUTH_PASSWORDLESS_CONSUME.limit;
@@ -115,7 +198,7 @@ describe('PasswordlessController consume with the global throttle guard enabled'
           useValue: { consume: jest.fn().mockResolvedValue({ jwt: 'j' }) },
         },
         PasswordlessEnabledGuard,
-        AuthThrottleGuard,
+        PasswordlessThrottleGuard,
         { provide: APP_GUARD, useClass: ThrottlerGuard },
         { provide: ConfigService, useValue: { get: () => true } },
       ],

@@ -16,7 +16,6 @@ import {
 } from '@nestjs/swagger';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
-import { AuthThrottleGuard } from '@/shared/guards/auth-throttle.guard';
 import { THROTTLE_LIMITS } from '@/shared/config/throttle.config';
 import {
   PasswordlessConsumeDto,
@@ -25,6 +24,7 @@ import {
   PasswordlessVerifyDto,
 } from './dto/passwordless.dto';
 import { PasswordlessEnabledGuard } from './guards/passwordless-enabled.guard';
+import { PasswordlessThrottleGuard } from './guards/passwordless-throttle.guard';
 import { PasswordlessBodyPipe } from './pipes/passwordless-body.pipe';
 import { PasswordlessService } from './services/passwordless.service';
 
@@ -36,7 +36,7 @@ export class PasswordlessController {
   constructor(private readonly passwordlessService: PasswordlessService) {}
 
   @Post('request')
-  @UseGuards(AuthThrottleGuard)
+  @UseGuards(PasswordlessThrottleGuard)
   @Throttle({
     short: {
       limit: THROTTLE_LIMITS.AUTH_PASSWORDLESS_REQUEST.limit,
@@ -52,7 +52,7 @@ export class PasswordlessController {
   }
 
   @Post('verify')
-  @UseGuards(AuthThrottleGuard)
+  @UseGuards(PasswordlessThrottleGuard)
   @Throttle({
     short: {
       limit: THROTTLE_LIMITS.AUTH_PASSWORDLESS_VERIFY.limit,
