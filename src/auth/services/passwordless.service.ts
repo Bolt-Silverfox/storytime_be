@@ -556,7 +556,7 @@ export class PasswordlessService {
       return attempts > 0 ? { admitted: true, charge } : { admitted: false };
     } catch {
       this.logger.error('Passwordless throttle store unavailable');
-      return { admitted: true };
+      return { admitted: true, charge };
     }
   }
 

@@ -1888,6 +1888,74 @@ describe('PasswordlessService', () => {
       });
     });
 
+    describe('when the reply to the daily charge is lost', () => {
+      const chargeThenLoseReply = (redis: InMemoryRedis) => {
+        const evaluate = redis.client.eval;
+        jest
+          .spyOn(redis.client, 'eval')
+          .mockImplementation(async (script, numKeys, ...args) => {
+            const result = await evaluate(script, numKeys, ...args);
+            if (args[0].startsWith('pwl:fail:charges:')) {
+              throw new Error('Passwordless Redis call timed out');
+            }
+            return result;
+          });
+      };
+
+      it('gives the charge back for a correct code so it cannot fill the last slot', async () => {
+        quiet();
+        const { service, captured, redis, throttle } = build();
+        await seedFailedAttempts(throttle, 'target@example.com', 19);
+        await service.request('target@example.com', '1.1.1.1');
+        chargeThenLoseReply(redis);
+
+        await expect(
+          service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+        ).resolves.toBeDefined();
+
+        expect(await failedAttempts(redis, 'target@example.com')).toBe(19);
+      });
+
+      it('keeps the charge for a wrong code', async () => {
+        quiet();
+        const { service, captured, redis, throttle } = build();
+        await seedFailedAttempts(throttle, 'target@example.com', 3);
+        await service.request('target@example.com', '1.1.1.1');
+        chargeThenLoseReply(redis);
+
+        await expectGeneric(
+          service.verify(
+            'target@example.com',
+            wrongCode(captured[0].code),
+            '41.0.0.1',
+          ),
+        );
+
+        expect(await failedAttempts(redis, 'target@example.com')).toBe(4);
+      });
+
+      it('signs a correct code in and removes no other charge when the charge never landed', async () => {
+        quiet();
+        const { service, captured, redis, throttle } = build();
+        await seedFailedAttempts(throttle, 'target@example.com', 3);
+        await service.request('target@example.com', '1.1.1.1');
+        const evaluate = redis.client.eval;
+        jest
+          .spyOn(redis.client, 'eval')
+          .mockImplementation((script, numKeys, ...args) =>
+            args[0].startsWith('pwl:fail:charges:')
+              ? Promise.reject(new Error('redis down'))
+              : evaluate(script, numKeys, ...args),
+          );
+
+        await expect(
+          service.verify('target@example.com', captured[0].code, '41.0.0.1'),
+        ).resolves.toBeDefined();
+
+        expect(await failedAttempts(redis, 'target@example.com')).toBe(3);
+      });
+    });
+
     it('keeps the charge for a wrong code and gives back only the correct code charge', async () => {
       quiet();
       const { service, captured, redis } = build();
