@@ -1168,6 +1168,29 @@ describe('PasswordService', () => {
         expect(authRepository.updateUser).not.toHaveBeenCalled();
       });
 
+      it('sends the caller charge before the token owner charge, so a slow owner command cannot delay the caller verdict', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        authRepository.findTokensByUserEmail.mockResolvedValue([
+          makeToken({ id: 'token-2', type: TokenType.PASSWORD_RESET }),
+        ]);
+        const sent: string[] = [];
+        const evalOnce = fakeRedis.eval;
+        jest.spyOn(fakeRedis, 'eval').mockImplementation((...args) => {
+          sent.push(args[2]);
+          return evalOnce(...args);
+        });
+
+        await expect(
+          attempt('raw-reset-token', 'other@example.com'),
+        ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(sent).toEqual([
+          'password-reset:token-failures:token-2',
+          'password-reset:token-failures:token-1',
+        ]);
+      });
+
       it('answers a mismatched email without waiting on the token owner charge, which gives up after the deadline', async () => {
         jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
         const errorSpy = jest

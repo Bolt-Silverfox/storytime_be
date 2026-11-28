@@ -146,6 +146,57 @@ d('PasswordService reset attempts against a real Redis', () => {
     client.disconnect();
   });
 
+  const replyProxy = async () => {
+    const upstream = new URL(url!);
+    const sockets: Socket[] = [];
+    const held: Array<() => void> = [];
+    const state = {
+      mode: 'passed' as 'passed' | 'held' | 'dropped',
+    };
+    const proxy: Server = createServer((downstream) => {
+      const server = connect(Number(upstream.port || 6379), upstream.hostname);
+      sockets.push(downstream, server);
+      downstream.on('data', (chunk) => server.write(chunk));
+      server.on('data', (chunk) => {
+        if (state.mode === 'passed') downstream.write(chunk);
+        else if (state.mode === 'held')
+          held.push(() => downstream.write(chunk));
+      });
+      downstream.on('close', () => server.destroy());
+      server.on('close', () => downstream.destroy());
+      downstream.on('error', () => undefined);
+      server.on('error', () => undefined);
+    });
+    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+    const { port } = proxy.address() as { port: number };
+    const proxied = new Redis({
+      host: '127.0.0.1',
+      port,
+      username: decodeURIComponent(upstream.username) || undefined,
+      password: decodeURIComponent(upstream.password) || undefined,
+      db: Number(upstream.pathname.slice(1) || 0),
+      enableOfflineQueue: true,
+      maxRetriesPerRequest: null,
+      retryStrategy: () => 300,
+    });
+    await proxied.ping();
+    return {
+      client: proxied,
+      get replies() {
+        return state.mode;
+      },
+      set replies(mode: 'passed' | 'held' | 'dropped') {
+        state.mode = mode;
+        if (mode === 'passed') held.splice(0).forEach((flush) => flush());
+      },
+      reset: () => sockets.forEach((socket) => socket.destroy()),
+      close: async () => {
+        proxied.disconnect();
+        await new Promise((resolve) => proxy.close(resolve));
+      },
+    };
+  };
+
   const fourWrongGuesses = async () => {
     for (let i = 0; i < 4; i++) expect(await guessWrong()).toBe(404);
   };
@@ -203,16 +254,23 @@ d('PasswordService reset attempts against a real Redis', () => {
     expect(tokens.size).toBe(0);
   });
 
-  it('answers 503 while Redis is paused and leaves the owner able to reset afterwards', async () => {
-    await fourWrongGuesses();
-    await admin.call('CLIENT', 'PAUSE', '3000', 'ALL');
-    const started = Date.now();
+  it('answers 503 while replies are held back and leaves the owner able to reset afterwards', async () => {
+    const link = await replyProxy();
+    try {
+      service = serviceOn(link.client);
+      await fourWrongGuesses();
+      link.replies = 'held';
+      const started = Date.now();
 
-    expect(await validate()).toBe(503);
-    expect(Date.now() - started).toBeLessThan(2800);
+      expect(await validate()).toBe(503);
+      expect(Date.now() - started).toBeLessThan(2800);
 
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    expect(await validate()).toBe(200);
+      link.replies = 'passed';
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      expect(await validate()).toBe(200);
+    } finally {
+      await link.close();
+    }
   }, 15_000);
 
   it('fails fast while the connection is down and lets the owner reset after reconnecting', async () => {
@@ -233,54 +291,26 @@ d('PasswordService reset attempts against a real Redis', () => {
   }, 15_000);
 
   it('leaves the counter alone when a valid code meets lost replies, so the code works once Redis answers again', async () => {
-    const upstream = new URL(url!);
-    let swallowReplies = false;
-    const sockets: Socket[] = [];
-    const proxy: Server = createServer((downstream) => {
-      const server = connect(Number(upstream.port || 6379), upstream.hostname);
-      sockets.push(downstream, server);
-      downstream.on('data', (chunk) => server.write(chunk));
-      server.on('data', (chunk) => {
-        if (!swallowReplies) downstream.write(chunk);
-      });
-      downstream.on('close', () => server.destroy());
-      server.on('close', () => downstream.destroy());
-      downstream.on('error', () => undefined);
-      server.on('error', () => undefined);
-    });
-    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
-    const { port } = proxy.address() as { port: number };
-    const proxied = new Redis({
-      host: '127.0.0.1',
-      port,
-      username: decodeURIComponent(upstream.username) || undefined,
-      password: decodeURIComponent(upstream.password) || undefined,
-      db: Number(upstream.pathname.slice(1) || 0),
-      enableOfflineQueue: true,
-      maxRetriesPerRequest: null,
-      retryStrategy: () => 300,
-    });
+    const link = await replyProxy();
     try {
-      await proxied.ping();
-      service = serviceOn(proxied);
+      service = serviceOn(link.client);
       await fourWrongGuesses();
       const [key] = await attemptKeys();
-      swallowReplies = true;
+      link.replies = 'dropped';
 
       expect(await validate()).toBe(503);
       expect(await admin.get(key)).toBe('4');
 
-      swallowReplies = false;
-      sockets.forEach((socket) => socket.destroy());
-      await waitFor(() => proxied.status !== 'ready');
-      await waitFor(() => proxied.status === 'ready');
-      await proxied.ping();
+      link.replies = 'passed';
+      link.reset();
+      await waitFor(() => link.client.status !== 'ready');
+      await waitFor(() => link.client.status === 'ready');
+      await link.client.ping();
 
       expect(await admin.get(key)).toBe('4');
       expect(await validate()).toBe(200);
     } finally {
-      proxied.disconnect();
-      await new Promise((resolve) => proxy.close(resolve));
+      await link.close();
     }
   }, 30_000);
 });

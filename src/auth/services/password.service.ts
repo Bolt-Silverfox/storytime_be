@@ -171,12 +171,15 @@ export class PasswordService {
       return resetToken;
     }
 
-    if (resetToken && !ownsResetToken) {
-      this.chargeForeignToken(resetToken.id).catch((error: unknown) =>
-        this.logFailure('Failed to charge reset token owner', error),
-      );
+    try {
+      await this.chargeOwnedTokens(email);
+    } finally {
+      if (resetToken && !ownsResetToken) {
+        this.chargeForeignToken(resetToken.id).catch((error: unknown) =>
+          this.logFailure('Failed to charge reset token owner', error),
+        );
+      }
     }
-    await this.chargeOwnedTokens(email);
     throw new NotFoundException('Invalid reset token');
   }
 

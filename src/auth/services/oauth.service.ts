@@ -172,8 +172,13 @@ export class OAuthService {
       const existing = await this.authRepository.findUserByEmail(email);
 
       if (existing) {
+        if (emailVerified !== true) {
+          throw new UnauthorizedException(
+            'Sign in with your password to link this provider',
+          );
+        }
         user = await this.authRepository.updateUserWithRelations(existing.id, {
-          isEmailVerified: emailVerified ? true : existing.isEmailVerified,
+          isEmailVerified: true,
           googleId: googleId || existing.googleId,
           appleId: appleId || existing.appleId,
         });
