@@ -40,7 +40,9 @@ export class OnboardingService {
   ) {}
 
   async register(data: RegisterDto): Promise<LoginResponseDto | null> {
-    const existingUser = await this.authRepository.findUserByEmail(data.email);
+    const existingUser = await this.authRepository.findUserByEmailIgnoringCase(
+      data.email,
+    );
     if (existingUser) {
       throw new ResourceAlreadyExistsException('User', 'email', data.email);
     }

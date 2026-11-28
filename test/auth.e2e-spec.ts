@@ -30,6 +30,11 @@ import { PushProcessor } from '../src/notification/queue/push.processor';
 import { EmailProvider } from '../src/notification/providers/email.provider';
 import { AuthThrottleGuard } from '../src/shared/guards/auth-throttle.guard';
 import { REDIS_CLIENT } from '../src/redis/redis.constants';
+import { RedisService } from '../src/redis/redis.service';
+import { FakeRedisClient } from '../src/shared/testing/fake-redis';
+import { createHash } from 'crypto';
+import * as bcrypt from 'bcryptjs';
+import { TokenType } from '../src/auth/dto/auth.dto';
 
 // SharedModule's InfraMetricsService injects REDIS_CLIENT, which the app gets
 // from the @Global RedisModule. Tests don't have a Redis server, so provide an
@@ -42,8 +47,12 @@ import { REDIS_CLIENT } from '../src/redis/redis.constants';
       provide: REDIS_CLIENT,
       useValue: { status: 'end', info: jest.fn(), on: jest.fn() },
     },
+    {
+      provide: RedisService,
+      useValue: { client: new FakeRedisClient() },
+    },
   ],
-  exports: [REDIS_CLIENT],
+  exports: [REDIS_CLIENT, RedisService],
 })
 class MockRedisModule {}
 
@@ -207,6 +216,29 @@ describe('Authentication (e2e)', () => {
   });
 
   // ==================== HELPER FUNCTIONS ====================
+
+  const seedToken = (email: string, raw: string, type: TokenType) => {
+    const user = mockState.users.get(email)!;
+    const token = createHash('sha256').update(raw).digest('hex');
+    mockState.tokens.set(token, {
+      id: `token-${raw}`,
+      userId: user.id,
+      token,
+      type,
+      expiresAt: new Date(Date.now() + 3600_000),
+      createdAt: new Date(),
+    });
+    return user;
+  };
+
+  const registerUser = async (email: string) => {
+    const res = await request(server).post('/api/v1/auth/register').send({
+      email,
+      password: testUser.password,
+      fullName: testUser.fullName,
+    });
+    expect(res.status).toBe(200);
+  };
 
   const expectSuccessResponse = (res: request.Response, statusCode: number) => {
     expect(res.status).toBe(statusCode);
@@ -530,6 +562,29 @@ describe('Authentication (e2e)', () => {
       expect(res.body.statusCode).toBe(401);
     });
 
+    it('verifies the email with a valid token once, then rejects the spent token', async () => {
+      const email = 'e2e-verify@example.com';
+      await registerUser(email);
+      const user = seedToken(email, 'verify-raw', TokenType.VERIFICATION);
+
+      const res = await request(server)
+        .post('/api/v1/auth/verify-email')
+        .send({ token: 'verify-raw' });
+
+      expectSuccessResponse(res, 200);
+      expect(user.isEmailVerified).toBe(true);
+      expect(user.onboardingStatus).toBe('email_verified');
+      expect(
+        mockState.tokens.has(
+          createHash('sha256').update('verify-raw').digest('hex'),
+        ),
+      ).toBe(false);
+      const again = await request(server)
+        .post('/api/v1/auth/verify-email')
+        .send({ token: 'verify-raw' });
+      expect(again.status).toBe(401);
+    });
+
     it('should reject verification without token', async () => {
       const res = await request(server)
         .post('/api/v1/auth/verify-email')
@@ -614,6 +669,32 @@ describe('Authentication (e2e)', () => {
 
       // Token validation should fail
       expect([400, 404, 500]).toContain(res.status);
+    });
+
+    it('resets the password with a valid code once, then rejects the spent code', async () => {
+      const email = 'e2e-reset@example.com';
+      await registerUser(email);
+      const user = seedToken(email, '12345678', TokenType.PASSWORD_RESET);
+      const oldHash = user.passwordHash;
+
+      const res = await request(server)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: '12345678', email, newPassword: 'NewPassword1#' });
+
+      expectSuccessResponse(res, 200);
+      expect(user.passwordHash).not.toBe(oldHash);
+      expect(
+        mockState.tokens.has(
+          createHash('sha256').update('12345678').digest('hex'),
+        ),
+      ).toBe(false);
+      await expect(
+        bcrypt.compare('NewPassword1#', user.passwordHash as string),
+      ).resolves.toBe(true);
+      const again = await request(server)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: '12345678', email, newPassword: 'OtherPassword1#' });
+      expect(again.status).toBe(404);
     });
 
     it('should reject reset with weak password', async () => {
@@ -749,8 +830,12 @@ describe('Authentication (e2e)', () => {
 
 function createMockPrismaService() {
   const { users, sessions, tokens } = mockState;
+  const userById = (id: unknown) =>
+    [...users.values()].find((user) => user.id === id);
+  const tokenById = (id: unknown) =>
+    [...tokens.entries()].find(([, token]) => token.id === id);
 
-  return {
+  const prisma: Record<string, unknown> = {
     user: {
       findUnique: jest.fn(
         ({ where }: { where: { email?: string; id?: string } }) => {
@@ -765,6 +850,13 @@ function createMockPrismaService() {
             }
           }
           return Promise.resolve(null);
+        },
+      ),
+      findMany: jest.fn(
+        ({ where }: { where: { email: { equals: string } } }) => {
+          const email = where.email.equals.replace(/\\([\\%_])/g, '$1');
+          const user = users.get(email.toLowerCase());
+          return Promise.resolve(user ? [user] : []);
         },
       ),
       findFirst: jest.fn(({ where }: { where: { email?: string } }) => {
@@ -891,9 +983,23 @@ function createMockPrismaService() {
         return Promise.resolve(token);
       }),
       findUnique: jest.fn(
-        ({ where }: { where: { id?: string; token?: string } }) => {
+        ({
+          where,
+          include,
+        }: {
+          where: { id?: string; token?: string; type?: string };
+          include?: { user?: boolean };
+        }) => {
           if (where.token) {
-            return Promise.resolve(tokens.get(where.token) || null);
+            const token = tokens.get(where.token);
+            if (!token || (where.type && token.type !== where.type)) {
+              return Promise.resolve(null);
+            }
+            return Promise.resolve(
+              include?.user
+                ? { ...token, user: userById(token.userId) }
+                : token,
+            );
           }
           if (where.id) {
             for (const token of tokens.values()) {
@@ -926,8 +1032,16 @@ function createMockPrismaService() {
           return Promise.resolve(null);
         },
       ),
-      deleteMany: jest.fn(() => Promise.resolve({ count: 1 })),
+      deleteMany: jest.fn(({ where }: { where?: { id?: string } } = {}) => {
+        const found = where?.id ? tokenById(where.id) : undefined;
+        if (found) tokens.delete(found[0]);
+        return Promise.resolve({ count: found ? 1 : 0 });
+      }),
     },
+    $queryRaw: jest.fn((_sql: TemplateStringsArray, id: unknown) => {
+      const found = tokenById(id);
+      return Promise.resolve(found ? [{ expiresAt: found[1].expiresAt }] : []);
+    }),
     profile: {
       create: jest.fn(({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({ id: `profile-${Date.now()}`, ...data }),
@@ -951,13 +1065,11 @@ function createMockPrismaService() {
       ),
     },
     $transaction: jest.fn(
-      (operations: unknown[] | ((prisma: unknown) => Promise<unknown>)) => {
-        if (typeof operations === 'function') {
-          // Interactive transaction - we don't support this in the mock, just resolve
-          return Promise.resolve(undefined);
-        }
-        return Promise.all(operations as Promise<unknown>[]);
-      },
+      (operations: unknown[] | ((tx: unknown) => Promise<unknown>)) =>
+        typeof operations === 'function'
+          ? operations(prisma as unknown)
+          : Promise.all(operations as Promise<unknown>[]),
     ),
   };
+  return prisma;
 }

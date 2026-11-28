@@ -54,6 +54,7 @@ export type LinkableProviderField = 'googleId' | 'appleId';
 export interface IAuthRepository {
   // User operations
   findUserByEmail(email: string): Promise<User | null>;
+  findUserByEmailIgnoringCase(email: string): Promise<User | null>;
   findUserByEmailWithRelations(
     email: string,
   ): Promise<UserWithProfileAvatarAndKidCount | null>;
@@ -202,7 +203,10 @@ export interface IAuthRepository {
 }
 
 export interface IAuthRepositoryTransaction {
+  consumeToken(id: string): Promise<boolean>;
   updateUser(id: string, data: { passwordHash: string }): Promise<User>;
+  markEmailVerified(userId: string): Promise<void>;
+  deleteAllUserSessions(userId: string): Promise<void>;
   deleteOtherSessions(userId: string, exceptSessionId: string): Promise<void>;
   findActiveUserLinkedProviderFields(
     userId: string,

@@ -32,6 +32,10 @@ jest.mock('apple-signin-auth', () => ({
  * failed / rejected logins never do.
  */
 describe('lastLoginAt recording across login paths', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   let auth: AuthService;
   let oauth: OAuthService;
   let onboarding: OnboardingService;
@@ -39,6 +43,7 @@ describe('lastLoginAt recording across login paths', () => {
   const repo = {
     findUserByEmailWithRelations: jest.fn(),
     findUserByEmail: jest.fn(),
+    findUserByEmailIgnoringCase: jest.fn(),
     findUserByGoogleId: jest.fn(),
     findUserByAppleId: jest.fn(),
     updateUserWithRelations: jest.fn(),
@@ -151,7 +156,7 @@ describe('lastLoginAt recording across login paths', () => {
     });
 
     it('registration (auto sign-in with a fresh session)', async () => {
-      repo.findUserByEmail.mockResolvedValue(null);
+      repo.findUserByEmailIgnoringCase.mockResolvedValue(null);
       repo.createUser.mockResolvedValue(verifiedUser);
       await onboarding.register({
         fullName: 'N',
