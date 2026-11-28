@@ -156,7 +156,8 @@ export class OAuthService {
 
   private async upsertOrReturnUserFromOAuthPayload(payload: OAuthPayload) {
     const { googleId, appleId, picture, name, emailVerified } = payload;
-    const email = payload.email?.trim().toLowerCase();
+    const sentEmail = payload.email?.trim();
+    const email = sentEmail?.toLowerCase();
 
     let user: UserWithProfileAndAvatar | null = null;
 
@@ -170,7 +171,7 @@ export class OAuthService {
     // 2. Try find by email
     if (!user) {
       const existing =
-        await this.authRepository.findUserByEmailIgnoringCase(email);
+        await this.authRepository.findUserByEmailIgnoringCase(sentEmail);
 
       if (existing) {
         if (emailVerified !== true) {

@@ -261,6 +261,16 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
         createdAt: new Date(2026, 1, 1),
       },
       { id: 'ci-wild', email: 'ab@rt.test', createdAt: new Date(2026, 1, 1) },
+      {
+        id: 'ci-dup-older',
+        email: 'Dup-A@rt.test',
+        createdAt: new Date(2026, 1, 1),
+      },
+      {
+        id: 'ci-dup-newer',
+        email: 'DUP-a@rt.test',
+        createdAt: new Date(2026, 1, 2),
+      },
     ];
 
     beforeEach(async () => {
@@ -290,10 +300,22 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
       ).toBe('ci-newer');
     });
 
-    it('picks the oldest case-only duplicate when none matches exactly', async () => {
+    it('prefers the exact form the caller sent over the lowercase form', async () => {
+      expect(
+        (await repo.findUserByEmailIgnoringCase('CI-Case@rt.test'))?.id,
+      ).toBe('ci-older');
+    });
+
+    it('falls back to the lowercase form when no row matches the sent casing', async () => {
       expect(
         (await repo.findUserByEmailIgnoringCase('Ci-CASE@rt.test'))?.id,
-      ).toBe('ci-older');
+      ).toBe('ci-newer');
+    });
+
+    it('picks the oldest case-only duplicate when neither the sent nor the lowercase form exists', async () => {
+      expect(
+        (await repo.findUserByEmailIgnoringCase('dup-A@RT.test'))?.id,
+      ).toBe('ci-dup-older');
     });
 
     it.each(['a_@rt.test', 'a%@rt.test', '%@rt.test'])(

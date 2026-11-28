@@ -42,7 +42,13 @@ export class PrismaAuthRepository implements IAuthRepository {
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
-    return matches.find((user) => user.email === email) ?? matches[0] ?? null;
+    const lowercase = email.toLowerCase();
+    return (
+      matches.find((user) => user.email === email) ??
+      matches.find((user) => user.email === lowercase) ??
+      matches[0] ??
+      null
+    );
   }
 
   async findUserByEmailWithRelations(

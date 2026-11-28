@@ -141,7 +141,7 @@ describe('OAuthService', () => {
       );
     });
 
-    it('looks up and creates the account with the provider email lowercased and trimmed', async () => {
+    it('looks up the account by the provider email as sent (trimmed) and creates it lowercased', async () => {
       googleClient.verifyIdToken.mockResolvedValue({
         getPayload: () => ({
           sub: 'google-new',
@@ -161,7 +161,7 @@ describe('OAuthService', () => {
       await service.loginWithGoogleIdToken('valid-token');
 
       expect(authRepository.findUserByEmailIgnoringCase).toHaveBeenCalledWith(
-        'new.user@example.com',
+        'New.User@Example.COM',
       );
       expect(authRepository.createUser).toHaveBeenCalledWith(
         expect.objectContaining({ email: 'new.user@example.com' }),
