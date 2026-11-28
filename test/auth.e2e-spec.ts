@@ -238,6 +238,7 @@ describe('Authentication (e2e)', () => {
       fullName: testUser.fullName,
     });
     expect(res.status).toBe(200);
+    return res;
   };
 
   const expectSuccessResponse = (res: request.Response, statusCode: number) => {
@@ -634,6 +635,27 @@ describe('Authentication (e2e)', () => {
       expect([200, 404, 503]).toContain(res.status);
     });
 
+    it('invalidates the earlier reset code when a new one is issued', async () => {
+      const email = 'e2e-reissue@example.com';
+      await registerUser(email);
+      seedToken(email, '87654321', TokenType.PASSWORD_RESET);
+
+      const res = await request(server)
+        .post('/api/v1/auth/request-password-reset')
+        .send({ email });
+
+      expectSuccessResponse(res, 200);
+      expect(
+        mockState.tokens.has(
+          createHash('sha256').update('87654321').digest('hex'),
+        ),
+      ).toBe(false);
+      const stale = await request(server)
+        .post('/api/v1/auth/validate-reset-token')
+        .send({ token: '87654321', email });
+      expect(stale.status).toBe(404);
+    });
+
     it('should reject with invalid email format', async () => {
       const res = await request(server)
         .post('/api/v1/auth/request-password-reset')
@@ -695,6 +717,22 @@ describe('Authentication (e2e)', () => {
         .post('/api/v1/auth/reset-password')
         .send({ token: '12345678', email, newPassword: 'OtherPassword1#' });
       expect(again.status).toBe(404);
+    });
+
+    it('revokes existing sessions when the password is reset', async () => {
+      const email = 'e2e-reset-sessions@example.com';
+      await registerUser(email);
+      const user = seedToken(email, '23456789', TokenType.PASSWORD_RESET);
+      const userSessions = () =>
+        [...mockState.sessions.values()].filter((s) => s.userId === user.id);
+      expect(userSessions().length).toBeGreaterThan(0);
+
+      const res = await request(server)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: '23456789', email, newPassword: 'NewPassword1#' });
+
+      expectSuccessResponse(res, 200);
+      expect(userSessions()).toHaveLength(0);
     });
 
     it('should reject reset with weak password', async () => {
@@ -834,6 +872,24 @@ function createMockPrismaService() {
     [...users.values()].find((user) => user.id === id);
   const tokenById = (id: unknown) =>
     [...tokens.entries()].find(([, token]) => token.id === id);
+  type Filter = Record<string, unknown>;
+  const matchesFilter = (row: Record<string, unknown>, where: Filter = {}) =>
+    Object.entries(where).every(([field, expected]) =>
+      expected !== null && typeof expected === 'object' && 'not' in expected
+        ? row[field] !== expected.not
+        : row[field] === expected,
+    );
+  const deleteMatching = (
+    store: Map<string, Record<string, unknown>>,
+    where: Filter | undefined,
+  ) => {
+    if (!where) return 0;
+    const keys = [...store.entries()]
+      .filter(([, row]) => matchesFilter(row, where))
+      .map(([key]) => key);
+    keys.forEach((key) => store.delete(key));
+    return keys.length;
+  };
 
   const prisma: Record<string, unknown> = {
     user: {
@@ -933,24 +989,12 @@ function createMockPrismaService() {
       findUnique: jest.fn(({ where }: { where: { id: string } }) => {
         return Promise.resolve(sessions.get(where.id) || null);
       }),
-      findFirst: jest.fn(
-        ({
-          where,
-        }: {
-          where: { refreshTokenHash?: string; userId?: string };
-        }) => {
-          if (where.refreshTokenHash) {
-            for (const session of sessions.values()) {
-              if (
-                session.refreshTokenHash === where.refreshTokenHash &&
-                session.isActive
-              ) {
-                return Promise.resolve(session);
-              }
-            }
-          }
-          return Promise.resolve(null);
-        },
+      findFirst: jest.fn(({ where }: { where: Filter }) =>
+        Promise.resolve(
+          [...sessions.values()].find(
+            (session) => session.isActive && matchesFilter(session, where),
+          ) ?? null,
+        ),
       ),
       update: jest.fn(
         ({
@@ -968,8 +1012,18 @@ function createMockPrismaService() {
           return Promise.resolve(null);
         },
       ),
-      updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
-      deleteMany: jest.fn(() => Promise.resolve({ count: 1 })),
+      updateMany: jest.fn(
+        ({ where, data }: { where: Filter; data: Record<string, unknown> }) => {
+          const matches = [...sessions.values()].filter((session) =>
+            matchesFilter(session, where),
+          );
+          matches.forEach((session) => Object.assign(session, data));
+          return Promise.resolve({ count: matches.length });
+        },
+      ),
+      deleteMany: jest.fn(({ where }: { where?: Filter } = {}) =>
+        Promise.resolve({ count: deleteMatching(sessions, where) }),
+      ),
     },
     token: {
       create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
@@ -1009,12 +1063,12 @@ function createMockPrismaService() {
           return Promise.resolve(null);
         },
       ),
-      findFirst: jest.fn(({ where }: { where: { token?: string } }) => {
-        if (where.token) {
-          return Promise.resolve(tokens.get(where.token) || null);
-        }
-        return Promise.resolve(null);
-      }),
+      findFirst: jest.fn(({ where }: { where: Filter }) =>
+        Promise.resolve(
+          [...tokens.values()].find((token) => matchesFilter(token, where)) ??
+            null,
+        ),
+      ),
       findMany: jest.fn(
         ({
           where,
@@ -1051,11 +1105,9 @@ function createMockPrismaService() {
           return Promise.resolve(null);
         },
       ),
-      deleteMany: jest.fn(({ where }: { where?: { id?: string } } = {}) => {
-        const found = where?.id ? tokenById(where.id) : undefined;
-        if (found) tokens.delete(found[0]);
-        return Promise.resolve({ count: found ? 1 : 0 });
-      }),
+      deleteMany: jest.fn(({ where }: { where?: Filter } = {}) =>
+        Promise.resolve({ count: deleteMatching(tokens, where) }),
+      ),
     },
     $queryRaw: jest.fn((_sql: TemplateStringsArray, id: unknown) => {
       const found = tokenById(id);
