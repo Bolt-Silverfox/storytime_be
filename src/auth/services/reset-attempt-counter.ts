@@ -54,6 +54,7 @@ export class ResetAttemptCounter {
   }
 
   async clear(key: string): Promise<void> {
+    this.assertReady();
     await withHealthTimeout(this.client.del(key), this.timeoutMs);
   }
 

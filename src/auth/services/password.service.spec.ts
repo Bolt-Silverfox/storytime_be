@@ -850,6 +850,32 @@ describe('PasswordService', () => {
       jest.restoreAllMocks();
     });
 
+    it('sends no failure-count clear while the client is reconnecting, so nothing is queued to replay', async () => {
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      const evalOnce = fakeRedis.eval;
+      jest
+        .spyOn(fakeRedis, 'eval')
+        .mockImplementationOnce((...args) => {
+          const read = evalOnce(...args);
+          fakeRedis.disconnect();
+          return read;
+        })
+        .mockImplementation(evalOnce);
+
+      await expect(
+        service.resetPassword('raw-reset-token', 'test@example.com', 'x', {
+          token: 'raw-reset-token',
+          email: 'test@example.com',
+          newPassword: 'x',
+        }),
+      ).resolves.toEqual({ message: 'Password has been reset successfully' });
+      fakeRedis.reconnect();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(fakeRedis.applied).not.toContain('del');
+    });
+
     it('counts every wrong guess in a concurrent burst and burns the code', async () => {
       stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
