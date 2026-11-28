@@ -3,10 +3,10 @@ interface ClosableRedis {
   disconnect(): void;
 }
 
-const within = <T>(
+export const withinDeadline = <T>(
   work: Promise<T>,
   what: string,
-  deadlineMs: number,
+  deadlineMs = 2_000,
 ): Promise<T> => {
   let timer: NodeJS.Timeout | undefined;
   const stalled = new Promise<never>((_, reject) => {
@@ -25,9 +25,11 @@ export async function closeRedisAfter(
   deadlineMs = 2_000,
 ): Promise<void> {
   try {
-    await within(cleanup(), 'cleanup', deadlineMs);
+    await withinDeadline(cleanup(), 'cleanup', deadlineMs);
   } finally {
-    await within(client.quit(), 'quit', deadlineMs).catch(() => undefined);
+    await withinDeadline(client.quit(), 'quit', deadlineMs).catch(
+      () => undefined,
+    );
     client.disconnect();
   }
 }

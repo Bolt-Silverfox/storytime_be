@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import type Keyv from 'keyv';
 import { GuestSessionService } from './guest-session.service';
-import { closeRedisAfter } from '@/shared/testing/close-redis';
+import { closeRedisAfter, withinDeadline } from '@/shared/testing/close-redis';
 import type { IGuestRepository } from './repositories/guest.repository.interface';
 
 const url = process.env.PASSWORDLESS_TEST_REDIS_URL;
@@ -38,22 +38,27 @@ maybe('GuestSessionService against real Redis', () => {
     client = new Redis(url as string);
   });
 
-  afterAll(() =>
-    closeRedisAfter(client, async () => {
-      if (services.length) {
-        await Promise.all(
-          sessions.map((id) => services[0].deleteGuestSession(id)),
-        );
-      }
-      const closed = await Promise.allSettled(
-        services.map((service) =>
-          (service as unknown as { keyv: Keyv }).keyv.disconnect(),
-        ),
+  afterAll(async () => {
+    try {
+      await withinDeadline(
+        Promise.all(sessions.map((id) => services[0].deleteGuestSession(id))),
+        'session cleanup',
       );
-      const failed = closed.find((r) => r.status === 'rejected');
-      if (failed) throw failed.reason;
-    }),
-  );
+    } finally {
+      await closeRedisAfter(client, async () => {
+        const closed = await Promise.allSettled(
+          services.map((service) =>
+            withinDeadline(
+              (service as unknown as { keyv: Keyv }).keyv.disconnect(),
+              'keyv disconnect',
+            ),
+          ),
+        );
+        const failed = closed.find((r) => r.status === 'rejected');
+        if (failed) throw failed.reason;
+      });
+    }
+  });
 
   it('round-trips a story saved under the lock through the session store', async () => {
     const service = await instance();

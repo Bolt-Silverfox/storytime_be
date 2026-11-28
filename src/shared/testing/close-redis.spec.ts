@@ -1,4 +1,4 @@
-import { closeRedisAfter } from './close-redis';
+import { closeRedisAfter, withinDeadline } from './close-redis';
 
 const never = () => new Promise<never>(() => undefined);
 
@@ -55,5 +55,26 @@ describe('closeRedisAfter', () => {
 
     await expect(outcome).resolves.toBeUndefined();
     expect(client.disconnect).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('withinDeadline', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('passes a reply through and rejects a stall after the deadline', async () => {
+    await expect(
+      withinDeadline(Promise.resolve(7), 'get', 1_000),
+    ).resolves.toBe(7);
+    const stalled = withinDeadline(never(), 'DEL', 1_000).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    await jest.advanceTimersByTimeAsync(1_000);
+
+    expect(await stalled).toEqual(
+      new Error('Redis DEL did not reply within 1000ms'),
+    );
   });
 });
