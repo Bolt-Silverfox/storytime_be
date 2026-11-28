@@ -18,6 +18,7 @@ import { InactiveAccountError } from '../repositories/inactive-account.error';
 import { PrismaLoginChallengeRepository } from '../repositories/prisma-login-challenge.repository';
 import { InMemoryRedis } from '@/shared/testing/passwordless-fakes';
 import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
+import { PASSWORDLESS_INVALID_MESSAGE } from './passwordless.constants';
 import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
 import { PrismaDeviceTokenRepository } from '@/notification/repositories/prisma-device-token.repository';
 import { PrismaGuestRepository } from '@/guest/repositories/prisma-guest.repository';
@@ -28,6 +29,24 @@ import { DeviceTokenService } from '@/notification/services/device-token.service
 const url = process.env.PASSWORDLESS_TEST_DATABASE_URL;
 const maybe = isThrowawayDatabaseUrl(url) ? describe : describe.skip;
 const LOCK_OBSERVATION_MS = 10_000;
+
+const expectOneWinnerAndGenericRejections = (
+  results: PromiseSettledResult<unknown>[],
+) => {
+  expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+  const rejections = results.flatMap((r) =>
+    r.status === 'rejected' ? [r.reason as unknown] : [],
+  );
+  expect(rejections).toHaveLength(results.length - 1);
+  for (const reason of rejections) {
+    expect(reason).toBeInstanceOf(BadRequestException);
+    expect((reason as BadRequestException).getResponse()).toEqual({
+      message: PASSWORDLESS_INVALID_MESSAGE,
+      error: 'Bad Request',
+      statusCode: 400,
+    });
+  }
+};
 
 maybe('PasswordlessService against Postgres', () => {
   jest.setTimeout(LOCK_OBSERVATION_MS * 3);
@@ -301,7 +320,7 @@ maybe('PasswordlessService against Postgres', () => {
         service.verify(email, code, `20.0.0.${i}`),
       ),
     );
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expectOneWinnerAndGenericRejections(results);
     expect(await prisma.session.count({ where: { user: { email } } })).toBe(1);
   });
 
@@ -309,11 +328,20 @@ maybe('PasswordlessService against Postgres', () => {
     const email = emailFor();
     const { code } = await issue(email);
     const wrong = code === '123456' ? '654321' : '123456';
-    await Promise.allSettled(
+    const guesses = await Promise.allSettled(
       Array.from({ length: 9 }, (_, i) =>
         service.verify(email, wrong, `21.0.0.${i}`),
       ),
     );
+    for (const guess of guesses) {
+      expect(guess).toMatchObject({
+        status: 'rejected',
+        reason: expect.objectContaining({
+          status: 400,
+          message: PASSWORDLESS_INVALID_MESSAGE,
+        }),
+      });
+    }
     expect((await rowFor(email)).attempts).toBe(5);
     await expect(service.verify(email, code, '21.1.1.1')).rejects.toMatchObject(
       {
@@ -330,7 +358,7 @@ maybe('PasswordlessService against Postgres', () => {
         service.consume(linkToken, `22.0.0.${i}`),
       ),
     );
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expectOneWinnerAndGenericRejections(results);
   });
 
   it('lets exactly one of the code and the link win a race', async () => {
@@ -342,7 +370,7 @@ maybe('PasswordlessService against Postgres', () => {
       service.verify(email, code, '23.0.0.3'),
       service.consume(linkToken, '23.0.0.4'),
     ]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expectOneWinnerAndGenericRejections(results);
   });
 
   it('rejects a code and a link after the 10 minute expiry', async () => {
