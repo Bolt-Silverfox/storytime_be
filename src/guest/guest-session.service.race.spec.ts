@@ -97,7 +97,7 @@ describe('GuestSessionService — concurrent read-modify-write', () => {
     expect(await service.getGuestReadingHistory(sessionId)).toEqual({});
   });
 
-  it('still records progress (fails open) when the Redis lock errors', async () => {
+  it('refuses to save progress with a 503 when the Redis lock errors, and saves nothing', async () => {
     const service = build();
     const { sessionId } = await service.createGuestSession();
     await service.recordNewStoryAccess(sessionId, 'story-z');
@@ -108,10 +108,35 @@ describe('GuestSessionService — concurrent read-modify-write', () => {
         eval: jest.fn().mockRejectedValue(new Error('redis down')),
       },
     };
-    await service.updateGuestProgress(sessionId, 'story-z', 40);
+    await expect(
+      service.updateGuestProgress(sessionId, 'story-z', 40),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(
       (await service.getGuestReadingHistory(sessionId))?.['story-z'].progress,
-    ).toBe(40);
+    ).toBe(0);
+  });
+
+  it('refuses to save progress with a 503 instead of waiting forever on a never-settling predecessor', async () => {
+    const service = build();
+    const { sessionId } = await service.createGuestSession();
+    await service.recordNewStoryAccess(sessionId, 'story-z');
+    jest.useFakeTimers();
+    try {
+      const chains = (
+        service as unknown as { sessionChains: Map<string, Promise<void>> }
+      ).sessionChains;
+      chains.set(sessionId, new Promise<void>(() => undefined));
+
+      const p = service.updateGuestProgress(sessionId, 'story-z', 40);
+      p.catch(() => undefined);
+      await jest.advanceTimersByTimeAsync(10_000);
+      await expect(p).rejects.toBeInstanceOf(ServiceUnavailableException);
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(
+      (await service.getGuestReadingHistory(sessionId))?.['story-z'].progress,
+    ).toBe(0);
   });
 
   it('takes a Redis lock keyed by session id, saves only while holding it, then releases it', async () => {
