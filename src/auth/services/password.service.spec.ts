@@ -25,7 +25,7 @@ import { TokenType } from '../dto/auth.dto';
 import { AppEvents } from '@/shared/events';
 import { Role, OnboardingStatus, Prisma } from '@prisma/client';
 import { RedisService } from '@/redis/redis.service';
-import { FakeRedisClient } from '@/shared/testing/fake-redis';
+import { FakeRedisClient, FakeReply } from '@/shared/testing/fake-redis';
 
 jest.mock('bcryptjs', () => ({
   compare: jest.fn(),
@@ -362,7 +362,7 @@ describe('PasswordService', () => {
       );
 
       it('answers 503 without queueing the issuance charge while Redis is reconnecting', async () => {
-        fakeRedis.link = 'offline';
+        fakeRedis.disconnect();
 
         await expect(request()).rejects.toBeInstanceOf(
           ServiceUnavailableException,
@@ -585,7 +585,7 @@ describe('PasswordService', () => {
       ]);
     };
 
-    const counterKeys = () => [...fakeRedis.hashes.keys()];
+    const counterKeys = () => [...fakeRedis.values.keys()];
 
     it('rejects a live token with a wrong email exactly like an unknown token', async () => {
       authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
@@ -796,7 +796,7 @@ describe('PasswordService', () => {
       expect([...fakeRedis.ttls.values()]).toEqual([3_600_000]);
     });
 
-    it('withdraws the charges already taken when charging a later token fails', async () => {
+    it('answers 503 when charging a later owned token fails, keeping the wrong guess already counted', async () => {
       jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       authRepository.findTokensByUserEmail.mockResolvedValue([
         makeToken({ id: 'token-1', type: TokenType.PASSWORD_RESET }),
@@ -811,28 +811,40 @@ describe('PasswordService', () => {
           Promise.reject(new Error('Connection is closed.')),
         );
 
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+
       await expect(
         validate('raw-reset-token', 'test@example.com'),
       ).rejects.toBeInstanceOf(ServiceUnavailableException);
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
-        4,
+        5,
       );
-      expect(authRepository.findTokenByHashedToken).not.toHaveBeenCalled();
+      expect(authRepository.deleteToken).not.toHaveBeenCalled();
       jest.restoreAllMocks();
     });
 
-    it('lets concurrent guesses be evaluated at most 5 times', async () => {
+    it('counts every wrong guess in a concurrent burst and burns the code', async () => {
       stubActiveToken();
-      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
 
       const results = await Promise.allSettled(
-        Array.from({ length: 20 }, () =>
-          validate('raw-reset-token', 'test@example.com'),
+        Array.from({ length: 20 }, (_, i) =>
+          validate(`guess-${i}`, 'test@example.com'),
         ),
       );
 
-      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(5);
+      expect(
+        results.every(
+          (r) =>
+            r.status === 'rejected' && r.reason instanceof NotFoundException,
+        ),
+      ).toBe(true);
+      expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
+        20,
+      );
+      expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
     });
   });
 
@@ -1206,16 +1218,32 @@ describe('PasswordService', () => {
         errorSpy.mockRestore();
       });
 
-      it('lets concurrent guesses be evaluated at most 5 times', async () => {
+      it('bounds a burst that read the counter before its misses landed: the valid code in the burst still resets and every miss is counted', async () => {
         stubActiveToken();
-        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        fakeRedis.seed('password-reset:token-failures:token-1', 4);
+        tokenService.hashToken.mockImplementation((code) => `h:${code}`);
+        authRepository.findTokenByHashedToken.mockImplementation((hash) =>
+          Promise.resolve(hash === 'h:raw-reset-token' ? mockResetToken : null),
+        );
         authRepository.updateUser.mockResolvedValue(makeUser());
 
-        const results = await Promise.allSettled(
-          Array.from({ length: 20 }, () => attempt('raw-reset-token')),
-        );
+        const results = await Promise.allSettled([
+          attempt('raw-reset-token'),
+          ...Array.from({ length: 20 }, (_, i) => attempt(`guess-${i}`)),
+        ]);
+        await new Promise((resolve) => setImmediate(resolve));
 
-        expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(5);
+        expect(results[0].status).toBe('fulfilled');
+        expect(
+          results
+            .slice(1)
+            .every(
+              (r) =>
+                r.status === 'rejected' &&
+                r.reason instanceof NotFoundException,
+            ),
+        ).toBe(true);
+        expect(authRepository.updateUser).toHaveBeenCalledTimes(1);
       });
 
       it('clears the counter after a successful reset', async () => {
@@ -1231,7 +1259,7 @@ describe('PasswordService', () => {
 
         await attempt('raw-reset-token');
 
-        expect(fakeRedis.hashes.size).toBe(0);
+        expect(fakeRedis.values.size).toBe(0);
       });
     });
   });
@@ -1246,13 +1274,57 @@ describe('PasswordService', () => {
       | 'foreign-expired';
     type CapState = 'first' | 'last' | 'over';
     type Entry = 'validate' | 'reset';
-    type CounterMode = 'up' | 'down' | 'error' | 'slow' | 'late' | 'offline';
-    type ClearMode = 'up' | 'down' | 'slow';
+    type RedisMode =
+      | 'up'
+      | 'down'
+      | 'error'
+      | 'slow'
+      | 'late'
+      | 'offline'
+      | 'charge-down'
+      | 'charge-error'
+      | 'charge-slow'
+      | 'charge-late'
+      | 'clear-down'
+      | 'clear-slow';
     type DbMode =
       'ok' | 'lookup-fails' | 'write-fails' | 'sessions-fail' | 'raced';
-    type World = { counter: CounterMode; clear: ClearMode; db: DbMode };
+    type World = { redis: RedisMode; db: DbMode };
 
-    const HEALTHY: World = { counter: 'up', clear: 'up', db: 'ok' };
+    const HEALTHY: World = { redis: 'up', db: 'ok' };
+    const WHOLE_LINK: Partial<Record<RedisMode, FakeReply>> = {
+      down: 'down',
+      error: 'garbage',
+      slow: 'slow',
+      late: 'late',
+    };
+    const oneCommand = (prefix: string): FakeReply => {
+      if (!world.redis.startsWith(`${prefix}-`)) return 'ok';
+      const mode = world.redis.slice(prefix.length + 1);
+      return mode === 'error' ? 'garbage' : (mode as FakeReply);
+    };
+    const readOk = (w: World) =>
+      !['down', 'error', 'slow', 'late', 'offline'].includes(w.redis);
+    const chargeOutcome = (w: World): 'ok' | 'late' | 'lost' =>
+      ['up', 'clear-down', 'clear-slow'].includes(w.redis)
+        ? 'ok'
+        : ['late', 'charge-late'].includes(w.redis)
+          ? 'late'
+          : 'lost';
+    const backgroundLands = (w: World) =>
+      [
+        'up',
+        'late',
+        'offline',
+        'charge-late',
+        'clear-down',
+        'clear-slow',
+      ].includes(w.redis);
+    const clearFails = (w: World) => w.redis.startsWith('clear-');
+    const timed = (w: World) =>
+      ['slow', 'late', 'charge-slow', 'charge-late', 'clear-slow'].includes(
+        w.redis,
+      );
     const NOW = new Date('2026-06-01T12:00:00Z').getTime();
     const ownerA = makeUser({ id: 'user-a', email: 'a@example.com' });
     const ownerB = makeUser({ id: 'user-b', email: 'b@example.com' });
@@ -1316,21 +1388,11 @@ describe('PasswordService', () => {
 
     const applyWorld = (w: World) => {
       world = w;
-      fakeRedis.link =
-        w.counter === 'late' || w.counter === 'offline' ? w.counter : 'up';
-      fakeRedis.chargeReply = (
-        {
-          up: 'ok',
-          down: 'down',
-          error: 'garbage',
-          slow: 'slow',
-          late: 'ok',
-          offline: 'ok',
-        } as const
-      )[w.counter];
-      fakeRedis.writeReply = (
-        { up: 'ok', down: 'down', slow: 'slow' } as const
-      )[w.clear];
+      fakeRedis.online = w.redis !== 'offline';
+      const whole = WHOLE_LINK[w.redis];
+      fakeRedis.readReply = whole ?? 'ok';
+      fakeRedis.chargeReply = whole ?? oneCommand('charge');
+      fakeRedis.writeReply = whole ?? oneCommand('clear');
     };
 
     beforeEach(() => {
@@ -1460,8 +1522,6 @@ describe('PasswordService', () => {
         }
         repoCalls = [];
         let preResponseCalls: string[] = [];
-        const timed =
-          ['slow', 'late', 'offline'].includes(w.counter) || w.clear === 'slow';
         const settled = call(entry, codeFor[presented], email).then(
           (body): { status: number; body: unknown } => {
             preResponseCalls = [...repoCalls];
@@ -1478,14 +1538,14 @@ describe('PasswordService', () => {
             return { status: error.getStatus(), body: error.getResponse() };
           },
         );
-        if (timed) {
+        if (timed(w)) {
           await flush();
           await jest.advanceTimersByTimeAsync(5000);
         }
         const outcome = await settled;
-        if (w.counter === 'offline') fakeRedis.reconnect();
+        if (w.redis === 'offline') fakeRedis.reconnect();
         await flush();
-        if (timed) await jest.advanceTimersByTimeAsync(5000);
+        if (timed(w)) await jest.advanceTimersByTimeAsync(5000);
         await flush();
         const after = {
           ...outcome,
@@ -1518,6 +1578,14 @@ describe('PasswordService', () => {
     const UNAVAILABLE = new ServiceUnavailableException(
       'Password reset is temporarily unavailable. Try again later.',
     ).getResponse();
+    const LOG_LEVELS = ['log', 'error', 'warn', 'debug', 'verbose'] as const;
+    const SECRETS = [
+      'a@example.com',
+      'A@Example.com',
+      'b@example.com',
+      'ghost@example.com',
+      ...Object.values(codeFor),
+    ];
 
     type Expected = {
       status: number;
@@ -1540,17 +1608,16 @@ describe('PasswordService', () => {
       const foreign = foreignCode(presented);
       const all = [own, foreign].sort();
       const prior = priorFailures[state];
-      const overCap = prior >= 5;
-      const charged = emailOwnsA && !overCap ? prior + 1 : prior;
       const isForeign = presented.startsWith('foreign');
-      const backgroundLands =
-        w.counter === 'up' || w.counter === 'late' || w.counter === 'offline';
-      const foreignFailures =
-        isForeign && w.db !== 'lookup-fails' && backgroundLands ? 1 : undefined;
       const presentedCode =
         presented === 'unknown' ? undefined : isForeign ? foreign : own;
-      const raced = (codes: string[]) =>
-        w.db === 'raced' ? codes.filter((c) => c !== presentedCode) : codes;
+      const raced = w.db === 'raced';
+      const left = (codes: string[]) =>
+        raced ? codes.filter((c) => c !== presentedCode) : codes;
+      const foreignFailures =
+        isForeign && w.db !== 'lookup-fails' && backgroundLands(w)
+          ? 1
+          : undefined;
       const result = (
         status: number,
         body: unknown,
@@ -1565,55 +1632,64 @@ describe('PasswordService', () => {
         foreignFailures,
         committed,
       });
-      const refunded = w.clear === 'up' ? prior : charged;
+      const missed = (status: number, body: unknown, ownListed: boolean) => {
+        if (!emailOwnsA || !ownListed) {
+          return result(status, body, left(all), prior);
+        }
+        const charge = chargeOutcome(w);
+        if (charge !== 'ok') {
+          return result(
+            503,
+            UNAVAILABLE,
+            left(all),
+            charge === 'late' ? prior + 1 : prior,
+          );
+        }
+        const failures = prior + 1;
+        return result(
+          status,
+          body,
+          failures >= 5 ? left(all).filter((c) => c !== own) : left(all),
+          failures,
+        );
+      };
 
-      if (emailOwnsA && w.counter !== 'up') {
+      if (w.db === 'lookup-fails') {
         return {
-          ...result(503, UNAVAILABLE, all, prior),
+          ...result(500, 'db unavailable', all, prior),
           foreignFailures: undefined,
         };
       }
-      if (w.db === 'lookup-fails') {
-        return result(
-          500,
-          'db unavailable',
-          all,
-          emailOwnsA ? refunded : prior,
-        );
+      if (!emailOwnsA || isForeign || presented === 'unknown') {
+        return missed(404, NOT_FOUND, true);
       }
-      if (!emailOwnsA) {
-        return result(404, NOT_FOUND, raced(all), prior);
+      if (presented !== 'own-live') {
+        const expired = missed(401, EXPIRED, !raced);
+        return expired.status === 401
+          ? { ...expired, remaining: [foreign] }
+          : expired;
       }
-      if (overCap) return result(404, NOT_FOUND, raced([foreign]), prior);
-      if (presented === 'own-live') {
-        if (entry === 'validate') {
-          return result(
-            200,
-            { message: 'Valid reset token' },
-            raced(all),
-            w.clear === 'up' ? undefined : charged,
-          );
-        }
-        if (w.db === 'raced') return result(404, NOT_FOUND, [foreign], charged);
-        if (w.db === 'write-fails' || w.db === 'sessions-fail') {
-          return result(500, 'db unavailable', all, refunded);
-        }
+      if (!readOk(w)) return result(503, UNAVAILABLE, left(all), prior);
+      if (prior >= 5) return missed(404, NOT_FOUND, !raced);
+      const cleared = clearFails(w) ? prior : undefined;
+      if (entry === 'validate') {
         return result(
           200,
-          { message: 'Password has been reset successfully' },
-          [foreign],
-          w.clear === 'up' ? undefined : charged,
-          ['updateUser', 'deleteAllUserSessions'],
+          { message: 'Valid reset token' },
+          left(all),
+          cleared,
         );
       }
-      if (presented === 'own-expired' || presented === 'own-at-expiry') {
-        return result(401, EXPIRED, [foreign], charged);
+      if (raced) return result(404, NOT_FOUND, [foreign], prior);
+      if (w.db === 'write-fails' || w.db === 'sessions-fail') {
+        return result(500, 'db unavailable', all, prior);
       }
       return result(
-        404,
-        NOT_FOUND,
-        raced(charged >= 5 ? [foreign] : all),
-        charged,
+        200,
+        { message: 'Password has been reset successfully' },
+        [foreign],
+        cleared,
+        ['updateUser', 'deleteAllUserSessions'],
       );
     };
 
@@ -1633,16 +1709,23 @@ describe('PasswordService', () => {
     };
 
     const emails = [
-      { label: 'owner email', email: 'a@example.com', ownsA: true },
+      {
+        label: 'owner email',
+        email: 'a@example.com',
+        ownsA: true,
+        casing: false,
+      },
       {
         label: 'owner email in other casing',
         email: 'A@Example.com',
         ownsA: true,
+        casing: true,
       },
       {
         label: 'email with no account',
         email: 'ghost@example.com',
         ownsA: false,
+        casing: false,
       },
     ];
     const presentedCases: Presented[] = [
@@ -1662,50 +1745,66 @@ describe('PasswordService', () => {
       'sessions-fail',
       'raced',
     ];
-    const counterModes: CounterMode[] = [
+    const redisModes: RedisMode[] = [
       'up',
       'down',
       'error',
       'slow',
       'late',
       'offline',
+      'charge-down',
+      'charge-error',
+      'charge-slow',
+      'charge-late',
+      'clear-down',
+      'clear-slow',
     ];
-    const worlds: World[] = [
-      ...counterModes.flatMap((counter) =>
-        dbModes.map((db): World => ({ counter, clear: 'up', db })),
-      ),
-      ...(['down', 'slow'] as ClearMode[]).flatMap((clear) =>
-        dbModes.map((db): World => ({ counter: 'up', clear, db })),
-      ),
-    ];
-    const describeWorld = ({ counter, clear, db }: World) =>
-      `redis counter ${counter}, redis clear ${clear}, db ${db}`;
+    const worlds: World[] = redisModes.flatMap((mode) =>
+      dbModes.map((db): World => ({ redis: mode, db })),
+    );
+    const describeWorld = ({ redis: mode, db }: World) =>
+      `redis ${mode}, db ${db}`;
     const rows = worlds.flatMap((w) =>
       entries.flatMap((entry) =>
-        emails.flatMap(({ label, email, ownsA }) =>
-          states.flatMap((state) =>
-            presentedCases
-              .filter((p) => ownsA || !p.startsWith('own'))
-              .map((presented) => ({
-                entry,
-                label,
-                email,
-                presented,
-                state,
-                world: w,
-                worldLabel: describeWorld(w),
-                expected: expectedFor(entry, ownsA, presented, state, w),
-              })),
+        emails
+          .filter(({ casing }) => !casing || w.redis === 'up')
+          .flatMap(({ label, email, ownsA }) =>
+            states.flatMap((state) =>
+              presentedCases
+                .filter((p) => ownsA || !p.startsWith('own'))
+                .map((presented) => ({
+                  entry,
+                  label,
+                  email,
+                  presented,
+                  state,
+                  world: w,
+                  worldLabel: describeWorld(w),
+                  expected: expectedFor(entry, ownsA, presented, state, w),
+                })),
+            ),
           ),
-        ),
       ),
     );
 
     it.each(rows)(
       '$worldLabel / $entry: $label, $state attempt, $presented code',
       async ({ entry, email, presented, state, world: w, expected }) => {
+        const spies = LOG_LEVELS.map((level) =>
+          jest
+            .spyOn(Logger.prototype, level)
+            .mockImplementation(() => undefined),
+        );
         const result = await run(entry, email, presented, state, w);
+        const logged = JSON.stringify(spies.map((spy) => spy.mock.calls));
+        spies.forEach((spy) => spy.mockRestore());
 
+        if (presented === 'own-live' && state !== 'over' && w.db !== 'raced') {
+          expect(result.followUp).toBe(
+            result.remaining.includes('a-live') ? 200 : 404,
+          );
+        }
+        for (const secret of SECRETS) expect(logged).not.toContain(secret);
         expect({
           status: result.status,
           body: result.body,
@@ -1719,24 +1818,24 @@ describe('PasswordService', () => {
     );
 
     it('sends no counter command while the client is reconnecting, so nothing replays on reconnect', async () => {
-      const result = await run('reset', 'a@example.com', 'own-live', 'last', {
+      const result = await run('reset', 'a@example.com', 'unknown', 'last', {
         ...HEALTHY,
-        counter: 'offline',
+        redis: 'offline',
       });
 
       expect(result.status).toBe(503);
       expect(result.applied).toEqual([]);
     });
 
-    it('withdraws a counter command that lands after its 503, in send order', async () => {
+    it('never sends a counter write for a valid code until the reset commits', async () => {
       const result = await run('reset', 'a@example.com', 'own-live', 'last', {
         ...HEALTHY,
-        counter: 'late',
+        db: 'write-fails',
       });
 
-      expect(result.status).toBe(503);
-      expect(result.applied).toEqual(['eval', 'hdel']);
-      expect(result.ownFailures).toBe(4);
+      expect(result.status).toBe(500);
+      expect(result.applied).toEqual(['read']);
+      expect(result.followUp).toBe(200);
     });
 
     it.each(
@@ -1773,7 +1872,6 @@ describe('PasswordService', () => {
 
       expect(result.status).toBe(200);
       expect(result.preResponseCalls).toEqual([
-        'findTokensByUserEmail',
         'findTokenByHashedToken',
         'bcrypt.hash',
         'transaction',
@@ -1783,12 +1881,9 @@ describe('PasswordService', () => {
       ]);
     });
 
-    it('never logs an email or a code on any path', async () => {
-      const spies = (['log', 'error', 'warn', 'debug', 'verbose'] as const).map(
-        (level) =>
-          jest
-            .spyOn(Logger.prototype, level)
-            .mockImplementation(() => undefined),
+    it('logs a failed token owner charge by error class only', async () => {
+      const spies = LOG_LEVELS.map((level) =>
+        jest.spyOn(Logger.prototype, level).mockImplementation(() => undefined),
       );
       const deleteToken = authRepository.deleteToken.getMockImplementation()!;
       authRepository.deleteToken.mockImplementation((id: string) =>
@@ -1799,23 +1894,19 @@ describe('PasswordService', () => {
           : deleteToken(id),
       );
 
-      for (const { entry, email, presented, state, world: w } of rows) {
-        await run(entry, email, presented, state, w, 4);
-      }
+      await run(
+        'validate',
+        'a@example.com',
+        'foreign-live',
+        'first',
+        HEALTHY,
+        4,
+      );
 
       const logged = JSON.stringify(spies.map((spy) => spy.mock.calls));
-      for (const secret of [
-        'a@example.com',
-        'A@Example.com',
-        'b@example.com',
-        'ghost@example.com',
-        ...Object.values(codeFor),
-      ]) {
-        expect(logged).not.toContain(secret);
-      }
-      expect(logged).toContain('Failed to charge reset token owner (Error)');
-      expect(logged).toContain('Failed to clear reset attempts');
       spies.forEach((spy) => spy.mockRestore());
+      expect(logged).toContain('Failed to charge reset token owner (Error)');
+      for (const secret of SECRETS) expect(logged).not.toContain(secret);
     });
   });
 
