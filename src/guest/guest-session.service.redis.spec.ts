@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import type Keyv from 'keyv';
 import { GuestSessionService } from './guest-session.service';
+import { closeRedisAfter } from '@/shared/testing/close-redis';
 import type { IGuestRepository } from './repositories/guest.repository.interface';
 
 const url = process.env.PASSWORDLESS_TEST_REDIS_URL;
@@ -12,6 +13,7 @@ maybe('GuestSessionService against real Redis', () => {
   jest.setTimeout(20_000);
   let client: Redis;
   const services: GuestSessionService[] = [];
+  const sessions: string[] = [];
 
   const instance = async () => {
     const service = new GuestSessionService(
@@ -25,6 +27,7 @@ maybe('GuestSessionService against real Redis', () => {
   const lockKey = (sessionId: string) => `guest:session-lock:${sessionId}`;
   const seeded = async (service: GuestSessionService) => {
     const { sessionId } = await service.createGuestSession();
+    sessions.push(sessionId);
     await service.recordNewStoryAccess(sessionId, 'story-x');
     return sessionId;
   };
@@ -35,8 +38,13 @@ maybe('GuestSessionService against real Redis', () => {
     client = new Redis(url as string);
   });
 
-  afterAll(async () => {
-    try {
+  afterAll(() =>
+    closeRedisAfter(client, async () => {
+      if (services.length) {
+        await Promise.all(
+          sessions.map((id) => services[0].deleteGuestSession(id)),
+        );
+      }
       const closed = await Promise.allSettled(
         services.map((service) =>
           (service as unknown as { keyv: Keyv }).keyv.disconnect(),
@@ -44,10 +52,8 @@ maybe('GuestSessionService against real Redis', () => {
       );
       const failed = closed.find((r) => r.status === 'rejected');
       if (failed) throw failed.reason;
-    } finally {
-      await client.quit().catch(() => client.disconnect());
-    }
-  });
+    }),
+  );
 
   it('round-trips a story saved under the lock through the session store', async () => {
     const service = await instance();
@@ -104,6 +110,39 @@ maybe('GuestSessionService against real Redis', () => {
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
 
     expect(await writer.getGuestSession(sessionId)).toBeNull();
+  });
+
+  it('does not bring back a retired session from a progress write that lost its lock lease', async () => {
+    const writer = await instance();
+    const retiring = await instance();
+    const sessionId = await seeded(writer);
+    const read = writer.getGuestSession.bind(writer);
+    jest.spyOn(writer, 'getGuestSession').mockImplementationOnce(async (id) => {
+      const stale = await read(id);
+      await client.del(lockKey(id));
+      await expect(
+        retiring.deleteGuestSessionIfHistoryIs(id, ['story-x']),
+      ).resolves.toEqual({ deleted: true });
+      return stale;
+    });
+
+    await expect(
+      writer.updateGuestProgress(sessionId, 'story-x', 40),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+    expect(await writer.getGuestSession(sessionId)).toBeNull();
+  });
+
+  it('saves progress through the lock it holds', async () => {
+    const service = await instance();
+    const sessionId = await seeded(service);
+
+    await service.updateGuestProgress(sessionId, 'story-x', 40);
+
+    expect(
+      (await service.getGuestReadingHistory(sessionId))?.['story-x'].progress,
+    ).toBe(40);
+    expect(await client.get(lockKey(sessionId))).toBeNull();
   });
 
   it('refuses to save a new story while another holder keeps the lock, and saves nothing', async () => {

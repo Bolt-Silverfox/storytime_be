@@ -626,7 +626,7 @@ export class GuestSessionService implements OnModuleInit {
     progress: number,
     completed?: boolean,
   ): Promise<GuestSession | null> {
-    return this.withSessionLock(sessionId, async () => {
+    return this.withSessionLock(sessionId, async (lock) => {
       const session = await this.getGuestSession(sessionId);
 
       if (!session) {
@@ -667,9 +667,7 @@ export class GuestSessionService implements OnModuleInit {
       // Update last active timestamp
       session.lastActiveAt = new Date();
 
-      // Save back to cache with TTL refresh
-      const key = this.getSessionKey(sessionId);
-      await this.persistSession(key, session, sessionId);
+      if (!(await lock.persist(session))) throw this.sessionBusy(sessionId);
 
       this.logger.debug(
         `Updated progress for session ${this.maskSessionId(sessionId)}, story ${storyId}: ${clampedProgress}%`,
