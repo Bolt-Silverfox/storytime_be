@@ -125,8 +125,16 @@ export class PasswordService {
     }
     for (const [i, owned] of ownedTokens.entries()) {
       if (failures[i] >= RESET_MAX_FAILED_ATTEMPTS) {
-        await this.authRepository.deleteToken(owned.id);
+        await this.deleteQuietly(owned.id, 'Failed to burn reset code');
       }
+    }
+  }
+
+  private async deleteQuietly(tokenId: string, context: string) {
+    try {
+      await this.authRepository.deleteToken(tokenId);
+    } catch (error) {
+      this.logFailure(context, error);
     }
   }
 
@@ -149,7 +157,10 @@ export class PasswordService {
 
     if (ownsResetToken && isTokenExpired(resetToken)) {
       await this.chargeOwnedTokens(email);
-      await this.authRepository.deleteToken(resetToken.id);
+      await this.deleteQuietly(
+        resetToken.id,
+        'Failed to delete expired reset code',
+      );
       throw new UnauthorizedException('Reset token has expired');
     }
 

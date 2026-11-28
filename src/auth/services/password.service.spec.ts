@@ -1288,7 +1288,12 @@ describe('PasswordService', () => {
       | 'clear-down'
       | 'clear-slow';
     type DbMode =
-      'ok' | 'lookup-fails' | 'write-fails' | 'sessions-fail' | 'raced';
+      | 'ok'
+      | 'lookup-fails'
+      | 'write-fails'
+      | 'sessions-fail'
+      | 'cleanup-fails'
+      | 'raced';
     type World = { redis: RedisMode; db: DbMode };
 
     const HEALTHY: World = { redis: 'up', db: 'ok' };
@@ -1446,6 +1451,7 @@ describe('PasswordService', () => {
       );
       authRepository.deleteToken.mockImplementation(
         record('deleteToken', (id: string) => {
+          if (world.db === 'cleanup-fails') return dbDown();
           removeWhere((t) => t.id === id);
           return Promise.resolve();
         }),
@@ -1607,6 +1613,16 @@ describe('PasswordService', () => {
       const own = ownCode(presented);
       const foreign = foreignCode(presented);
       const all = [own, foreign].sort();
+      if (w.db === 'cleanup-fails') {
+        const healthyDb = outcomeFor(entry, emailOwnsA, presented, state, {
+          ...w,
+          db: 'ok',
+        });
+        return {
+          ...healthyDb,
+          remaining: healthyDb.committed.length > 0 ? [foreign] : all,
+        };
+      }
       const prior = priorFailures[state];
       const isForeign = presented.startsWith('foreign');
       const presentedCode =
@@ -1743,6 +1759,7 @@ describe('PasswordService', () => {
       'lookup-fails',
       'write-fails',
       'sessions-fail',
+      'cleanup-fails',
       'raced',
     ];
     const redisModes: RedisMode[] = [

@@ -145,25 +145,45 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
   });
 
   it('does not claim a token that expired while waiting for a claim that rolled back', async () => {
+    const expiresAt = new Date(Date.now() + 1500);
     const { id } = await prisma.token.update({
       where: { token: 'rt-1' },
-      data: { expiresAt: new Date(Date.now() + 1500) },
+      data: { expiresAt },
     });
-    let firstClaimed!: () => void;
-    const claimedByFirst = new Promise<void>((resolve) => {
+    let firstClaimed!: (claimed: boolean) => void;
+    const claimedByFirst = new Promise<boolean>((resolve) => {
       firstClaimed = resolve;
+    });
+    let releaseFirst!: () => void;
+    const firstReleased = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
     });
 
     const first = repo
       .transaction(async (tx) => {
-        await tx.consumeToken(id);
-        firstClaimed();
-        await new Promise((resolve) => setTimeout(resolve, 2500));
+        firstClaimed(await tx.consumeToken(id));
+        await firstReleased;
         throw new Error('rolled back');
       })
-      .catch(() => 'rolled back');
-    await claimedByFirst;
+      .catch((error: Error) => error.message);
+    expect(await claimedByFirst).toBe(true);
     const second = claimAndWrite(id, 'rt-owner');
+
+    let waitingOnLock = 0;
+    for (let i = 0; i < 100 && waitingOnLock === 0; i++) {
+      const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
+        SELECT count(*)::int AS waiting FROM pg_stat_activity
+        WHERE wait_event_type = 'Lock' AND datname = current_database()`;
+      waitingOnLock = row.waiting;
+      if (waitingOnLock === 0) await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(waitingOnLock).toBe(1);
+    expect(Date.now()).toBeLessThan(expiresAt.getTime());
+
+    await new Promise((r) =>
+      setTimeout(r, expiresAt.getTime() - Date.now() + 50),
+    );
+    releaseFirst();
 
     expect(await first).toBe('rolled back');
     expect(await second).toBe(false);
