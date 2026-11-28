@@ -1057,7 +1057,7 @@ describe('PasswordService', () => {
           .spyOn(Logger.prototype, 'error')
           .mockImplementation(() => undefined);
         let calls = 0;
-        jest.spyOn(redis, 'eval').mockImplementation((...args) => {
+        jest.spyOn(redis, 'eval').mockImplementation(() => {
           calls++;
           if (calls === 1) return Promise.resolve('4');
           if (calls === 2) return Promise.resolve(6);
