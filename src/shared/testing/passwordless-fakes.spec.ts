@@ -288,7 +288,10 @@ describe('InMemoryRedis expiry', () => {
 });
 
 describe('InMemoryRedis admission', () => {
+  afterEach(() => jest.useRealTimers());
+
   it('admits up to the limit, refuses without counting and charges no key when one is spent', async () => {
+    jest.useFakeTimers({ now: NOW });
     const { client } = new InMemoryRedis();
     await client.set('spent', '3', 'PX', 1000);
 
