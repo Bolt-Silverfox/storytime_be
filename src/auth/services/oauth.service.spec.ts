@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { renderLogCalls } from '@/shared/testing/render-log-calls';
 import { OAuthService } from './oauth.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import {
@@ -13,6 +14,7 @@ import { NotificationPreferenceService } from '@/notification/services/notificat
 import { OAuth2Client } from 'google-auth-library';
 import { ConfigService } from '@nestjs/config';
 import { Role } from '@prisma/client';
+import appleSigninAuth from 'apple-signin-auth';
 
 // Mock google-auth-library
 jest.mock('google-auth-library', () => ({
@@ -132,6 +134,52 @@ describe('OAuthService', () => {
       expect(authRepository.findUserByGoogleId).toHaveBeenCalledWith(
         'google-123',
       );
+    });
+  });
+  describe('verification failure logging', () => {
+    const idToken = 'eyJsentinel.header.signature';
+    const email = 'kid.parent@example.com';
+    let logged: unknown[][];
+
+    beforeEach(() => {
+      logged = [];
+      for (const level of ['log', 'error', 'warn', 'debug'] as const) {
+        jest
+          .spyOn(Logger.prototype, level)
+          .mockImplementation((...args: unknown[]) => {
+            logged.push(args);
+          });
+      }
+    });
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('logs neither the Google id_token nor its payload', async () => {
+      googleClient.verifyIdToken.mockRejectedValue(
+        new Error(`Token used too late: {"email":"${email}"} ${idToken}`),
+      );
+
+      await expect(service.loginWithGoogleIdToken(idToken)).rejects.toThrow(
+        'Invalid Google id_token',
+      );
+
+      expect(logged.length).toBeGreaterThan(0);
+      expect(renderLogCalls(logged)).not.toContain(idToken);
+      expect(renderLogCalls(logged)).not.toContain(email);
+    });
+
+    it('logs neither the Apple id_token nor its payload', async () => {
+      (appleSigninAuth.verifyIdToken as jest.Mock).mockRejectedValue(
+        new Error(`jwt rejected for ${email}: ${idToken}`),
+      );
+
+      await expect(service.loginWithAppleIdToken(idToken)).rejects.toThrow(
+        'Invalid Apple id_token',
+      );
+
+      expect(logged.length).toBeGreaterThan(0);
+      expect(renderLogCalls(logged)).not.toContain(idToken);
+      expect(renderLogCalls(logged)).not.toContain(email);
     });
   });
 });

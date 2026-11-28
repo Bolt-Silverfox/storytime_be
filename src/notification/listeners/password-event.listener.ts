@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { NotificationService } from '../notification.service';
+import { errorKind } from '@/shared/utils/error-kind';
 
 /**
  * Event listener for password-related events that require special handling.
@@ -22,7 +23,7 @@ export class PasswordEventListener {
     email: string;
     resetToken: string;
   }) {
-    this.logger.log(`Sending password reset email to ${payload.email}`);
+    this.logger.log(`Sending password reset email for user ${payload.userId}`);
 
     await this.notificationService.sendNotification('PasswordReset', {
       email: payload.email,
@@ -44,7 +45,7 @@ export class PasswordEventListener {
     userName: string;
   }) {
     this.logger.log(
-      `Sending password reset security alert to ${payload.email}`,
+      `Sending password reset security alert for user ${payload.userId}`,
     );
 
     // Best-effort: emit() is fire-and-forget, so a rejection here would surface
@@ -63,11 +64,14 @@ export class PasswordEventListener {
       );
 
       if (!resp.success) {
-        this.logger.error(`Failed to send password reset alert: ${resp.error}`);
+        this.logger.error(
+          `Failed to send password reset alert for user ${payload.userId}`,
+        );
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Password reset alert failed: ${message}`);
+      this.logger.error(
+        `Password reset alert failed for user ${payload.userId} (${errorKind(error)})`,
+      );
     }
   }
 
@@ -81,7 +85,7 @@ export class PasswordEventListener {
     email: string;
     token: string;
   }) {
-    this.logger.log(`Sending email verification to ${payload.email}`);
+    this.logger.log(`Sending email verification for user ${payload.userId}`);
 
     const resp = await this.notificationService.sendNotification(
       'EmailVerification',
@@ -92,7 +96,9 @@ export class PasswordEventListener {
     );
 
     if (!resp.success) {
-      this.logger.error(`Failed to send email verification: ${resp.error}`);
+      this.logger.error(
+        `Failed to send email verification for user ${payload.userId}`,
+      );
     }
   }
 
@@ -106,7 +112,7 @@ export class PasswordEventListener {
     userName: string | null;
   }) {
     this.logger.log(
-      `Sending password changed confirmation to ${payload.email}`,
+      `Sending password changed confirmation for user ${payload.userId}`,
     );
 
     await this.notificationService.sendNotification('PasswordChanged', {
