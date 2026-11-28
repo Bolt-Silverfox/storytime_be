@@ -155,7 +155,8 @@ export class OAuthService {
   // ==================== INTERNAL: Unified OAuth upsert logic ====================
 
   private async upsertOrReturnUserFromOAuthPayload(payload: OAuthPayload) {
-    const { googleId, appleId, email, picture, name, emailVerified } = payload;
+    const { googleId, appleId, picture, name, emailVerified } = payload;
+    const email = payload.email?.trim().toLowerCase();
 
     let user: UserWithProfileAndAvatar | null = null;
 
