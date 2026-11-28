@@ -10,6 +10,7 @@ import type {
   UserIP,
 } from '@prisma/client';
 import { OnboardingStatus } from '@prisma/client';
+import { isTokenExpired } from '../services/token-expiry';
 import { TokenType } from '../dto/auth.dto';
 import {
   IAuthRepository,
@@ -427,9 +428,10 @@ export class PrismaAuthRepository implements IAuthRepository {
     return this.prisma.$transaction(async (prisma) => {
       const tx: IAuthRepositoryTransaction = {
         consumeToken: async (id) => {
-          const { count } = await prisma.token.deleteMany({
-            where: { id, expiresAt: { gt: new Date() } },
-          });
+          const [locked] = await prisma.$queryRaw<{ expiresAt: Date }[]>`
+            SELECT "expiresAt" FROM "tokens" WHERE "id" = ${id} FOR UPDATE`;
+          if (!locked || isTokenExpired(locked)) return false;
+          const { count } = await prisma.token.deleteMany({ where: { id } });
           return count > 0;
         },
         updateUser: async (id, data) => {

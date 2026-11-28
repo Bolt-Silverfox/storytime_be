@@ -170,18 +170,30 @@ d('PasswordService reset attempts against a real Redis', () => {
     expect(await admin.pttl(key)).toBeGreaterThan(3_500_000);
   });
 
-  it('refunds the slot a valid reset took when the password write rolls back, so the same code still works', async () => {
+  it('gives a capped window left without a TTL an expiry when the cap is read', async () => {
+    await guessWrong();
+    const [key] = await attemptKeys();
+    await admin.set(key, '5');
+
+    expect(await validate()).toBe(429);
+
+    expect(await admin.pttl(key)).toBeGreaterThan(3_500_000);
+  });
+
+  it('never writes the counter for a valid code whose password write rolls back, so the same code still works', async () => {
     await fourWrongGuesses();
+    const [key] = await attemptKeys();
     failWrites = true;
 
     expect(await reset()).toBe(500);
+    expect(await admin.get(key)).toBe('4');
 
     failWrites = false;
     expect(await reset()).toBe(200);
     expect(tokens.size).toBe(0);
   });
 
-  it('does not let a counter command that lands after its 503 lock the owner out', async () => {
+  it('answers 503 while Redis is paused and leaves the owner able to reset afterwards', async () => {
     await fourWrongGuesses();
     await admin.call('CLIENT', 'PAUSE', '3000', 'ALL');
     const started = Date.now();
@@ -193,9 +205,10 @@ d('PasswordService reset attempts against a real Redis', () => {
     expect(await validate()).toBe(200);
   }, 15_000);
 
-  it('does not queue counter commands while the connection is down, so reconnecting cannot charge a 503', async () => {
+  it('fails fast while the connection is down and lets the owner reset after reconnecting', async () => {
     await fourWrongGuesses();
-    await admin.call('CLIENT', 'KILL', 'TYPE', 'normal', 'SKIPME', 'yes');
+    const clientId = await client.client('ID');
+    await admin.call('CLIENT', 'KILL', 'ID', String(clientId));
     await waitFor(() => client.status !== 'ready');
     expect(client.status).not.toBe('ready');
 
@@ -209,7 +222,7 @@ d('PasswordService reset attempts against a real Redis', () => {
     expect(await validate()).toBe(200);
   }, 15_000);
 
-  it('does not keep a charge Redis applied when its reply was lost and the 503 went out', async () => {
+  it('leaves the counter alone when a valid code meets lost replies, so the code works once Redis answers again', async () => {
     const upstream = new URL(url!);
     let swallowReplies = false;
     const sockets: Socket[] = [];
@@ -230,6 +243,8 @@ d('PasswordService reset attempts against a real Redis', () => {
     const proxied = new Redis({
       host: '127.0.0.1',
       port,
+      username: decodeURIComponent(upstream.username) || undefined,
+      password: decodeURIComponent(upstream.password) || undefined,
       db: Number(upstream.pathname.slice(1) || 0),
       enableOfflineQueue: true,
       maxRetriesPerRequest: null,
@@ -242,14 +257,8 @@ d('PasswordService reset attempts against a real Redis', () => {
       const [key] = await attemptKeys();
       swallowReplies = true;
 
-      const pending = validate();
-      let applied = 0;
-      for (let i = 0; i < 100 && applied < 6; i++) {
-        applied = await admin.hlen(key);
-        if (applied < 6) await new Promise((r) => setTimeout(r, 10));
-      }
-      expect(applied).toBe(6);
-      expect(await pending).toBe(503);
+      expect(await validate()).toBe(503);
+      expect(await admin.get(key)).toBe('4');
 
       swallowReplies = false;
       sockets.forEach((socket) => socket.destroy());
@@ -257,7 +266,7 @@ d('PasswordService reset attempts against a real Redis', () => {
       await waitFor(() => proxied.status === 'ready');
       await proxied.ping();
 
-      expect(await admin.hlen(key)).toBe(5);
+      expect(await admin.get(key)).toBe('4');
       expect(await validate()).toBe(200);
     } finally {
       proxied.disconnect();

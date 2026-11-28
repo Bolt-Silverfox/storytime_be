@@ -60,10 +60,13 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
   });
 
   afterAll(async () => {
-    await prisma.user.deleteMany({
-      where: { id: { in: users.map((u) => u.id) } },
-    });
-    await prisma.$disconnect();
+    try {
+      await prisma.user.deleteMany({
+        where: { id: { in: users.map((u) => u.id) } },
+      });
+    } finally {
+      await prisma.$disconnect();
+    }
   });
 
   const remaining = async () =>
@@ -126,6 +129,32 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
     await expect(claimAndWrite(id, 'rt-owner')).resolves.toBe(false);
     expect(await remaining()).toEqual(['rt-1', 'rt-2', 'rt-3', 'rt-4']);
   });
+
+  it('does not claim a token that expired while waiting for a claim that rolled back', async () => {
+    const { id } = await prisma.token.update({
+      where: { token: 'rt-1' },
+      data: { expiresAt: new Date(Date.now() + 1500) },
+    });
+    let firstClaimed!: () => void;
+    const claimedByFirst = new Promise<void>((resolve) => {
+      firstClaimed = resolve;
+    });
+
+    const first = repo
+      .transaction(async (tx) => {
+        await tx.consumeToken(id);
+        firstClaimed();
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        throw new Error('rolled back');
+      })
+      .catch(() => 'rolled back');
+    await claimedByFirst;
+    const second = claimAndWrite(id, 'rt-owner');
+
+    expect(await first).toBe('rolled back');
+    expect(await second).toBe(false);
+    expect(await remaining()).toEqual(['rt-1', 'rt-2', 'rt-3', 'rt-4']);
+  }, 15_000);
 
   it('claims a verification token once across concurrent verifications and marks the email verified', async () => {
     const { id } = await prisma.token.findUniqueOrThrow({
