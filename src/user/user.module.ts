@@ -8,6 +8,7 @@ import { UploadModule } from '@/upload/upload.module';
 import { USER_REPOSITORY } from './repositories';
 import { PrismaUserRepository } from './repositories/prisma-user.repository';
 import { UserDataExportService } from './services/user-data-export.service';
+import { UserPinService } from './services/user-pin.service';
 import { AccessControlModule } from '@/shared/access/access-control.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { AccessControlModule } from '@/shared/access/access-control.module';
   providers: [
     UserService,
     UserDataExportService,
+    UserPinService,
     {
       provide: USER_REPOSITORY,
       useClass: PrismaUserRepository,

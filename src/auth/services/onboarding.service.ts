@@ -24,6 +24,7 @@ import {
   InvalidAdminSecretException,
 } from '@/shared/exceptions';
 import { AppEvents, UserRegisteredEvent } from '@/shared/events';
+import { errorKind } from '@/shared/utils/error-kind';
 
 @Injectable()
 export class OnboardingService {
@@ -77,9 +78,7 @@ export class OnboardingService {
       await this.emailVerificationService.sendEmailVerification(user.email);
     } catch (err) {
       this.logger.error(
-        `Failed to send verification email for user ${user.id}: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        `Failed to send verification email for user ${user.id} (${errorKind(err)})`,
       );
     }
 

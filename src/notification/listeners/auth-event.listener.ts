@@ -40,7 +40,7 @@ export class AuthEventListener {
    */
   @OnEvent(AppEvents.USER_EMAIL_VERIFIED)
   handleEmailVerified(payload: UserEmailVerifiedEvent) {
-    this.logger.log(`User ${payload.userId} verified email: ${payload.email}`);
+    this.logger.log(`User ${payload.userId} verified email`);
 
     // Future: Send welcome notification if Welcome template is added to registry
   }

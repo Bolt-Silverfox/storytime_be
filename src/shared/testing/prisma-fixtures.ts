@@ -98,6 +98,7 @@ export const makeToken = (overrides: Partial<Token> = {}): Token => ({
   type: 'password_reset',
   expiresAt: new Date(FIXTURE_NOW.getTime() + 60 * 60 * 1000),
   createdAt: FIXTURE_NOW,
+  failedAttempts: 0,
   isDeleted: false,
   deletedAt: null,
   ...overrides,

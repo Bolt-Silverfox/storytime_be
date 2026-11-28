@@ -20,6 +20,7 @@ import {
   IAuthRepository,
   UserWithProfileAndAvatar,
 } from '../repositories';
+import { errorKind } from '@/shared/utils/error-kind';
 
 interface OAuthPayload {
   googleId?: string;
@@ -73,7 +74,9 @@ export class OAuthService {
         audience: validAudiences,
       });
     } catch (err) {
-      this.logger.error('Google id_token verification failed', err);
+      this.logger.error(
+        `Google id_token verification failed (${errorKind(err)})`,
+      );
       this.logger.debug(
         `Expected audiences: ${JSON.stringify(validAudiences)}`,
       );
@@ -147,7 +150,9 @@ export class OAuthService {
         name,
       });
     } catch (err) {
-      this.logger.error('Apple id_token verification failed', err);
+      this.logger.error(
+        `Apple id_token verification failed (${errorKind(err)})`,
+      );
       throw new UnauthorizedException('Invalid Apple id_token');
     }
   }

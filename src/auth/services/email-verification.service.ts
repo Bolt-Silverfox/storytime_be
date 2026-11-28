@@ -1,6 +1,5 @@
 import { Injectable, Logger, Inject } from '@nestjs/common';
 import {
-  ResourceNotFoundException,
   InvalidTokenException,
   TokenExpiredException,
 } from '@/shared/exceptions';
@@ -11,6 +10,7 @@ import { TokenType } from '../dto/auth.dto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserEmailVerifiedEvent } from '@/shared/events';
 import { OnboardingStatus } from '@prisma/client';
+import { errorKind } from '@/shared/utils/error-kind';
 
 @Injectable()
 export class EmailVerificationService {
@@ -25,10 +25,19 @@ export class EmailVerificationService {
 
   async sendEmailVerification(email: string) {
     const user = await this.authRepository.findUserByEmail(email);
-    if (!user) {
-      throw new ResourceNotFoundException('User');
+    if (user) {
+      setImmediate(() => {
+        this.issueVerificationToken(user).catch((error: unknown) => {
+          this.logger.error(
+            `Failed to issue verification email for user ${user.id} (${errorKind(error)})`,
+          );
+        });
+      });
     }
+    return { message: 'Verification email sent' };
+  }
 
+  private async issueVerificationToken(user: { id: string; email: string }) {
     const { token, expiresAt } = generateToken(24);
     const hashedToken = this.tokenService.hashToken(token);
 
@@ -50,7 +59,6 @@ export class EmailVerificationService {
     });
 
     this.logger.log(`Email verification requested for user ${user.id}`);
-    return { message: 'Verification email sent' };
   }
 
   async verifyEmail(token: string) {

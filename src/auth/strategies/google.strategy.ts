@@ -5,6 +5,7 @@ import { Strategy } from 'passport-custom';
 import { OAuth2Client } from 'google-auth-library';
 import { GoogleOAuthProfile } from '@/shared/types';
 import { Request } from 'express';
+import { errorKind } from '@/shared/utils/error-kind';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(
@@ -54,7 +55,7 @@ export class GoogleStrategy extends PassportStrategy(
         providerId: payload.sub,
       };
     } catch (e) {
-      this.logger.error('Google token validation failed:', e);
+      this.logger.error(`Google token validation failed (${errorKind(e)})`);
       throw new UnauthorizedException('Invalid Google token');
     }
   }

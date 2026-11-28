@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OnboardingService } from './onboarding.service';
-import { NotFoundException } from '@nestjs/common';
+import { Logger, NotFoundException } from '@nestjs/common';
+import { renderLogCalls } from '@/shared/testing/render-log-calls';
 import {
   AUTH_REPOSITORY,
   IAuthRepository,
@@ -21,6 +22,7 @@ describe('OnboardingService', () => {
   let passwordService: jest.Mocked<PasswordService>;
   let tokenService: jest.Mocked<TokenService>;
   let eventEmitter: jest.Mocked<EventEmitter2>;
+  let emailVerificationService: jest.Mocked<EmailVerificationService>;
 
   // Satisfies both shapes the repository mocks return: the profile/avatar
   // variant and the learning-expectations variant.
@@ -103,6 +105,7 @@ describe('OnboardingService', () => {
     passwordService = module.get(PasswordService);
     tokenService = module.get(TokenService);
     eventEmitter = module.get(EventEmitter2);
+    emailVerificationService = module.get(EmailVerificationService);
   });
 
   describe('register', () => {
@@ -170,6 +173,38 @@ describe('OnboardingService', () => {
 
       expect(result).toBeDefined();
       expect(authRepository.upsertProfile).toHaveBeenCalled();
+    });
+  });
+  describe('register when the verification email cannot be issued', () => {
+    it('logs no part of the failure that could carry the email', async () => {
+      const logged: unknown[][] = [];
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation((...args: unknown[]) => {
+          logged.push(args);
+        });
+      authRepository.findUserByEmail.mockResolvedValue(null);
+      passwordService.hashPassword.mockResolvedValue('hashed_password');
+      authRepository.createUser.mockResolvedValue(mockUser);
+      tokenService.createTokenPair.mockResolvedValue({
+        jwt: 'jwt-token',
+        refreshToken: 'refresh-token',
+      });
+      emailVerificationService.sendEmailVerification.mockRejectedValue(
+        new Error(
+          'Invalid `findUnique()` invocation: { email: "test@example.com" }',
+        ),
+      );
+
+      await service.register({
+        fullName: 'Test User',
+        email: 'test@example.com',
+        password: 'password123',
+      });
+
+      expect(logged.length).toBeGreaterThan(0);
+      expect(renderLogCalls(logged)).not.toContain('test@example.com');
+      errorSpy.mockRestore();
     });
   });
 });
