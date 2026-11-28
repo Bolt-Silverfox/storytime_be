@@ -109,7 +109,9 @@ d('PasswordService reset attempts against a real Redis', () => {
     endpoint = scratchRedisEndpoint(url!);
     admin = new Redis({ ...endpoint, commandTimeout: 2000 });
     await assertOnScratchDb(admin, 'Admin connection');
-    await admin.set(unrelatedKey, 'kept', 'EX', 600);
+    if ((await admin.set(unrelatedKey, 'kept', 'EX', 600)) !== 'OK') {
+      throw new Error('Sentinel key was not written');
+    }
   });
 
   afterAll(async () => {
@@ -282,7 +284,8 @@ d('PasswordService reset attempts against a real Redis', () => {
   it('gives a window left without a TTL an expiry on the next attempt', async () => {
     await guessWrong();
     const key = counterKey();
-    await admin.persist(key);
+    expect(await admin.persist(key)).toBe(1);
+    expect(await admin.pttl(key)).toBe(-1);
 
     await guessWrong();
 
@@ -293,7 +296,8 @@ d('PasswordService reset attempts against a real Redis', () => {
   it('gives a window left without a TTL an expiry when a valid code reads it', async () => {
     await guessWrong();
     const key = counterKey();
-    await admin.set(key, '4');
+    expect(await admin.set(key, '4')).toBe('OK');
+    expect(await admin.pttl(key)).toBe(-1);
     failWrites = true;
 
     expect(await reset()).toBe(500);
@@ -340,7 +344,7 @@ d('PasswordService reset attempts against a real Redis', () => {
     const underTest = client!;
     await fourWrongGuesses();
     const clientId = await underTest.client('ID');
-    await admin.call('CLIENT', 'KILL', 'ID', String(clientId));
+    expect(await admin.call('CLIENT', 'KILL', 'ID', String(clientId))).toBe(1);
     await waitFor(() => underTest.status !== 'ready');
     expect(underTest.status).not.toBe('ready');
 
