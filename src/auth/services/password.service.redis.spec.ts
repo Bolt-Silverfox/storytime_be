@@ -69,6 +69,7 @@ d('PasswordService reset attempts against a real Redis', () => {
     );
 
   const counterKey = () => `password-reset:token-failures:${tokenId}`;
+  const UNOWNED_MISS_KEY = 'password-reset:unowned-misses';
   const waitFor = async (condition: () => boolean) => {
     for (let i = 0; i < 600 && !condition(); i++) {
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -79,6 +80,7 @@ d('PasswordService reset attempts against a real Redis', () => {
   const unrelatedKey = `unrelated:${runId}`;
   let testNumber = 0;
   let endpoint: ScratchRedisEndpoint;
+  let sentinelWritten = false;
 
   const withinDeadline = async <T>(work: Promise<T>, what: string) => {
     let timer: NodeJS.Timeout | undefined;
@@ -112,12 +114,16 @@ d('PasswordService reset attempts against a real Redis', () => {
     if ((await admin.set(unrelatedKey, 'kept', 'EX', 600)) !== 'OK') {
       throw new Error('Sentinel key was not written');
     }
+    sentinelWritten = true;
   });
 
   afterAll(async () => {
     if (!admin) return;
     try {
-      await admin.del(unrelatedKey);
+      if (sentinelWritten) {
+        await assertOnScratchDb(admin, 'Admin connection');
+        await admin.del(unrelatedKey);
+      }
     } finally {
       admin.disconnect();
     }
@@ -191,7 +197,9 @@ d('PasswordService reset attempts against a real Redis', () => {
   afterEach(async () => {
     client?.disconnect();
     client = undefined;
-    if (tokenId) await admin.del(counterKey());
+    if (!sentinelWritten) return;
+    await assertOnScratchDb(admin, 'Admin connection');
+    await admin.del(counterKey(), UNOWNED_MISS_KEY);
   });
 
   const replyProxy = async () => {
