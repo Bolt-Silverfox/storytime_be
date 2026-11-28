@@ -1073,10 +1073,10 @@ describe('PasswordService', () => {
         );
       });
 
-      it('logs a failed owner charge without the owner email', async () => {
+      it('logs a failed owner-token delete after an over-cap owner charge without the owner email', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
         authRepository.deleteToken.mockRejectedValue(
-          new Error('db unavailable'),
+          new Error(`db unavailable for ${mockUser.email}`),
         );
         const errorSpy = jest
           .spyOn(Logger.prototype, 'error')
@@ -1320,6 +1320,7 @@ describe('PasswordService', () => {
       'foreign-live': 'b-live',
       'foreign-expired': 'b-old',
     };
+    const DB_DOWN = 'db unavailable for a@example.com and b@example.com';
     const counterKey = (email: string) =>
       `password-reset:misses:${createHash('sha256').update(email).digest('hex')}`;
 
@@ -1390,7 +1391,7 @@ describe('PasswordService', () => {
           }
         return removed;
       };
-      const dbDown = () => Promise.reject(new Error('db unavailable'));
+      const dbDown = () => Promise.reject(new Error(DB_DOWN));
       (bcrypt.hash as jest.Mock).mockImplementation(
         record('bcrypt.hash', () => Promise.resolve('hashed-password')),
       );
@@ -1616,7 +1617,7 @@ describe('PasswordService', () => {
         );
       }
       if (w.db === 'lookup-fails') {
-        return answer(500, 'db unavailable', ALL, prior);
+        return answer(500, DB_DOWN, ALL, prior);
       }
       if (presented === 'own-live') {
         if (entry === 'validate') {
@@ -1630,7 +1631,7 @@ describe('PasswordService', () => {
         if (w.db === 'raced')
           return answer(404, NOT_FOUND, without('a-live'), prior);
         if (w.db === 'write-fails' || w.db === 'sessions-fail') {
-          return answer(500, 'db unavailable', ALL, prior);
+          return answer(500, DB_DOWN, ALL, prior);
         }
         return answer(
           200,

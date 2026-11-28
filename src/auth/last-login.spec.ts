@@ -32,6 +32,10 @@ jest.mock('apple-signin-auth', () => ({
  * failed / rejected logins never do.
  */
 describe('lastLoginAt recording across login paths', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   let auth: AuthService;
   let oauth: OAuthService;
   let onboarding: OnboardingService;
