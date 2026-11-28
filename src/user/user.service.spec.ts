@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { UserService } from './user.service';
+import { UserPinService } from './services/user-pin.service';
 import type { SafeUser } from './user.service';
 import { UserRole } from './user.controller';
 import { NotificationService } from '@/notification/notification.service';
@@ -59,6 +60,7 @@ describe('UserService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UserService,
+        UserPinService,
         { provide: USER_REPOSITORY, useValue: mockRepo },
         {
           provide: NotificationService,

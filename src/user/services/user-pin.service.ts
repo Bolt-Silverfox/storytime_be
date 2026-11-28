@@ -4,10 +4,17 @@ import {
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
+import { createHash, randomInt } from 'crypto';
 import { NotificationService } from '@/notification/notification.service';
 import { hashPin, verifyPinHash } from '../utils/pin.util';
-import { USER_REPOSITORY, IUserRepository } from '../repositories';
+import {
+  USER_REPOSITORY,
+  IUserRepository,
+  PinResetTokenRedemption,
+} from '../repositories';
 
 @Injectable()
 export class UserPinService {
@@ -58,28 +65,20 @@ export class UserPinService {
     const user = await this.userRepository.findUserById(userId);
     if (!user) throw new NotFoundException('User not found');
 
-    // Delete any existing PIN reset tokens for this user
-    await this.userRepository.deleteTokensByUserAndType(user.id, 'pin_reset');
-
-    // Generate 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // OTP expires in 1 hour
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1);
-
-    // Hash the OTP before storing
-    const crypto = await import('crypto');
-    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
-
-    await this.userRepository.createToken({
+    const otp = randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const issue = await this.userRepository.issuePinResetToken({
       userId: user.id,
-      token: hashedOtp,
-      expiresAt,
-      type: 'pin_reset',
+      hashedToken: hashPinResetOtp(user.id, otp),
+      expiresAt: new Date(Date.now() + PIN_RESET_OTP_TTL_MS),
+      maxFailedAttempts: PIN_RESET_MAX_FAILED_ATTEMPTS,
     });
+    if (issue === 'guess_budget_spent') {
+      throw new HttpException(
+        'Too many incorrect codes. Please try again later.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
 
-    // Send OTP via email using notification service
     const resp = await this.notificationService.sendNotification('PinReset', {
       email: user.email,
       otp,
@@ -87,93 +86,78 @@ export class UserPinService {
     });
 
     if (!resp.success) {
-      throw new ServiceUnavailableException(
-        resp.error || 'Failed to send pin reset email',
-      );
+      throw new ServiceUnavailableException('Failed to send pin reset email');
     }
 
     return { message: 'Pin reset token sent' };
   }
 
   async validatePinResetOtp(userId: string, otp: string) {
-    if (!/^\d{6}$/.test(otp)) {
-      throw new BadRequestException('OTP must be exactly 6 digits');
-    }
+    assertSixDigits(otp, 'OTP');
 
-    const crypto = await import('crypto');
-    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
-
-    const resetToken = await this.userRepository.findTokenByHashedToken(
+    const outcome = await this.userRepository.redeemPinResetToken({
       userId,
-      hashedOtp,
-      'pin_reset',
-    );
-
-    if (!resetToken) {
-      throw new BadRequestException('Invalid OTP');
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await this.userRepository.deleteToken(resetToken.id);
-      throw new BadRequestException(
-        'OTP has expired. Please request a new one.',
-      );
-    }
+      hashedToken: hashPinResetOtp(userId, otp),
+      maxFailedAttempts: PIN_RESET_MAX_FAILED_ATTEMPTS,
+    });
+    assertOtpAccepted(outcome);
 
     return { success: true, message: 'Valid OTP' };
   }
 
   async resetPinWithOtp(userId: string, otp: string, newPin: string) {
-    // Validate OTP format
-    if (!/^\d{6}$/.test(otp)) {
-      throw new BadRequestException('OTP must be exactly 6 digits');
-    }
-
-    // Validate PIN format
-    if (!/^\d{6}$/.test(newPin)) {
-      throw new BadRequestException('PIN must be exactly 6 digits');
-    }
-
-    const crypto = await import('crypto');
-    const hashedOtp = crypto.createHash('sha256').update(otp).digest('hex');
-
-    // Verify OTP
-    const resetToken = await this.userRepository.findTokenByHashedToken(
-      userId,
-      hashedOtp,
-      'pin_reset',
-    );
-
-    if (!resetToken) {
-      throw new BadRequestException('Invalid OTP');
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await this.userRepository.deleteToken(resetToken.id);
-      throw new BadRequestException(
-        'OTP has expired. Please request a new one.',
-      );
-    }
+    assertSixDigits(otp, 'OTP');
+    assertSixDigits(newPin, 'PIN');
 
     const user = await this.userRepository.findUserById(userId);
     if (!user) throw new NotFoundException('User not found');
 
-    // Check if new PIN is same as old PIN (using bcrypt)
-    if (user.pinHash) {
-      const isSameAsOld = await verifyPinHash(newPin, user.pinHash);
-      if (isSameAsOld) {
-        throw new BadRequestException('New PIN cannot be the same as old PIN');
-      }
+    const hashedToken = hashPinResetOtp(userId, otp);
+    const isSameAsOld = user.pinHash
+      ? await verifyPinHash(newPin, user.pinHash)
+      : false;
+
+    if (isSameAsOld) {
+      assertOtpAccepted(
+        await this.userRepository.redeemPinResetToken({
+          userId,
+          hashedToken,
+          maxFailedAttempts: PIN_RESET_MAX_FAILED_ATTEMPTS,
+        }),
+      );
+      throw new BadRequestException('New PIN cannot be the same as old PIN');
     }
 
-    // Hash and save new PIN using bcrypt
-    const pinHash = await hashPin(newPin);
-
-    await this.userRepository.updateUserSimple(userId, { pinHash });
-
-    // Delete the used OTP token
-    await this.userRepository.deleteToken(resetToken.id);
+    const outcome = await this.userRepository.redeemPinResetToken({
+      userId,
+      hashedToken,
+      maxFailedAttempts: PIN_RESET_MAX_FAILED_ATTEMPTS,
+      newPinHash: await hashPin(newPin),
+    });
+    assertOtpAccepted(outcome);
 
     return { success: true, message: 'PIN has been reset successfully' };
+  }
+}
+
+const PIN_RESET_OTP_TTL_MS = 60 * 60 * 1000;
+const PIN_RESET_MAX_FAILED_ATTEMPTS = 5;
+
+function hashPinResetOtp(userId: string, otp: string): string {
+  return createHash('sha256').update(`${userId}:${otp}`).digest('hex');
+}
+
+function assertSixDigits(value: string, label: 'OTP' | 'PIN') {
+  if (!/^\d{6}$/.test(value)) {
+    throw new BadRequestException(`${label} must be exactly 6 digits`);
+  }
+}
+
+function assertOtpAccepted(outcome: PinResetTokenRedemption) {
+  if (outcome === 'expired') {
+    throw new BadRequestException('OTP has expired. Please request a new one.');
+  }
+  if (outcome === 'invalid') {
+    throw new BadRequestException('Invalid OTP');
   }
 }

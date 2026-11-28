@@ -19,7 +19,11 @@ import {
   UserWithAvatar,
   UserDataExport,
   USER_EXPORT_INCLUDE,
+  PinResetTokenIssue,
+  PinResetTokenRedemption,
 } from './user.repository.interface';
+
+const PIN_RESET_TOKEN_TYPE = 'pin_reset';
 
 @Injectable()
 export class PrismaUserRepository implements IUserRepository {
@@ -294,6 +298,92 @@ export class PrismaUserRepository implements IUserRepository {
   async deleteTokensByUserAndType(userId: string, type: string): Promise<void> {
     await this.prisma.token.deleteMany({
       where: { userId, type },
+    });
+  }
+
+  async issuePinResetToken(input: {
+    userId: string;
+    hashedToken: string;
+    expiresAt: Date;
+    maxFailedAttempts: number;
+  }): Promise<PinResetTokenIssue> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
+      const existing = await tx.token.findMany({
+        where: { userId: input.userId, type: PIN_RESET_TOKEN_TYPE },
+      });
+      const now = Date.now();
+      const failedAttempts = Math.max(
+        0,
+        ...existing
+          .filter((token) => token.expiresAt.getTime() > now)
+          .map((token) => token.failedAttempts),
+      );
+      if (failedAttempts >= input.maxFailedAttempts) {
+        return 'guess_budget_spent';
+      }
+
+      await tx.token.deleteMany({
+        where: { userId: input.userId, type: PIN_RESET_TOKEN_TYPE },
+      });
+      await tx.token.create({
+        data: {
+          userId: input.userId,
+          token: input.hashedToken,
+          expiresAt: input.expiresAt,
+          type: PIN_RESET_TOKEN_TYPE,
+          failedAttempts,
+        },
+      });
+      return 'issued';
+    });
+  }
+
+  async redeemPinResetToken(input: {
+    userId: string;
+    hashedToken: string;
+    maxFailedAttempts: number;
+    newPinHash?: string;
+  }): Promise<PinResetTokenRedemption> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.userId} FOR UPDATE`;
+      const tokens = await tx.token.findMany({
+        where: { userId: input.userId, type: PIN_RESET_TOKEN_TYPE },
+      });
+      const now = Date.now();
+      const presented = tokens.find(
+        (token) => token.token === input.hashedToken,
+      );
+
+      if (!presented) {
+        const liveIds = tokens
+          .filter((token) => token.expiresAt.getTime() > now)
+          .map((token) => token.id);
+        if (liveIds.length > 0) {
+          await tx.token.updateMany({
+            where: { id: { in: liveIds } },
+            data: { failedAttempts: { increment: 1 } },
+          });
+        }
+        return 'invalid';
+      }
+      if (presented.failedAttempts >= input.maxFailedAttempts) {
+        return 'invalid';
+      }
+      if (presented.expiresAt.getTime() <= now) {
+        await tx.token.delete({ where: { id: presented.id } });
+        return 'expired';
+      }
+      if (input.newPinHash === undefined) {
+        return 'valid';
+      }
+
+      await tx.user.update({
+        where: { id: input.userId, isDeleted: false },
+        data: { pinHash: input.newPinHash },
+      });
+      await tx.token.delete({ where: { id: presented.id } });
+      return 'pin_changed';
     });
   }
 

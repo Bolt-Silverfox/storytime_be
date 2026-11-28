@@ -3,7 +3,9 @@ import {
   NotFoundException,
   BadRequestException,
   ServiceUnavailableException,
+  HttpStatus,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { UserPinService } from './user-pin.service';
 import { USER_REPOSITORY } from '../repositories';
 import { NotificationService } from '@/notification/notification.service';
@@ -24,6 +26,8 @@ describe('UserPinService', () => {
     createToken: jest.Mock;
     findTokenByHashedToken: jest.Mock;
     deleteToken: jest.Mock;
+    issuePinResetToken: jest.Mock;
+    redeemPinResetToken: jest.Mock;
   };
   let mockNotificationService: {
     sendNotification: jest.Mock;
@@ -52,6 +56,8 @@ describe('UserPinService', () => {
       createToken: jest.fn(),
       findTokenByHashedToken: jest.fn(),
       deleteToken: jest.fn(),
+      issuePinResetToken: jest.fn(),
+      redeemPinResetToken: jest.fn(),
     };
 
     mockNotificationService = {
@@ -196,8 +202,7 @@ describe('UserPinService', () => {
   describe('requestPinResetOtp', () => {
     it('should send PIN reset OTP successfully', async () => {
       mockUserRepository.findUserById.mockResolvedValue(mockUser);
-      mockUserRepository.deleteTokensByUserAndType.mockResolvedValue(undefined);
-      mockUserRepository.createToken.mockResolvedValue({});
+      mockUserRepository.issuePinResetToken.mockResolvedValue('issued');
       mockNotificationService.sendNotification.mockResolvedValue({
         success: true,
       });
@@ -205,25 +210,86 @@ describe('UserPinService', () => {
       const result = await service.requestPinResetOtp('user-123');
 
       expect(mockUserRepository.findUserById).toHaveBeenCalledWith('user-123');
-      expect(mockUserRepository.deleteTokensByUserAndType).toHaveBeenCalledWith(
-        'user-123',
-        'pin_reset',
-      );
-      expect(mockUserRepository.createToken).toHaveBeenCalledWith({
-        userId: 'user-123',
-        token: expect.any(String),
-        expiresAt: expect.any(Date),
-        type: 'pin_reset',
+      const [sentType, sent] = mockNotificationService.sendNotification.mock
+        .calls[0] as [string, { email: string; otp: string; userName: string }];
+      expect(sentType).toBe('PinReset');
+      expect(sent).toEqual({
+        email: 'test@example.com',
+        otp: expect.stringMatching(/^\d{6}$/),
+        userName: 'Test User',
       });
+      expect(mockUserRepository.issuePinResetToken).toHaveBeenCalledWith({
+        userId: 'user-123',
+        hashedToken: createHash('sha256')
+          .update(`user-123:${sent.otp}`)
+          .digest('hex'),
+        expiresAt: expect.any(Date),
+        maxFailedAttempts: 5,
+      });
+      expect(result).toEqual({ message: 'Pin reset token sent' });
+    });
+
+    it('refuses to issue a code once the guess budget is spent', async () => {
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
+      mockUserRepository.issuePinResetToken.mockResolvedValue(
+        'guess_budget_spent',
+      );
+
+      await expect(
+        service.requestPinResetOtp('user-123'),
+      ).rejects.toMatchObject({ status: HttpStatus.TOO_MANY_REQUESTS });
+      expect(mockNotificationService.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it('draws the code from crypto.randomInt, never Math.random', async () => {
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
+      mockUserRepository.issuePinResetToken.mockResolvedValue('issued');
+      mockNotificationService.sendNotification.mockResolvedValue({
+        success: true,
+      });
+      const randomSpy = jest.spyOn(Math, 'random');
+      const randomIntSpy = jest
+        .spyOn(
+          jest.requireActual<typeof import('crypto')>('crypto'),
+          'randomInt',
+        )
+        .mockImplementation(() => 42);
+
+      try {
+        await service.requestPinResetOtp('user-123');
+      } finally {
+        randomIntSpy.mockRestore();
+        randomSpy.mockRestore();
+      }
+
+      expect(randomSpy).not.toHaveBeenCalled();
       expect(mockNotificationService.sendNotification).toHaveBeenCalledWith(
         'PinReset',
-        {
-          email: 'test@example.com',
-          otp: expect.any(String),
-          userName: 'Test User',
-        },
+        expect.objectContaining({ otp: '000042' }),
       );
-      expect(result).toEqual({ message: 'Pin reset token sent' });
+    });
+
+    it('expires the code one hour of elapsed time after issue across a DST change', async () => {
+      const originalTz = process.env.TZ;
+      process.env.TZ = 'America/New_York';
+      const issuedAt = new Date('2026-11-01T05:30:00.000Z');
+      jest.useFakeTimers({ now: issuedAt, doNotFake: ['nextTick'] });
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
+      mockUserRepository.issuePinResetToken.mockResolvedValue('issued');
+      mockNotificationService.sendNotification.mockResolvedValue({
+        success: true,
+      });
+
+      try {
+        await service.requestPinResetOtp('user-123');
+      } finally {
+        jest.useRealTimers();
+        process.env.TZ = originalTz;
+      }
+
+      const [{ expiresAt }] = mockUserRepository.issuePinResetToken.mock
+        .calls[0] as [{ expiresAt: Date }];
+      expect(expiresAt.getTime() - issuedAt.getTime()).toBe(60 * 60 * 1000);
     });
 
     it('should throw NotFoundException if user not found', async () => {
@@ -234,100 +300,74 @@ describe('UserPinService', () => {
       );
     });
 
-    it('should throw ServiceUnavailableException if email sending fails', async () => {
+    it('answers 503 without echoing the provider error when email sending fails', async () => {
       mockUserRepository.findUserById.mockResolvedValue(mockUser);
-      mockUserRepository.deleteTokensByUserAndType.mockResolvedValue(undefined);
-      mockUserRepository.createToken.mockResolvedValue({});
+      mockUserRepository.issuePinResetToken.mockResolvedValue('issued');
       mockNotificationService.sendNotification.mockResolvedValue({
         success: false,
-        error: 'SMTP connection failed',
+        error: 'SMTP 550 mailbox test@example.com unavailable',
       });
 
-      await expect(service.requestPinResetOtp('user-123')).rejects.toThrow(
-        ServiceUnavailableException,
-      );
-      await expect(service.requestPinResetOtp('user-123')).rejects.toThrow(
-        'SMTP connection failed',
-      );
+      const failure = service.requestPinResetOtp('user-123');
+
+      await expect(failure).rejects.toThrow(ServiceUnavailableException);
+      await expect(failure).rejects.toThrow('Failed to send pin reset email');
     });
   });
 
-  describe('validatePinResetOtp', () => {
-    const validToken = {
-      id: 'token-123',
-      userId: 'user-123',
-      token: 'hashedOtp',
-      type: 'pin_reset',
-      expiresAt: new Date(Date.now() + 3600000), // 1 hour from now
-    };
+  const otpHash = (otp: string) =>
+    createHash('sha256').update(`user-123:${otp}`).digest('hex');
 
-    it('should validate OTP successfully', async () => {
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
+  describe('validatePinResetOtp', () => {
+    it('should validate OTP successfully without consuming it', async () => {
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('valid');
 
       const result = await service.validatePinResetOtp('user-123', '123456');
 
-      expect(mockUserRepository.findTokenByHashedToken).toHaveBeenCalledWith(
-        'user-123',
-        expect.any(String), // SHA256 hash of OTP
-        'pin_reset',
-      );
+      expect(mockUserRepository.redeemPinResetToken).toHaveBeenCalledWith({
+        userId: 'user-123',
+        hashedToken: otpHash('123456'),
+        maxFailedAttempts: 5,
+      });
       expect(result).toEqual({ success: true, message: 'Valid OTP' });
     });
 
     it('should throw BadRequestException if OTP format is invalid', async () => {
       await expect(
         service.validatePinResetOtp('user-123', '12345'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.validatePinResetOtp('user-123', '12345'),
-      ).rejects.toThrow('OTP must be exactly 6 digits');
+      ).rejects.toMatchObject({
+        status: 400,
+        message: 'OTP must be exactly 6 digits',
+      });
+      expect(mockUserRepository.redeemPinResetToken).not.toHaveBeenCalled();
     });
 
     it('should throw BadRequestException if OTP is invalid', async () => {
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(null);
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('invalid');
 
       await expect(
         service.validatePinResetOtp('user-123', '654321'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.validatePinResetOtp('user-123', '654321'),
-      ).rejects.toThrow('Invalid OTP');
+      ).rejects.toMatchObject({ status: 400, message: 'Invalid OTP' });
     });
 
     it('should throw BadRequestException if OTP is expired', async () => {
-      const expiredToken = {
-        ...validToken,
-        expiresAt: new Date(Date.now() - 3600000), // 1 hour ago
-      };
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
-      mockUserRepository.deleteToken.mockResolvedValue(undefined);
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('expired');
 
       await expect(
         service.validatePinResetOtp('user-123', '123456'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.validatePinResetOtp('user-123', '123456'),
-      ).rejects.toThrow('OTP has expired');
-      expect(mockUserRepository.deleteToken).toHaveBeenCalled();
+      ).rejects.toMatchObject({
+        status: 400,
+        message: 'OTP has expired. Please request a new one.',
+      });
     });
   });
 
   describe('resetPinWithOtp', () => {
-    const validToken = {
-      id: 'token-123',
-      userId: 'user-123',
-      token: 'hashedOtp',
-      type: 'pin_reset',
-      expiresAt: new Date(Date.now() + 3600000), // 1 hour from now
-    };
-
     it('should reset PIN successfully', async () => {
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
       mockUserRepository.findUserById.mockResolvedValue(mockUser);
-      (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(false); // New PIN is different
+      (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(false);
       (pinUtil.hashPin as jest.Mock).mockResolvedValue('newHashedPin');
-      mockUserRepository.updateUserSimple.mockResolvedValue({});
-      mockUserRepository.deleteToken.mockResolvedValue(undefined);
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('pin_changed');
 
       const result = await service.resetPinWithOtp(
         'user-123',
@@ -336,11 +376,12 @@ describe('UserPinService', () => {
       );
 
       expect(pinUtil.hashPin).toHaveBeenCalledWith('654321');
-      expect(mockUserRepository.updateUserSimple).toHaveBeenCalledWith(
-        'user-123',
-        { pinHash: 'newHashedPin' },
-      );
-      expect(mockUserRepository.deleteToken).toHaveBeenCalledWith('token-123');
+      expect(mockUserRepository.redeemPinResetToken).toHaveBeenCalledWith({
+        userId: 'user-123',
+        hashedToken: otpHash('123456'),
+        maxFailedAttempts: 5,
+        newPinHash: 'newHashedPin',
+      });
       expect(result).toEqual({
         success: true,
         message: 'PIN has been reset successfully',
@@ -350,79 +391,90 @@ describe('UserPinService', () => {
     it('should throw BadRequestException if OTP format is invalid', async () => {
       await expect(
         service.resetPinWithOtp('user-123', '12345', '654321'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.resetPinWithOtp('user-123', '12345', '654321'),
-      ).rejects.toThrow('OTP must be exactly 6 digits');
+      ).rejects.toMatchObject({
+        status: 400,
+        message: 'OTP must be exactly 6 digits',
+      });
     });
 
     it('should throw BadRequestException if PIN format is invalid', async () => {
       await expect(
         service.resetPinWithOtp('user-123', '123456', '12345'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.resetPinWithOtp('user-123', '123456', '12345'),
-      ).rejects.toThrow('PIN must be exactly 6 digits');
+      ).rejects.toMatchObject({
+        status: 400,
+        message: 'PIN must be exactly 6 digits',
+      });
     });
 
     it('should throw BadRequestException if OTP is invalid', async () => {
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(null);
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
+      (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(false);
+      (pinUtil.hashPin as jest.Mock).mockResolvedValue('newHashedPin');
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('invalid');
 
       await expect(
         service.resetPinWithOtp('user-123', '654321', '123456'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.resetPinWithOtp('user-123', '654321', '123456'),
-      ).rejects.toThrow('Invalid OTP');
+      ).rejects.toMatchObject({ status: 400, message: 'Invalid OTP' });
     });
 
     it('should throw BadRequestException if OTP is expired', async () => {
-      const expiredToken = {
-        ...validToken,
-        expiresAt: new Date(Date.now() - 3600000), // 1 hour ago
-      };
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(expiredToken);
-      mockUserRepository.deleteToken.mockResolvedValue(undefined);
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
+      (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(false);
+      (pinUtil.hashPin as jest.Mock).mockResolvedValue('newHashedPin');
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('expired');
 
       await expect(
         service.resetPinWithOtp('user-123', '123456', '654321'),
-      ).rejects.toThrow(BadRequestException);
-      await expect(
-        service.resetPinWithOtp('user-123', '123456', '654321'),
-      ).rejects.toThrow('OTP has expired');
+      ).rejects.toMatchObject({
+        status: 400,
+        message: 'OTP has expired. Please request a new one.',
+      });
     });
 
-    it('should throw NotFoundException if user not found after OTP validation', async () => {
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
+    it('should throw NotFoundException if user not found', async () => {
       mockUserRepository.findUserById.mockResolvedValue(null);
 
       await expect(
         service.resetPinWithOtp('user-123', '123456', '654321'),
       ).rejects.toThrow(NotFoundException);
+      expect(mockUserRepository.redeemPinResetToken).not.toHaveBeenCalled();
     });
 
-    it('should throw BadRequestException if new PIN is same as old PIN', async () => {
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
+    it('rejects a PIN equal to the old one only after the OTP is accepted, without consuming it', async () => {
       mockUserRepository.findUserById.mockResolvedValue(mockUser);
-      (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(true); // Same as old PIN
+      (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(true);
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('valid');
 
       await expect(
         service.resetPinWithOtp('user-123', '123456', '654321'),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toMatchObject({
+        status: 400,
+        message: 'New PIN cannot be the same as old PIN',
+      });
+      expect(mockUserRepository.redeemPinResetToken).toHaveBeenCalledWith({
+        userId: 'user-123',
+        hashedToken: otpHash('123456'),
+        maxFailedAttempts: 5,
+      });
+    });
+
+    it('does not reveal that the PIN matches the old one when the OTP is wrong', async () => {
+      mockUserRepository.findUserById.mockResolvedValue(mockUser);
+      (pinUtil.verifyPinHash as jest.Mock).mockResolvedValue(true);
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('invalid');
+
       await expect(
         service.resetPinWithOtp('user-123', '123456', '654321'),
-      ).rejects.toThrow('New PIN cannot be the same as old PIN');
+      ).rejects.toMatchObject({ status: 400, message: 'Invalid OTP' });
     });
 
     it('should allow PIN reset if user has no existing PIN', async () => {
-      mockUserRepository.findTokenByHashedToken.mockResolvedValue(validToken);
       mockUserRepository.findUserById.mockResolvedValue({
         ...mockUser,
         pinHash: null,
       });
       (pinUtil.hashPin as jest.Mock).mockResolvedValue('newHashedPin');
-      mockUserRepository.updateUserSimple.mockResolvedValue({});
-      mockUserRepository.deleteToken.mockResolvedValue(undefined);
+      mockUserRepository.redeemPinResetToken.mockResolvedValue('pin_changed');
 
       const result = await service.resetPinWithOtp(
         'user-123',
@@ -430,6 +482,7 @@ describe('UserPinService', () => {
         '654321',
       );
 
+      expect(pinUtil.verifyPinHash).not.toHaveBeenCalled();
       expect(result).toEqual({
         success: true,
         message: 'PIN has been reset successfully',

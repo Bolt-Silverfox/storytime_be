@@ -11,6 +11,11 @@ import type {
 } from '@prisma/client';
 
 // ==================== User Types ====================
+export type PinResetTokenIssue = 'issued' | 'guess_budget_spent';
+
+export type PinResetTokenRedemption =
+  'valid' | 'invalid' | 'expired' | 'pin_changed';
+
 export interface UserWithRelations extends User {
   profile?: Profile | null;
   kids?: Kid[];
@@ -185,6 +190,18 @@ export interface IUserRepository {
   ): Promise<Token | null>;
   deleteToken(id: string): Promise<void>;
   deleteTokensByUserAndType(userId: string, type: string): Promise<void>;
+  issuePinResetToken(input: {
+    userId: string;
+    hashedToken: string;
+    expiresAt: Date;
+    maxFailedAttempts: number;
+  }): Promise<PinResetTokenIssue>;
+  redeemPinResetToken(input: {
+    userId: string;
+    hashedToken: string;
+    maxFailedAttempts: number;
+    newPinHash?: string;
+  }): Promise<PinResetTokenRedemption>;
 
   // Activity log operations
   createActivityLog(data: {
