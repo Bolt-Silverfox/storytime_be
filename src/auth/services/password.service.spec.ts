@@ -42,6 +42,11 @@ jest.mock('@/shared/utils/generate-token', () => ({
 }));
 
 describe('PasswordService', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
   let service: PasswordService;
   let authRepository: jest.Mocked<IAuthRepository>;
   let tokenService: jest.Mocked<TokenService>;
@@ -845,10 +850,10 @@ describe('PasswordService', () => {
     });
 
     describe('attempt cap', () => {
-      const attempt = (token: string) =>
-        service.resetPassword(token, 'test@example.com', 'NewPass1#', {
+      const attempt = (token: string, email = 'test@example.com') =>
+        service.resetPassword(token, email, 'NewPass1#', {
           token,
-          email: 'test@example.com',
+          email,
           newPassword: 'NewPass1#',
         });
 
@@ -1085,6 +1090,24 @@ describe('PasswordService', () => {
         } finally {
           jest.useRealTimers();
         }
+      });
+
+      it('budgets wrong guesses per email: other emails never spend the owner budget, and the owner email stops at five', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(null);
+        for (let i = 0; i < 20; i++) {
+          await expect(
+            attempt(`guess-${i}`, `rotated-${i}@example.com`),
+          ).rejects.toThrow(NotFoundException);
+        }
+        for (let i = 0; i < 5; i++) {
+          await expect(attempt(`owner-guess-${i}`)).rejects.toThrow(
+            NotFoundException,
+          );
+        }
+
+        await expect(attempt('owner-guess-5')).rejects.toMatchObject({
+          status: 429,
+        });
       });
 
       it('lets concurrent guesses through at most 5 times', async () => {
