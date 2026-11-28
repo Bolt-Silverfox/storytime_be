@@ -1,13 +1,49 @@
-import { assertScratchRedisUrl } from './scratch-redis';
+import { scratchRedisEndpoint } from './scratch-redis';
 
-describe('assertScratchRedisUrl', () => {
+describe('scratchRedisEndpoint', () => {
   it.each([
-    'redis://127.0.0.1:6379/3',
-    'redis://localhost:6380/15',
-    'redis://[::1]:6379/1',
-    'redis://:secret@127.0.0.1:6379/2',
-  ])('accepts a loopback Redis on a dedicated database (%s)', (url) => {
-    expect(() => assertScratchRedisUrl(url)).not.toThrow();
+    [
+      'redis://127.0.0.1:6379/3',
+      {
+        host: '127.0.0.1',
+        port: 6379,
+        db: 3,
+        username: undefined,
+        password: undefined,
+      },
+    ],
+    [
+      'redis://localhost/15',
+      {
+        host: 'localhost',
+        port: 6379,
+        db: 15,
+        username: undefined,
+        password: undefined,
+      },
+    ],
+    [
+      'redis://[::1]:6380/1',
+      {
+        host: '::1',
+        port: 6380,
+        db: 1,
+        username: undefined,
+        password: undefined,
+      },
+    ],
+    [
+      'redis://user:p%40ss@127.0.0.1:6379/2',
+      {
+        host: '127.0.0.1',
+        port: 6379,
+        db: 2,
+        username: 'user',
+        password: 'p@ss',
+      },
+    ],
+  ])('returns validated connection options for %s', (url, expected) => {
+    expect(scratchRedisEndpoint(url)).toEqual(expected);
   });
 
   it.each([
@@ -17,8 +53,11 @@ describe('assertScratchRedisUrl', () => {
     ['no database', 'redis://127.0.0.1:6379'],
     ['a non-numeric database', 'redis://127.0.0.1:6379/x'],
     ['a non-Redis scheme', 'http://127.0.0.1:6379/3'],
+    ['a socket path option', 'redis://127.0.0.1:6379/3?path=/tmp/other.sock'],
+    ['any query option', 'redis://127.0.0.1:6379/3?db=0'],
+    ['an unparseable URL', 'not a url'],
   ])('refuses %s', (_label, url) => {
-    expect(() => assertScratchRedisUrl(url)).toThrow(
+    expect(() => scratchRedisEndpoint(url)).toThrow(
       /loopback Redis on a numbered database other than 0/,
     );
   });
@@ -26,7 +65,7 @@ describe('assertScratchRedisUrl', () => {
   it('does not echo the URL, which may carry a password', () => {
     let message = '';
     try {
-      assertScratchRedisUrl('redis://:hunter2@cache.internal:6379/3');
+      scratchRedisEndpoint('redis://:hunter2@cache.internal:6379/3');
     } catch (error) {
       message = (error as Error).message;
     }
