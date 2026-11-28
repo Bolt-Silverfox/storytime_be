@@ -136,9 +136,12 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
       where: { token: 'rt-1' },
       data: { expiresAt },
     });
+    const observer = new PrismaClient({ datasources: { db: { url } } });
     let firstClaimed!: (claimed: boolean) => void;
-    const claimedByFirst = new Promise<boolean>((resolve) => {
+    let firstClaimFailed!: (error: unknown) => void;
+    const claimedByFirst = new Promise<boolean>((resolve, reject) => {
       firstClaimed = resolve;
+      firstClaimFailed = reject;
     });
     let releaseFirst!: () => void;
     const firstReleased = new Promise<void>((resolve) => {
@@ -147,33 +150,48 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
 
     const first = repo
       .transaction(async (tx) => {
-        firstClaimed(await tx.consumeToken(id));
+        try {
+          firstClaimed(await tx.consumeToken(id));
+        } catch (error) {
+          firstClaimFailed(error);
+          throw error;
+        }
         await firstReleased;
         throw new Error('rolled back');
       })
-      .catch((error: Error) => error.message);
-    expect(await claimedByFirst).toBe(true);
-    const second = claimAndWrite(id, 'rt-owner');
+      .then(
+        () => 'committed',
+        (error: Error) => error.message,
+      );
+    let second: Promise<boolean | Error> | undefined;
+    try {
+      expect(await claimedByFirst).toBe(true);
+      second = claimAndWrite(id, 'rt-owner').catch((error: Error) => error);
 
-    let waitingOnLock = 0;
-    for (let i = 0; i < 100 && waitingOnLock === 0; i++) {
-      const [row] = await prisma.$queryRaw<{ waiting: number }[]>`
-        SELECT count(*)::int AS waiting FROM pg_stat_activity
-        WHERE wait_event_type = 'Lock' AND datname = current_database()`;
-      waitingOnLock = row.waiting;
-      if (waitingOnLock === 0) await new Promise((r) => setTimeout(r, 10));
+      let waitingOnLock = 0;
+      for (let i = 0; i < 100 && waitingOnLock === 0; i++) {
+        const [row] = await observer.$queryRaw<{ waiting: number }[]>`
+          SELECT count(*)::int AS waiting FROM pg_stat_activity
+          WHERE wait_event_type = 'Lock' AND datname = current_database()`;
+        waitingOnLock = row.waiting;
+        if (waitingOnLock === 0) await new Promise((r) => setTimeout(r, 10));
+      }
+      expect(waitingOnLock).toBe(1);
+      expect(Date.now()).toBeLessThan(expiresAt.getTime());
+
+      await new Promise((r) =>
+        setTimeout(r, expiresAt.getTime() - Date.now() + 50),
+      );
+      releaseFirst();
+
+      expect(await first).toBe('rolled back');
+      expect(await second).toBe(false);
+      expect(await remaining()).toEqual(['rt-1', 'rt-2', 'rt-3', 'rt-4']);
+    } finally {
+      releaseFirst();
+      await Promise.allSettled([first, second]);
+      await observer.$disconnect();
     }
-    expect(waitingOnLock).toBe(1);
-    expect(Date.now()).toBeLessThan(expiresAt.getTime());
-
-    await new Promise((r) =>
-      setTimeout(r, expiresAt.getTime() - Date.now() + 50),
-    );
-    releaseFirst();
-
-    expect(await first).toBe('rolled back');
-    expect(await second).toBe(false);
-    expect(await remaining()).toEqual(['rt-1', 'rt-2', 'rt-3', 'rt-4']);
   }, 15_000);
 
   it('claims a verification token once across concurrent verifications and marks the email verified', async () => {
