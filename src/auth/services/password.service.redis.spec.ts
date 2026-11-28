@@ -173,7 +173,28 @@ d('PasswordService reset attempts against a real Redis', () => {
       maxRetriesPerRequest: null,
       retryStrategy: () => 300,
     });
-    await proxied.ping();
+    const close = async () => {
+      proxied.disconnect();
+      sockets.forEach((socket) => socket.destroy());
+      await new Promise((resolve) => proxy.close(resolve));
+    };
+    let startup: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        proxied.ping(),
+        new Promise((_, reject) => {
+          startup = setTimeout(
+            () => reject(new Error('Reply proxy did not start')),
+            2000,
+          );
+        }),
+      ]);
+    } catch (error) {
+      await close();
+      throw error;
+    } finally {
+      clearTimeout(startup);
+    }
     return {
       client: proxied,
       get replies() {
@@ -184,10 +205,7 @@ d('PasswordService reset attempts against a real Redis', () => {
         if (mode === 'passed') held.splice(0).forEach((flush) => flush());
       },
       reset: () => sockets.forEach((socket) => socket.destroy()),
-      close: async () => {
-        proxied.disconnect();
-        await new Promise((resolve) => proxy.close(resolve));
-      },
+      close,
     };
   };
 
@@ -257,7 +275,9 @@ d('PasswordService reset attempts against a real Redis', () => {
 
       link.replies = 'passed';
       await new Promise((resolve) => setTimeout(resolve, 200));
-      expect(await validate()).toBe(200);
+      expect(await reset()).toBe(200);
+      expect(tokens.size).toBe(0);
+      expect(await attemptKeys()).toEqual([]);
     } finally {
       await link.close();
     }
@@ -277,7 +297,9 @@ d('PasswordService reset attempts against a real Redis', () => {
     await waitFor(() => client.status === 'ready');
     expect(client.status).toBe('ready');
     await client.ping();
-    expect(await validate()).toBe(200);
+    expect(await reset()).toBe(200);
+    expect(tokens.size).toBe(0);
+    expect(await attemptKeys()).toEqual([]);
   }, 15_000);
 
   it('leaves the counter alone when a valid code meets lost replies, so the code works once Redis answers again', async () => {
@@ -298,7 +320,9 @@ d('PasswordService reset attempts against a real Redis', () => {
       await link.client.ping();
 
       expect(await admin.get(key)).toBe('4');
-      expect(await validate()).toBe(200);
+      expect(await reset()).toBe(200);
+      expect(tokens.size).toBe(0);
+      expect(await attemptKeys()).toEqual([]);
     } finally {
       await link.close();
     }
