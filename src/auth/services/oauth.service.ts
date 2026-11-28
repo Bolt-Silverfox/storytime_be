@@ -155,7 +155,9 @@ export class OAuthService {
   // ==================== INTERNAL: Unified OAuth upsert logic ====================
 
   private async upsertOrReturnUserFromOAuthPayload(payload: OAuthPayload) {
-    const { googleId, appleId, email, picture, name, emailVerified } = payload;
+    const { googleId, appleId, picture, name, emailVerified } = payload;
+    const sentEmail = payload.email?.trim();
+    const email = sentEmail?.toLowerCase();
 
     let user: UserWithProfileAndAvatar | null = null;
 
@@ -168,11 +170,17 @@ export class OAuthService {
 
     // 2. Try find by email
     if (!user) {
-      const existing = await this.authRepository.findUserByEmail(email);
+      const existing =
+        await this.authRepository.findUserByEmailIgnoringCase(sentEmail);
 
       if (existing) {
+        if (emailVerified !== true) {
+          throw new UnauthorizedException(
+            'Sign in with your password to link this provider',
+          );
+        }
         user = await this.authRepository.updateUserWithRelations(existing.id, {
-          isEmailVerified: emailVerified ? true : existing.isEmailVerified,
+          isEmailVerified: true,
           googleId: googleId || existing.googleId,
           appleId: appleId || existing.appleId,
         });

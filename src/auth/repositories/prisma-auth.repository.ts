@@ -9,6 +9,8 @@ import type {
   LearningExpectation,
   UserIP,
 } from '@prisma/client';
+import { OnboardingStatus } from '@prisma/client';
+import { isTokenExpired } from '../services/token-expiry';
 import { TokenType } from '../dto/auth.dto';
 import {
   IAuthRepository,
@@ -21,6 +23,8 @@ import {
   UserLinkedAccountInfo,
 } from './auth.repository.interface';
 
+const escapeLikePattern = (value: string) => value.replace(/[\\%_]/g, '\\$&');
+
 @Injectable()
 export class PrismaAuthRepository implements IAuthRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -29,6 +33,22 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async findUserByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email } });
+  }
+
+  async findUserByEmailIgnoringCase(email: string): Promise<User | null> {
+    const matches = await this.prisma.user.findMany({
+      where: {
+        email: { equals: escapeLikePattern(email), mode: 'insensitive' },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const lowercase = email.toLowerCase();
+    return (
+      matches.find((user) => user.email === email) ??
+      matches.find((user) => user.email === lowercase) ??
+      matches[0] ??
+      null
+    );
   }
 
   async findUserByEmailWithRelations(
@@ -282,8 +302,22 @@ export class PrismaAuthRepository implements IAuthRepository {
     });
   }
 
+  async findTokensByUserEmail(
+    email: string,
+    type: TokenType,
+  ): Promise<Token[]> {
+    return this.prisma.token.findMany({
+      where: {
+        type,
+        user: {
+          email: { equals: escapeLikePattern(email), mode: 'insensitive' },
+        },
+      },
+    });
+  }
+
   async deleteToken(id: string): Promise<void> {
-    await this.prisma.token.delete({ where: { id } });
+    await this.prisma.token.deleteMany({ where: { id } });
   }
 
   async deleteUserTokensByType(userId: string, type: TokenType): Promise<void> {
@@ -425,8 +459,27 @@ export class PrismaAuthRepository implements IAuthRepository {
   ): Promise<T> {
     return this.prisma.$transaction(async (prisma) => {
       const tx: IAuthRepositoryTransaction = {
+        consumeToken: async (id) => {
+          const [locked] = await prisma.$queryRaw<{ expiresAt: Date }[]>`
+            SELECT "expiresAt" FROM "tokens" WHERE "id" = ${id} FOR UPDATE`;
+          if (!locked || isTokenExpired(locked)) return false;
+          const { count } = await prisma.token.deleteMany({ where: { id } });
+          return count > 0;
+        },
         updateUser: async (id, data) => {
           return prisma.user.update({ where: { id }, data });
+        },
+        markEmailVerified: async (userId) => {
+          await prisma.user.update({
+            where: { id: userId },
+            data: {
+              isEmailVerified: true,
+              onboardingStatus: OnboardingStatus.email_verified,
+            },
+          });
+        },
+        deleteAllUserSessions: async (userId) => {
+          await prisma.session.deleteMany({ where: { userId } });
         },
         deleteOtherSessions: async (userId, exceptSessionId) => {
           await prisma.session.deleteMany({

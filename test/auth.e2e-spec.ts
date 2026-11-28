@@ -17,7 +17,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { EventEmitterModule } from '@nestjs/event-emitter';
+import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
 import { SuccessResponseInterceptor } from '../src/shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from '../src/shared/filters/prisma-exception.filter';
@@ -30,6 +30,11 @@ import { PushProcessor } from '../src/notification/queue/push.processor';
 import { EmailProvider } from '../src/notification/providers/email.provider';
 import { AuthThrottleGuard } from '../src/shared/guards/auth-throttle.guard';
 import { REDIS_CLIENT } from '../src/redis/redis.constants';
+import { RedisService } from '../src/redis/redis.service';
+import { FakeRedisClient } from '../src/shared/testing/fake-redis';
+import { createHash } from 'crypto';
+import * as bcrypt from 'bcryptjs';
+import { TokenType } from '../src/auth/dto/auth.dto';
 
 // SharedModule's InfraMetricsService injects REDIS_CLIENT, which the app gets
 // from the @Global RedisModule. Tests don't have a Redis server, so provide an
@@ -42,8 +47,12 @@ import { REDIS_CLIENT } from '../src/redis/redis.constants';
       provide: REDIS_CLIENT,
       useValue: { status: 'end', info: jest.fn(), on: jest.fn() },
     },
+    {
+      provide: RedisService,
+      useValue: { client: new FakeRedisClient() },
+    },
   ],
-  exports: [REDIS_CLIENT],
+  exports: [REDIS_CLIENT, RedisService],
 })
 class MockRedisModule {}
 
@@ -207,6 +216,30 @@ describe('Authentication (e2e)', () => {
   });
 
   // ==================== HELPER FUNCTIONS ====================
+
+  const seedToken = (email: string, raw: string, type: TokenType) => {
+    const user = mockState.users.get(email)!;
+    const token = createHash('sha256').update(raw).digest('hex');
+    mockState.tokens.set(token, {
+      id: `token-${raw}`,
+      userId: user.id,
+      token,
+      type,
+      expiresAt: new Date(Date.now() + 3600_000),
+      createdAt: new Date(),
+    });
+    return user;
+  };
+
+  const registerUser = async (email: string) => {
+    const res = await request(server).post('/api/v1/auth/register').send({
+      email,
+      password: testUser.password,
+      fullName: testUser.fullName,
+    });
+    expect(res.status).toBe(200);
+    return res;
+  };
 
   const expectSuccessResponse = (res: request.Response, statusCode: number) => {
     expect(res.status).toBe(statusCode);
@@ -530,6 +563,29 @@ describe('Authentication (e2e)', () => {
       expect(res.body.statusCode).toBe(401);
     });
 
+    it('verifies the email with a valid token once, then rejects the spent token', async () => {
+      const email = 'e2e-verify@example.com';
+      await registerUser(email);
+      const user = seedToken(email, 'verify-raw', TokenType.VERIFICATION);
+
+      const res = await request(server)
+        .post('/api/v1/auth/verify-email')
+        .send({ token: 'verify-raw' });
+
+      expectSuccessResponse(res, 200);
+      expect(user.isEmailVerified).toBe(true);
+      expect(user.onboardingStatus).toBe('email_verified');
+      expect(
+        mockState.tokens.has(
+          createHash('sha256').update('verify-raw').digest('hex'),
+        ),
+      ).toBe(false);
+      const again = await request(server)
+        .post('/api/v1/auth/verify-email')
+        .send({ token: 'verify-raw' });
+      expect(again.status).toBe(401);
+    });
+
     it('should reject verification without token', async () => {
       const res = await request(server)
         .post('/api/v1/auth/verify-email')
@@ -579,6 +635,49 @@ describe('Authentication (e2e)', () => {
       expect([200, 404, 503]).toContain(res.status);
     });
 
+    it('invalidates the earlier reset code when a new one is issued', async () => {
+      const email = 'e2e-reissue@example.com';
+      await registerUser(email);
+      const user = seedToken(email, '87654321', TokenType.PASSWORD_RESET);
+      const issued: string[] = [];
+      const capture = ({ resetToken }: { resetToken: string }) =>
+        issued.push(resetToken);
+      const events = app.get(EventEmitter2);
+      events.on('password.reset_requested', capture);
+
+      const res = await request(server)
+        .post('/api/v1/auth/request-password-reset')
+        .send({ email });
+      events.off('password.reset_requested', capture);
+
+      expectSuccessResponse(res, 200);
+      expect(issued).toHaveLength(1);
+      expect(issued[0]).not.toBe('87654321');
+      expect(
+        mockState.tokens.get(
+          createHash('sha256').update(issued[0]).digest('hex'),
+        ),
+      ).toEqual(
+        expect.objectContaining({
+          userId: user.id,
+          type: TokenType.PASSWORD_RESET,
+        }),
+      );
+      const replacement = await request(server)
+        .post('/api/v1/auth/validate-reset-token')
+        .send({ token: issued[0], email });
+      expectSuccessResponse(replacement, 201);
+      expect(
+        mockState.tokens.has(
+          createHash('sha256').update('87654321').digest('hex'),
+        ),
+      ).toBe(false);
+      const stale = await request(server)
+        .post('/api/v1/auth/validate-reset-token')
+        .send({ token: '87654321', email });
+      expect(stale.status).toBe(404);
+    });
+
     it('should reject with invalid email format', async () => {
       const res = await request(server)
         .post('/api/v1/auth/request-password-reset')
@@ -614,6 +713,66 @@ describe('Authentication (e2e)', () => {
 
       // Token validation should fail
       expect([400, 404, 500]).toContain(res.status);
+    });
+
+    it('resets the password with a valid code once, then rejects the spent code', async () => {
+      const email = 'e2e-reset@example.com';
+      await registerUser(email);
+      const user = seedToken(email, '12345678', TokenType.PASSWORD_RESET);
+      const oldHash = user.passwordHash;
+
+      const res = await request(server)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: '12345678', email, newPassword: 'NewPassword1#' });
+
+      expectSuccessResponse(res, 200);
+      expect(user.passwordHash).not.toBe(oldHash);
+      expect(
+        mockState.tokens.has(
+          createHash('sha256').update('12345678').digest('hex'),
+        ),
+      ).toBe(false);
+      await expect(
+        bcrypt.compare('NewPassword1#', user.passwordHash as string),
+      ).resolves.toBe(true);
+      const again = await request(server)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: '12345678', email, newPassword: 'OtherPassword1#' });
+      expect(again.status).toBe(404);
+    });
+
+    it('revokes existing sessions when the password is reset', async () => {
+      const email = 'e2e-reset-sessions@example.com';
+      await registerUser(email);
+      const user = seedToken(email, '23456789', TokenType.PASSWORD_RESET);
+      const userSessions = () =>
+        [...mockState.sessions.values()].filter((s) => s.userId === user.id);
+      expect(userSessions().length).toBeGreaterThan(0);
+
+      const res = await request(server)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: '23456789', email, newPassword: 'NewPassword1#' });
+
+      expectSuccessResponse(res, 200);
+      expect(userSessions()).toHaveLength(0);
+    });
+
+    it('burns the code of an email with LIKE wildcards after five wrong guesses', async () => {
+      const email = 'first_last%x@example.com';
+      await registerUser(email);
+      seedToken(email, '34567890', TokenType.PASSWORD_RESET);
+
+      for (let i = 0; i < 5; i++) {
+        const miss = await request(server)
+          .post('/api/v1/auth/validate-reset-token')
+          .send({ token: `0000000${i}`, email });
+        expect(miss.status).toBe(404);
+      }
+      const valid = await request(server)
+        .post('/api/v1/auth/validate-reset-token')
+        .send({ token: '34567890', email });
+
+      expect(valid.status).toBe(404);
     });
 
     it('should reject reset with weak password', async () => {
@@ -749,8 +908,30 @@ describe('Authentication (e2e)', () => {
 
 function createMockPrismaService() {
   const { users, sessions, tokens } = mockState;
+  const userById = (id: unknown) =>
+    [...users.values()].find((user) => user.id === id);
+  const tokenById = (id: unknown) =>
+    [...tokens.entries()].find(([, token]) => token.id === id);
+  type Filter = Record<string, unknown>;
+  const matchesFilter = (row: Record<string, unknown>, where: Filter = {}) =>
+    Object.entries(where).every(([field, expected]) =>
+      expected !== null && typeof expected === 'object' && 'not' in expected
+        ? row[field] !== expected.not
+        : row[field] === expected,
+    );
+  const deleteMatching = (
+    store: Map<string, Record<string, unknown>>,
+    where: Filter | undefined,
+  ) => {
+    if (!where) return 0;
+    const keys = [...store.entries()]
+      .filter(([, row]) => matchesFilter(row, where))
+      .map(([key]) => key);
+    keys.forEach((key) => store.delete(key));
+    return keys.length;
+  };
 
-  return {
+  const prisma: Record<string, unknown> = {
     user: {
       findUnique: jest.fn(
         ({ where }: { where: { email?: string; id?: string } }) => {
@@ -765,6 +946,13 @@ function createMockPrismaService() {
             }
           }
           return Promise.resolve(null);
+        },
+      ),
+      findMany: jest.fn(
+        ({ where }: { where: { email: { equals: string } } }) => {
+          const email = where.email.equals.replace(/\\([\\%_])/g, '$1');
+          const user = users.get(email.toLowerCase());
+          return Promise.resolve(user ? [user] : []);
         },
       ),
       findFirst: jest.fn(({ where }: { where: { email?: string } }) => {
@@ -841,24 +1029,12 @@ function createMockPrismaService() {
       findUnique: jest.fn(({ where }: { where: { id: string } }) => {
         return Promise.resolve(sessions.get(where.id) || null);
       }),
-      findFirst: jest.fn(
-        ({
-          where,
-        }: {
-          where: { refreshTokenHash?: string; userId?: string };
-        }) => {
-          if (where.refreshTokenHash) {
-            for (const session of sessions.values()) {
-              if (
-                session.refreshTokenHash === where.refreshTokenHash &&
-                session.isActive
-              ) {
-                return Promise.resolve(session);
-              }
-            }
-          }
-          return Promise.resolve(null);
-        },
+      findFirst: jest.fn(({ where }: { where: Filter }) =>
+        Promise.resolve(
+          [...sessions.values()].find(
+            (session) => session.isActive && matchesFilter(session, where),
+          ) ?? null,
+        ),
       ),
       update: jest.fn(
         ({
@@ -876,8 +1052,18 @@ function createMockPrismaService() {
           return Promise.resolve(null);
         },
       ),
-      updateMany: jest.fn(() => Promise.resolve({ count: 1 })),
-      deleteMany: jest.fn(() => Promise.resolve({ count: 1 })),
+      updateMany: jest.fn(
+        ({ where, data }: { where: Filter; data: Record<string, unknown> }) => {
+          const matches = [...sessions.values()].filter((session) =>
+            matchesFilter(session, where),
+          );
+          matches.forEach((session) => Object.assign(session, data));
+          return Promise.resolve({ count: matches.length });
+        },
+      ),
+      deleteMany: jest.fn(({ where }: { where?: Filter } = {}) =>
+        Promise.resolve({ count: deleteMatching(sessions, where) }),
+      ),
     },
     token: {
       create: jest.fn(({ data }: { data: Record<string, unknown> }) => {
@@ -891,9 +1077,23 @@ function createMockPrismaService() {
         return Promise.resolve(token);
       }),
       findUnique: jest.fn(
-        ({ where }: { where: { id?: string; token?: string } }) => {
+        ({
+          where,
+          include,
+        }: {
+          where: { id?: string; token?: string; type?: string };
+          include?: { user?: boolean };
+        }) => {
           if (where.token) {
-            return Promise.resolve(tokens.get(where.token) || null);
+            const token = tokens.get(where.token);
+            if (!token || (where.type && token.type !== where.type)) {
+              return Promise.resolve(null);
+            }
+            return Promise.resolve(
+              include?.user
+                ? { ...token, user: userById(token.userId) }
+                : token,
+            );
           }
           if (where.id) {
             for (const token of tokens.values()) {
@@ -903,12 +1103,33 @@ function createMockPrismaService() {
           return Promise.resolve(null);
         },
       ),
-      findFirst: jest.fn(({ where }: { where: { token?: string } }) => {
-        if (where.token) {
-          return Promise.resolve(tokens.get(where.token) || null);
-        }
-        return Promise.resolve(null);
-      }),
+      findFirst: jest.fn(({ where }: { where: Filter }) =>
+        Promise.resolve(
+          [...tokens.values()].find((token) => matchesFilter(token, where)) ??
+            null,
+        ),
+      ),
+      findMany: jest.fn(
+        ({
+          where,
+        }: {
+          where: { type?: string; user?: { email?: { equals: string } } };
+        }) => {
+          const email = where.user?.email?.equals
+            .replace(/\\([\\%_])/g, '$1')
+            .toLowerCase();
+          return Promise.resolve(
+            [...tokens.values()].filter(
+              (token) =>
+                (!where.type || token.type === where.type) &&
+                (!email ||
+                  (
+                    userById(token.userId)?.email as string | undefined
+                  )?.toLowerCase() === email),
+            ),
+          );
+        },
+      ),
       update: jest.fn(
         ({
           where,
@@ -926,8 +1147,14 @@ function createMockPrismaService() {
           return Promise.resolve(null);
         },
       ),
-      deleteMany: jest.fn(() => Promise.resolve({ count: 1 })),
+      deleteMany: jest.fn(({ where }: { where?: Filter } = {}) =>
+        Promise.resolve({ count: deleteMatching(tokens, where) }),
+      ),
     },
+    $queryRaw: jest.fn((_sql: TemplateStringsArray, id: unknown) => {
+      const found = tokenById(id);
+      return Promise.resolve(found ? [{ expiresAt: found[1].expiresAt }] : []);
+    }),
     profile: {
       create: jest.fn(({ data }: { data: Record<string, unknown> }) =>
         Promise.resolve({ id: `profile-${Date.now()}`, ...data }),
@@ -951,13 +1178,11 @@ function createMockPrismaService() {
       ),
     },
     $transaction: jest.fn(
-      (operations: unknown[] | ((prisma: unknown) => Promise<unknown>)) => {
-        if (typeof operations === 'function') {
-          // Interactive transaction - we don't support this in the mock, just resolve
-          return Promise.resolve(undefined);
-        }
-        return Promise.all(operations as Promise<unknown>[]);
-      },
+      (operations: unknown[] | ((tx: unknown) => Promise<unknown>)) =>
+        typeof operations === 'function'
+          ? operations(prisma as unknown)
+          : Promise.all(operations as Promise<unknown>[]),
     ),
   };
+  return prisma;
 }

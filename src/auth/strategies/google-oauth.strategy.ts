@@ -35,7 +35,7 @@ export class GoogleOAuthStrategy extends PassportStrategy(Strategy, 'google') {
       email: emails?.[0]?.value || null,
       name: `${name?.givenName || ''} ${name?.familyName || ''}`.trim() || null,
       avatar: photos?.[0]?.value || null,
-      emailVerified: true,
+      emailVerified: emails?.[0]?.verified === true,
     });
   }
 }

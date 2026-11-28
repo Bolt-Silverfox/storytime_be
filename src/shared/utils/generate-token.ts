@@ -10,8 +10,7 @@ export function generateToken(expiresInHours = 24): {
   expiresAt: Date;
 } {
   const token = generateSecureNumberToken();
-  const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + expiresInHours);
+  const expiresAt = new Date(Date.now() + expiresInHours * 3_600_000);
 
   return { token, expiresAt };
 }
@@ -23,4 +22,19 @@ export function generateToken(expiresInHours = 24): {
 function generateSecureNumberToken(): string {
   const token = crypto.randomInt(100000, 999999);
   return token.toString();
+}
+
+const RESET_CODE_DIGITS = 8;
+
+export function generateResetCode(expiresInHours = 24): {
+  token: string;
+  expiresAt: Date;
+} {
+  const token = crypto
+    .randomInt(0, 10 ** RESET_CODE_DIGITS)
+    .toString()
+    .padStart(RESET_CODE_DIGITS, '0');
+  const expiresAt = new Date(Date.now() + expiresInHours * 3_600_000);
+
+  return { token, expiresAt };
 }

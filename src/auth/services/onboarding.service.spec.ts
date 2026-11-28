@@ -1,3 +1,4 @@
+import { ResourceAlreadyExistsException } from '@/shared/exceptions';
 import { Test, TestingModule } from '@nestjs/testing';
 import { OnboardingService } from './onboarding.service';
 import { NotFoundException } from '@nestjs/common';
@@ -47,6 +48,7 @@ describe('OnboardingService', () => {
   beforeEach(async () => {
     const mockAuthRepository = {
       findUserByEmail: jest.fn(),
+      findUserByEmailIgnoringCase: jest.fn(),
       findUserByIdWithProfile: jest.fn(),
       findUserByIdWithLearningExpectations: jest.fn(),
       findLearningExpectationsByIds: jest.fn(),
@@ -106,8 +108,24 @@ describe('OnboardingService', () => {
   });
 
   describe('register', () => {
+    it('refuses a lowercase sign-up when an account is stored with a mixed-case form of the email', async () => {
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue({
+        ...mockUser,
+        email: 'Test@Example.com',
+      });
+
+      await expect(
+        service.register({
+          fullName: 'Test User',
+          email: 'test@example.com',
+          password: 'password123',
+        }),
+      ).rejects.toThrow(ResourceAlreadyExistsException);
+      expect(authRepository.createUser).not.toHaveBeenCalled();
+    });
+
     it('should register a new user successfully', async () => {
-      authRepository.findUserByEmail.mockResolvedValue(null);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
       passwordService.hashPassword.mockResolvedValue('hashed_password');
       authRepository.createUser.mockResolvedValue(mockUser);
       tokenService.createTokenPair.mockResolvedValue({

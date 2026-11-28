@@ -5,9 +5,15 @@ import {
   UnauthorizedException,
   BadRequestException,
   Inject,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
+import { Prisma } from '@prisma/client';
+import { RedisService } from '@/redis/redis.service';
 import { TokenService } from './token.service';
-import { generateToken } from '@/shared/utils/generate-token';
+import { ResetAttemptCounter } from './reset-attempt-counter';
+import { isTokenExpired } from './token-expiry';
+import { generateResetCode } from '@/shared/utils/generate-token';
 import {
   TokenType,
   RequestResetDto,
@@ -20,16 +26,192 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppEvents, UserPasswordChangedEvent } from '@/shared/events';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 
+const RESET_MAX_FAILED_ATTEMPTS = 5;
+const RESET_MAX_ISSUANCES = 5;
+const RESET_COUNTER_WINDOW_MS = 60 * 60 * 1000;
+const RESET_CODE_LIFETIME_HOURS = 24;
+const RESET_CODE_LIFETIME_MS = RESET_CODE_LIFETIME_HOURS * 60 * 60 * 1000;
+const RESET_CODE_MAX_COLLISION_RETRIES = 5;
+const RESET_REDIS_TIMEOUT_MS = 2000;
+const RESET_UNOWNED_MISS_KEY = 'password-reset:unowned-misses';
+
+const normalizeEmail = (email: string) => email.toLowerCase().trim();
+
 @Injectable()
 export class PasswordService {
   private readonly logger = new Logger(PasswordService.name);
+  private readonly tokenFailures: ResetAttemptCounter;
+  private readonly issuances: ResetAttemptCounter;
 
   constructor(
     @Inject(AUTH_REPOSITORY)
     private readonly authRepository: IAuthRepository,
     private readonly eventEmitter: EventEmitter2,
     private readonly tokenService: TokenService,
-  ) {}
+    private readonly redis: RedisService,
+  ) {
+    this.tokenFailures = new ResetAttemptCounter(
+      redis.client,
+      RESET_CODE_LIFETIME_MS,
+      RESET_REDIS_TIMEOUT_MS,
+    );
+    this.issuances = new ResetAttemptCounter(
+      redis.client,
+      RESET_COUNTER_WINDOW_MS,
+      RESET_REDIS_TIMEOUT_MS,
+    );
+  }
+
+  private tokenFailuresKey(tokenId: string): string {
+    return `password-reset:token-failures:${tokenId}`;
+  }
+
+  private issuanceKey(email: string): string {
+    const digest = createHash('sha256')
+      .update(normalizeEmail(email))
+      .digest('hex');
+    return `password-reset:issued:${digest}`;
+  }
+
+  private unavailable(
+    context: string,
+    error: unknown,
+  ): ServiceUnavailableException {
+    this.logFailure(context, error);
+    return new ServiceUnavailableException(
+      'Password reset is temporarily unavailable. Try again later.',
+    );
+  }
+
+  private async clearTokenFailures(tokenId: string) {
+    try {
+      await this.tokenFailures.clear(this.tokenFailuresKey(tokenId));
+    } catch (error) {
+      this.logFailure('Failed to clear reset attempts', error);
+    }
+  }
+
+  private logFailure(context: string, error: unknown) {
+    const code = (error as { code?: unknown } | null)?.code;
+    const kind =
+      typeof code === 'string'
+        ? code
+        : error instanceof Error
+          ? error.name
+          : typeof error;
+    this.logger.error(`${context} (${kind})`);
+  }
+
+  private async chargeForeignToken(tokenId: string) {
+    const failures = await this.tokenFailures.chargeMiss(
+      this.tokenFailuresKey(tokenId),
+    );
+    if (failures >= RESET_MAX_FAILED_ATTEMPTS) {
+      await this.authRepository.deleteToken(tokenId);
+    }
+  }
+
+  private async chargeOwnedTokens(email: string) {
+    const ownedTokens = await this.authRepository.findTokensByUserEmail(
+      normalizeEmail(email),
+      TokenType.PASSWORD_RESET,
+    );
+    const chargedKeys =
+      ownedTokens.length > 0
+        ? ownedTokens.map((owned) => this.tokenFailuresKey(owned.id))
+        : [RESET_UNOWNED_MISS_KEY];
+    let failures: number[];
+    try {
+      failures = await Promise.all(
+        chargedKeys.map((key) => this.tokenFailures.chargeMiss(key)),
+      );
+    } catch (error) {
+      throw this.unavailable('Failed to count reset attempt', error);
+    }
+    for (const [i, owned] of ownedTokens.entries()) {
+      if (failures[i] >= RESET_MAX_FAILED_ATTEMPTS) {
+        await this.deleteQuietly(owned.id, 'Failed to burn reset code');
+      }
+    }
+  }
+
+  private async deleteQuietly(tokenId: string, context: string) {
+    try {
+      await this.authRepository.deleteToken(tokenId);
+    } catch (error) {
+      this.logFailure(context, error);
+    }
+  }
+
+  private async failuresOf(tokenId: string) {
+    try {
+      return await this.tokenFailures.misses(this.tokenFailuresKey(tokenId));
+    } catch (error) {
+      throw this.unavailable('Failed to read reset attempts', error);
+    }
+  }
+
+  private async findOwnedLiveCode(token: string, email: string) {
+    const resetToken = await this.authRepository.findTokenByHashedToken(
+      this.tokenService.hashToken(token),
+      TokenType.PASSWORD_RESET,
+    );
+    const ownsResetToken =
+      resetToken &&
+      normalizeEmail(resetToken.user.email) === normalizeEmail(email);
+
+    if (ownsResetToken) {
+      const failures = isTokenExpired(resetToken)
+        ? 0
+        : await this.failuresOf(resetToken.id);
+      if (isTokenExpired(resetToken)) {
+        await this.chargeOwnedTokens(email);
+        await this.deleteQuietly(
+          resetToken.id,
+          'Failed to delete expired reset code',
+        );
+        throw new UnauthorizedException('Reset token has expired');
+      }
+      if (failures < RESET_MAX_FAILED_ATTEMPTS) {
+        return resetToken;
+      }
+      await this.deleteQuietly(resetToken.id, 'Failed to burn reset code');
+      throw new NotFoundException('Invalid reset token');
+    }
+
+    try {
+      await this.chargeOwnedTokens(email);
+    } finally {
+      if (resetToken && !ownsResetToken && !isTokenExpired(resetToken)) {
+        this.chargeForeignToken(resetToken.id).catch((error: unknown) =>
+          this.logFailure('Failed to charge reset token owner', error),
+        );
+      }
+    }
+    throw new NotFoundException('Invalid reset token');
+  }
+
+  private async issueResetCode(userId: string): Promise<string> {
+    for (let attempt = 1; ; attempt++) {
+      const { token, expiresAt } = generateResetCode(RESET_CODE_LIFETIME_HOURS);
+      try {
+        await this.authRepository.createToken({
+          userId,
+          token: this.tokenService.hashToken(token),
+          expiresAt,
+          type: TokenType.PASSWORD_RESET,
+        });
+        return token;
+      } catch (error) {
+        const collided =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002';
+        if (!collided || attempt >= RESET_CODE_MAX_COLLISION_RETRIES) {
+          throw error;
+        }
+      }
+    }
+  }
 
   /**
    * Request a password reset - sends reset email to user
@@ -41,9 +223,19 @@ export class PasswordService {
     userAgent?: string,
   ): Promise<{ message: string }> {
     const { email } = data;
-    const user = await this.authRepository.findUserByEmail(email);
+    let issued: number;
+    try {
+      issued = await this.issuances.chargeMiss(this.issuanceKey(email));
+    } catch (error) {
+      throw this.unavailable('Failed to count reset attempt', error);
+    }
+    if (issued > RESET_MAX_ISSUANCES) {
+      return { message: 'Password reset token sent' };
+    }
+
+    const user = await this.authRepository.findUserByEmailIgnoringCase(email);
     if (!user) {
-      throw new NotFoundException('User not found');
+      return { message: 'Password reset token sent' };
     }
 
     // Security: alert the user when a reset is requested from an unfamiliar IP.
@@ -80,14 +272,7 @@ export class PasswordService {
       TokenType.PASSWORD_RESET,
     );
 
-    // Generate new reset token (24 hour expiry)
-    const { token, expiresAt } = generateToken(24);
-    await this.authRepository.createToken({
-      userId: user.id,
-      token: this.tokenService.hashToken(token),
-      expiresAt,
-      type: TokenType.PASSWORD_RESET,
-    });
+    const token = await this.issueResetCode(user.id);
 
     // Emit event for password reset notification (handled by PasswordEventListener)
     this.eventEmitter.emit('password.reset_requested', {
@@ -110,24 +295,7 @@ export class PasswordService {
     email: string,
     data: ValidateResetTokenDto, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
-    const hashedToken = this.tokenService.hashToken(token);
-    const resetToken = await this.authRepository.findTokenByHashedToken(
-      hashedToken,
-      TokenType.PASSWORD_RESET,
-    );
-
-    if (!resetToken) {
-      throw new NotFoundException('Invalid reset token');
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await this.authRepository.deleteToken(resetToken.id);
-      throw new UnauthorizedException('Reset token has expired');
-    }
-
-    if (resetToken.user.email !== email) {
-      throw new UnauthorizedException('Invalid reset token');
-    }
+    await this.findOwnedLiveCode(token, email);
 
     return { message: 'Valid reset token' };
   }
@@ -144,30 +312,17 @@ export class PasswordService {
     ip?: string,
     userAgent?: string,
   ): Promise<{ message: string }> {
-    const hashedToken = this.tokenService.hashToken(token);
-    const resetToken = await this.authRepository.findTokenByHashedToken(
-      hashedToken,
-      TokenType.PASSWORD_RESET,
-    );
-
-    if (!resetToken) {
-      throw new NotFoundException('Invalid reset token');
-    }
-
-    if (resetToken.expiresAt < new Date()) {
-      await this.authRepository.deleteToken(resetToken.id);
-      throw new UnauthorizedException('Reset token has expired');
-    }
-
-    // Hash new password and update user
+    const resetToken = await this.findOwnedLiveCode(token, email);
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await this.authRepository.updateUser(resetToken.userId, {
-      passwordHash: hashedPassword,
+    await this.authRepository.transaction(async (tx) => {
+      if (!(await tx.consumeToken(resetToken.id))) {
+        throw new NotFoundException('Invalid reset token');
+      }
+      await tx.updateUser(resetToken.userId, { passwordHash: hashedPassword });
+      await tx.deleteAllUserSessions(resetToken.userId);
     });
 
-    // Clean up: delete token and invalidate all sessions
-    await this.authRepository.deleteToken(resetToken.id);
-    await this.authRepository.deleteAllUserSessions(resetToken.userId);
+    await this.clearTokenFailures(resetToken.id);
 
     // The reset succeeded with a token delivered to the account's email, so the
     // requester has proven control of the account. Only now is it safe to trust
