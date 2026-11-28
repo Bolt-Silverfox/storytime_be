@@ -242,4 +242,65 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
     await expect(repo.deleteToken(id)).resolves.toBeUndefined();
     expect(await remaining()).toEqual(['rt-2', 'rt-3', 'rt-4']);
   });
+
+  describe('findUserByEmailIgnoringCase', () => {
+    const variants = [
+      {
+        id: 'ci-newer',
+        email: 'ci-case@rt.test',
+        createdAt: new Date(2026, 1, 2),
+      },
+      {
+        id: 'ci-older',
+        email: 'CI-Case@rt.test',
+        createdAt: new Date(2026, 1, 1),
+      },
+      {
+        id: 'ci-mixed',
+        email: 'Mixed.Only@rt.test',
+        createdAt: new Date(2026, 1, 1),
+      },
+      { id: 'ci-wild', email: 'ab@rt.test', createdAt: new Date(2026, 1, 1) },
+    ];
+
+    beforeEach(async () => {
+      await prisma.user.deleteMany({
+        where: { id: { in: variants.map((u) => u.id) } },
+      });
+      await prisma.user.createMany({
+        data: variants.map((u) => ({ ...u, passwordHash: 'x' })),
+      });
+    });
+
+    afterAll(async () => {
+      await prisma.user.deleteMany({
+        where: { id: { in: variants.map((u) => u.id) } },
+      });
+    });
+
+    it('finds an account stored with mixed case from the lowercased email', async () => {
+      expect(
+        (await repo.findUserByEmailIgnoringCase('mixed.only@rt.test'))?.id,
+      ).toBe('ci-mixed');
+    });
+
+    it('prefers the exact stored form when case-only duplicates exist', async () => {
+      expect(
+        (await repo.findUserByEmailIgnoringCase('ci-case@rt.test'))?.id,
+      ).toBe('ci-newer');
+    });
+
+    it('picks the oldest case-only duplicate when none matches exactly', async () => {
+      expect(
+        (await repo.findUserByEmailIgnoringCase('Ci-CASE@rt.test'))?.id,
+      ).toBe('ci-older');
+    });
+
+    it.each(['a_@rt.test', 'a%@rt.test', '%@rt.test'])(
+      'treats %s literally instead of as a pattern',
+      async (email) => {
+        expect(await repo.findUserByEmailIgnoringCase(email)).toBeNull();
+      },
+    );
+  });
 });

@@ -225,7 +225,7 @@ export class PasswordService {
       return { message: 'Password reset token sent' };
     }
 
-    const user = await this.authRepository.findUserByEmail(email);
+    const user = await this.authRepository.findUserByEmailIgnoringCase(email);
     if (!user) {
       throw new NotFoundException('User not found');
     }

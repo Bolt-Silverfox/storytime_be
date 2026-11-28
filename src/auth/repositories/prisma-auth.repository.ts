@@ -35,6 +35,16 @@ export class PrismaAuthRepository implements IAuthRepository {
     return this.prisma.user.findUnique({ where: { email } });
   }
 
+  async findUserByEmailIgnoringCase(email: string): Promise<User | null> {
+    const matches = await this.prisma.user.findMany({
+      where: {
+        email: { equals: escapeLikePattern(email), mode: 'insensitive' },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    return matches.find((user) => user.email === email) ?? matches[0] ?? null;
+  }
+
   async findUserByEmailWithRelations(
     email: string,
   ): Promise<UserWithProfileAvatarAndKidCount | null> {

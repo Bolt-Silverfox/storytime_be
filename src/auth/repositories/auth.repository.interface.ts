@@ -54,6 +54,7 @@ export type LinkableProviderField = 'googleId' | 'appleId';
 export interface IAuthRepository {
   // User operations
   findUserByEmail(email: string): Promise<User | null>;
+  findUserByEmailIgnoringCase(email: string): Promise<User | null>;
   findUserByEmailWithRelations(
     email: string,
   ): Promise<UserWithProfileAvatarAndKidCount | null>;
