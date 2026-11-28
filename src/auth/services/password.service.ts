@@ -157,17 +157,19 @@ export class PasswordService {
       resetToken &&
       normalizeEmail(resetToken.user.email) === normalizeEmail(email);
 
-    if (ownsResetToken && isTokenExpired(resetToken)) {
-      await this.chargeOwnedTokens(email);
-      await this.deleteQuietly(
-        resetToken.id,
-        'Failed to delete expired reset code',
-      );
-      throw new UnauthorizedException('Reset token has expired');
-    }
-
     if (ownsResetToken) {
-      if ((await this.failuresOf(resetToken.id)) < RESET_MAX_FAILED_ATTEMPTS) {
+      const failures = isTokenExpired(resetToken)
+        ? 0
+        : await this.failuresOf(resetToken.id);
+      if (isTokenExpired(resetToken)) {
+        await this.chargeOwnedTokens(email);
+        await this.deleteQuietly(
+          resetToken.id,
+          'Failed to delete expired reset code',
+        );
+        throw new UnauthorizedException('Reset token has expired');
+      }
+      if (failures < RESET_MAX_FAILED_ATTEMPTS) {
         return resetToken;
       }
       await this.deleteQuietly(resetToken.id, 'Failed to burn reset code');
@@ -290,9 +292,7 @@ export class PasswordService {
     email: string,
     data: ValidateResetTokenDto, // eslint-disable-line @typescript-eslint/no-unused-vars
   ): Promise<{ message: string }> {
-    const resetToken = await this.findOwnedLiveCode(token, email);
-
-    await this.clearTokenFailures(resetToken.id);
+    await this.findOwnedLiveCode(token, email);
 
     return { message: 'Valid reset token' };
   }

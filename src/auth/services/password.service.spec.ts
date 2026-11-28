@@ -765,7 +765,7 @@ describe('PasswordService', () => {
       expect(counterKeys()).toHaveLength(1);
     });
 
-    it('clears the counter after a successful validation', async () => {
+    it('keeps the counter after a successful validation, since validating does not consume the code', async () => {
       stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
       await expect(validate('x', 'test@example.com')).rejects.toThrow(
@@ -775,7 +775,10 @@ describe('PasswordService', () => {
 
       await validate('raw-reset-token', 'test@example.com');
 
-      expect(counterKeys()).toHaveLength(0);
+      expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
+        1,
+      );
+      expect(fakeRedis.applied).not.toContain('del');
     });
 
     it('treats an expired token with a wrong email as unknown and keeps the token', async () => {
@@ -884,9 +887,10 @@ describe('PasswordService', () => {
       expect(fakeRedis.applied).not.toContain('del');
     });
 
-    it('keeps a code locked after a lost fifth charge for the rest of the code lifetime, with no further request', async () => {
+    it('keeps a code locked after a lost fifth charge until just before its original expiry, with no further request', async () => {
       jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
       jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      const originalExpiry = new Date(Date.now() + 24 * 3_600_000);
       stubActiveToken();
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
       for (let i = 0; i < 4; i++) {
@@ -907,12 +911,80 @@ describe('PasswordService', () => {
       expect(authRepository.deleteToken).not.toHaveBeenCalled();
 
       fakeRedis.chargeReply = 'ok';
-      await jest.advanceTimersByTimeAsync(23 * 3_600_000);
+      await jest.advanceTimersByTimeAsync(
+        originalExpiry.getTime() - 1000 - Date.now(),
+      );
+      expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
+        5,
+      );
       authRepository.findTokenByHashedToken.mockResolvedValue({
         ...mockResetToken,
-        expiresAt: new Date(Date.now() + 3_600_000),
+        expiresAt: originalExpiry,
       });
 
+      await expect(
+        validate('raw-reset-token', 'test@example.com'),
+      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+    });
+
+    it('rejects a code that expires while its failure count is being read, charging the owner and deleting the code', async () => {
+      jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+      stubActiveToken();
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockResetToken,
+        expiresAt: new Date(Date.now() + 1000),
+      });
+      const evalOnce = fakeRedis.eval;
+      jest
+        .spyOn(fakeRedis, 'eval')
+        .mockImplementationOnce(
+          (...args) =>
+            new Promise((resolve) => {
+              setTimeout(() => resolve(evalOnce(...args)), 1500);
+            }),
+        )
+        .mockImplementation(evalOnce);
+
+      const outcome = validate('raw-reset-token', 'test@example.com').catch(
+        (e: HttpException) => e,
+      );
+      await jest.advanceTimersByTimeAsync(1500);
+
+      expect(await outcome).toEqual(
+        new UnauthorizedException('Reset token has expired'),
+      );
+      expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
+        1,
+      );
+      expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+    });
+
+    it('keeps a cap reached by a concurrent wrong guess when the valid code is validated, so the code stays locked', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.deleteToken.mockRejectedValue(new Error('db down'));
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      fakeRedis.seed('password-reset:token-failures:token-1', 4, 86_400_000);
+      const evalOnce = fakeRedis.eval;
+      jest
+        .spyOn(fakeRedis, 'eval')
+        .mockImplementationOnce(async (...args) => {
+          const read = await evalOnce(...args);
+          fakeRedis.seed(
+            'password-reset:token-failures:token-1',
+            5,
+            86_400_000,
+          );
+          return read;
+        })
+        .mockImplementation(evalOnce);
+
+      await expect(
+        validate('raw-reset-token', 'test@example.com'),
+      ).resolves.toEqual({ message: 'Valid reset token' });
+
+      expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
+        5,
+      );
       await expect(
         validate('raw-reset-token', 'test@example.com'),
       ).rejects.toThrow(new NotFoundException('Invalid reset token'));
@@ -1844,14 +1916,8 @@ describe('PasswordService', () => {
           prior,
         );
       }
-      const cleared = clearFails(w) ? prior : undefined;
       if (entry === 'validate') {
-        return result(
-          200,
-          { message: 'Valid reset token' },
-          left(all),
-          cleared,
-        );
+        return result(200, { message: 'Valid reset token' }, left(all), prior);
       }
       if (raced) return result(404, NOT_FOUND, [foreign], prior);
       if (w.db === 'write-fails' || w.db === 'sessions-fail') {
@@ -1861,7 +1927,7 @@ describe('PasswordService', () => {
         200,
         { message: 'Password has been reset successfully' },
         [foreign],
-        cleared,
+        clearFails(w) ? prior : undefined,
         ['updateUser', 'deleteAllUserSessions'],
       );
     };
