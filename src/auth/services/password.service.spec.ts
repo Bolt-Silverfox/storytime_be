@@ -997,6 +997,82 @@ describe('PasswordService', () => {
         ]);
       });
 
+      const keyOf = (email: string) =>
+        `password-reset:misses:${createHash('sha256').update(email).digest('hex')}`;
+      const guessForeign = () =>
+        service
+          .resetPassword('raw-reset-token', 'other@example.com', 'x', {
+            token: 'raw-reset-token',
+            email: 'other@example.com',
+            newPassword: 'x',
+          })
+          .catch((error: HttpException) => error.getStatus());
+
+      it('revokes a foreign code when its charge pushes the caller over the cap, charging the owner once', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        redis.seed(keyOf('other@example.com'), 4);
+        const evalOnce = redis.eval;
+        jest
+          .spyOn(redis, 'eval')
+          .mockImplementationOnce(async (...args) => {
+            const read = await evalOnce(...args);
+            redis.seed(keyOf('other@example.com'), 5);
+            return read;
+          })
+          .mockImplementation(evalOnce);
+
+        expect(await guessForeign()).toBe(429);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+        expect(redis.failures(keyOf(mockUser.email))).toBe(1);
+      });
+
+      it('revokes a foreign code in a concurrent burst that crosses the caller cap', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        redis.seed(keyOf('other@example.com'), 4);
+
+        const statuses = await Promise.all(
+          Array.from({ length: 3 }, () => guessForeign()),
+        );
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(statuses.sort()).toEqual([404, 429, 429]);
+        expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+      });
+
+      it('keeps an under-cap foreign guess at 404 without revoking the code', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+
+        expect(await guessForeign()).toBe(404);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(authRepository.deleteToken).not.toHaveBeenCalled();
+        expect(redis.failures(keyOf(mockUser.email))).toBe(1);
+      });
+
+      it('revokes the foreign code even when charging its owner fails', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        const errorSpy = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        let calls = 0;
+        jest.spyOn(redis, 'eval').mockImplementation((...args) => {
+          calls++;
+          if (calls === 1) return Promise.resolve('4');
+          if (calls === 2) return Promise.resolve(6);
+          return Promise.reject(new Error('owner charge failed'));
+        });
+
+        expect(await guessForeign()).toBe(429);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Failed to charge reset token owner (Error)',
+        );
+      });
+
       it('logs a failed owner charge without the owner email', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
         authRepository.deleteToken.mockRejectedValue(

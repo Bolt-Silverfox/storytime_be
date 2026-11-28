@@ -140,6 +140,10 @@ export class PasswordService {
   private async revokeForeignCode(token: string, email: string) {
     const presented = await this.findPresentedCode(token);
     if (!presented || this.isOwnedBy(presented, email)) return;
+    await this.chargeOwnerAndRevoke(presented);
+  }
+
+  private async chargeOwnerAndRevoke(presented: TokenWithUser) {
     const [charge, revoke] = await Promise.allSettled([
       this.attempts.recordMiss(this.resetMissesKey(presented.user.email)),
       this.authRepository.deleteToken(presented.id),
@@ -178,16 +182,25 @@ export class PasswordService {
     }
 
     if (!this.isOwnedBy(resetToken, email)) {
+      let verdict: HttpException | undefined;
       try {
-        throw await this.chargedVerdict(
+        verdict = await this.chargedVerdict(
           email,
           new NotFoundException('Invalid reset token'),
         );
+        throw verdict;
       } finally {
-        this.inBackground(
-          this.chargeTokenOwner(resetToken),
-          'Failed to charge reset token owner',
-        );
+        if (verdict?.getStatus() === 429) {
+          this.inBackground(
+            this.chargeOwnerAndRevoke(resetToken),
+            'Failed to revoke presented reset code',
+          );
+        } else {
+          this.inBackground(
+            this.chargeTokenOwner(resetToken),
+            'Failed to charge reset token owner',
+          );
+        }
       }
     }
 
