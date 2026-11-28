@@ -133,5 +133,32 @@ describe('OAuthService', () => {
         'google-123',
       );
     });
+
+    it('looks up and creates the account with the provider email lowercased and trimmed', async () => {
+      googleClient.verifyIdToken.mockResolvedValue({
+        getPayload: () => ({
+          sub: 'google-new',
+          email: ' New.User@Example.COM ',
+          email_verified: true,
+        }),
+      });
+      authRepository.findUserByGoogleId.mockResolvedValue(null);
+      authRepository.findUserByEmail.mockResolvedValue(null);
+      authRepository.createUser.mockResolvedValue(mockUser);
+      authRepository.countKidsByParentId.mockResolvedValue(0);
+      tokenService.createTokenPair.mockResolvedValue({
+        jwt: 'jwt-token',
+        refreshToken: 'refresh-token',
+      });
+
+      await service.loginWithGoogleIdToken('valid-token');
+
+      expect(authRepository.findUserByEmail).toHaveBeenCalledWith(
+        'new.user@example.com',
+      );
+      expect(authRepository.createUser).toHaveBeenCalledWith(
+        expect.objectContaining({ email: 'new.user@example.com' }),
+      );
+    });
   });
 });

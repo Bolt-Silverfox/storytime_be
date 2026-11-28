@@ -65,7 +65,14 @@ export class EmailVerificationService {
     }
 
     if (isTokenExpired(verificationToken)) {
-      await this.authRepository.deleteToken(verificationToken.id);
+      try {
+        await this.authRepository.deleteToken(verificationToken.id);
+      } catch (error) {
+        const kind = error instanceof Error ? error.name : typeof error;
+        this.logger.error(
+          `Failed to delete expired verification token (${kind})`,
+        );
+      }
       throw new TokenExpiredException();
     }
 
