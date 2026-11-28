@@ -1008,6 +1008,25 @@ function createMockPrismaService() {
         }
         return Promise.resolve(null);
       }),
+      findMany: jest.fn(
+        ({
+          where,
+        }: {
+          where: { type?: string; user?: { email?: { equals: string } } };
+        }) => {
+          const email = where.user?.email?.equals.toLowerCase();
+          return Promise.resolve(
+            [...tokens.values()].filter(
+              (token) =>
+                (!where.type || token.type === where.type) &&
+                (!email ||
+                  (
+                    userById(token.userId)?.email as string | undefined
+                  )?.toLowerCase() === email),
+            ),
+          );
+        },
+      ),
       update: jest.fn(
         ({
           where,
