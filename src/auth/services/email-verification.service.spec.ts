@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { EmailVerificationService } from './email-verification.service';
 import { TokenService } from './token.service';
 import {
@@ -339,6 +340,31 @@ describe('EmailVerificationService', () => {
         TokenExpiredException,
       );
       expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+    });
+
+    it('still answers TokenExpiredException when deleting the expired token fails, logging the failure by class only', async () => {
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockTokenRecord,
+        expiresAt: new Date('2020-01-01'),
+      });
+      authRepository.deleteToken.mockRejectedValue(
+        new Error(`db down for ${mockTokenRecord.user.email}`),
+      );
+
+      await expect(service.verifyEmail('expired-token')).rejects.toThrow(
+        TokenExpiredException,
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Failed to delete expired verification token (Error)',
+      );
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+        mockTokenRecord.user.email,
+      );
+      errorSpy.mockRestore();
     });
   });
 });
