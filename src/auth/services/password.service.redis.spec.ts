@@ -266,8 +266,8 @@ d('PasswordService reset attempts against a real Redis', () => {
     expect(tokens.size).toBe(0);
     expect(await validate()).toBe(404);
     const key = counterKey();
-    expect(await admin.ttl(key)).toBeGreaterThan(3500);
-    expect(await admin.ttl(key)).toBeLessThanOrEqual(3600);
+    expect(await admin.ttl(key)).toBeGreaterThan(86_300);
+    expect(await admin.ttl(key)).toBeLessThanOrEqual(86_400);
   });
 
   it('counts every one of twenty concurrent wrong guesses against the code and burns it', async () => {
@@ -289,8 +289,8 @@ d('PasswordService reset attempts against a real Redis', () => {
 
     await guessWrong();
 
-    expect(await admin.pttl(key)).toBeGreaterThan(3_500_000);
-    expect(await admin.pttl(key)).toBeLessThanOrEqual(3_600_000);
+    expect(await admin.pttl(key)).toBeGreaterThan(86_300_000);
+    expect(await admin.pttl(key)).toBeLessThanOrEqual(86_400_000);
   });
 
   it('gives a window left without a TTL an expiry when a valid code reads it', async () => {
@@ -302,8 +302,8 @@ d('PasswordService reset attempts against a real Redis', () => {
 
     expect(await reset()).toBe(500);
 
-    expect(await admin.pttl(key)).toBeGreaterThan(3_500_000);
-    expect(await admin.pttl(key)).toBeLessThanOrEqual(3_600_000);
+    expect(await admin.pttl(key)).toBeGreaterThan(86_300_000);
+    expect(await admin.pttl(key)).toBeLessThanOrEqual(86_400_000);
   });
 
   it('never writes the counter for a valid code whose password write rolls back, so the same code still works', async () => {

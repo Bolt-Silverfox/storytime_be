@@ -803,7 +803,7 @@ describe('PasswordService', () => {
       await expect(validate('x', 'test@example.com')).rejects.toThrow(
         NotFoundException,
       );
-      expect([...fakeRedis.ttls.values()]).toEqual([3_600_000]);
+      expect([...fakeRedis.ttls.values()]).toEqual([86_400_000]);
     });
 
     it('gives a counter with no TTL an expiry on the next attempt', async () => {
@@ -818,7 +818,7 @@ describe('PasswordService', () => {
         NotFoundException,
       );
 
-      expect([...fakeRedis.ttls.values()]).toEqual([3_600_000]);
+      expect([...fakeRedis.ttls.values()]).toEqual([86_400_000]);
     });
 
     it('answers 503 when charging a later owned token fails, keeping the wrong guess already counted', async () => {
@@ -874,6 +874,75 @@ describe('PasswordService', () => {
       await new Promise((resolve) => setImmediate(resolve));
 
       expect(fakeRedis.applied).not.toContain('del');
+    });
+
+    it('keeps a code locked after a lost fifth charge for the rest of the code lifetime, with no further request', async () => {
+      jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+      stubActiveToken();
+      authRepository.findTokenByHashedToken.mockResolvedValue(null);
+      for (let i = 0; i < 4; i++) {
+        await expect(validate(`g${i}`, 'test@example.com')).rejects.toThrow(
+          NotFoundException,
+        );
+      }
+      fakeRedis.chargeReply = 'late';
+
+      const guess = validate('wrong', 'test@example.com').catch(
+        (e: HttpException) => e.getStatus(),
+      );
+      await jest.advanceTimersByTimeAsync(5000);
+      expect(await guess).toBe(503);
+      expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
+        5,
+      );
+      expect(authRepository.deleteToken).not.toHaveBeenCalled();
+
+      fakeRedis.chargeReply = 'ok';
+      await jest.advanceTimersByTimeAsync(23 * 3_600_000);
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockResetToken,
+        expiresAt: new Date(Date.now() + 3_600_000),
+      });
+
+      await expect(
+        validate('raw-reset-token', 'test@example.com'),
+      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+    });
+
+    it('rejects a capped owned code without charging it again, and burns it', async () => {
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      authRepository.findTokensByUserEmail.mockResolvedValue([mockResetToken]);
+      fakeRedis.seed('password-reset:token-failures:token-1', 5);
+
+      await expect(
+        validate('raw-reset-token', 'test@example.com'),
+      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+
+      expect(fakeRedis.applied).not.toContain('charge');
+      expect(fakeRedis.failures('password-reset:token-failures:token-1')).toBe(
+        5,
+      );
+      expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
+    });
+
+    it('queues no foreign-token charge while the client is reconnecting', async () => {
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+      fakeRedis.disconnect();
+
+      await expect(
+        validate('raw-reset-token', 'other@example.com'),
+      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+      fakeRedis.reconnect();
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(fakeRedis.applied).toEqual([]);
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Failed to charge reset token owner (RedisNotReadyError)',
+      );
     });
 
     it('counts every wrong guess in a concurrent burst and burns the code', async () => {
@@ -1391,14 +1460,9 @@ describe('PasswordService', () => {
           ? 'late'
           : 'lost';
     const backgroundLands = (w: World) =>
-      [
-        'up',
-        'late',
-        'offline',
-        'charge-late',
-        'clear-down',
-        'clear-slow',
-      ].includes(w.redis);
+      ['up', 'late', 'charge-late', 'clear-down', 'clear-slow'].includes(
+        w.redis,
+      );
     const clearFails = (w: World) => w.redis.startsWith('clear-');
     const timed = (w: World) =>
       ['slow', 'late', 'charge-slow', 'charge-late', 'clear-slow'].includes(
@@ -1761,7 +1825,14 @@ describe('PasswordService', () => {
           : expired;
       }
       if (!readOk(w)) return result(503, UNAVAILABLE, left(all), prior);
-      if (prior >= 5) return missed(404, NOT_FOUND, !raced);
+      if (prior >= 5) {
+        return result(
+          404,
+          NOT_FOUND,
+          left(all).filter((c) => c !== own),
+          prior,
+        );
+      }
       const cleared = clearFails(w) ? prior : undefined;
       if (entry === 'validate') {
         return result(

@@ -29,6 +29,8 @@ import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
 const RESET_MAX_FAILED_ATTEMPTS = 5;
 const RESET_MAX_ISSUANCES = 5;
 const RESET_COUNTER_WINDOW_MS = 60 * 60 * 1000;
+const RESET_CODE_LIFETIME_HOURS = 24;
+const RESET_CODE_LIFETIME_MS = RESET_CODE_LIFETIME_HOURS * 60 * 60 * 1000;
 const RESET_CODE_MAX_COLLISION_RETRIES = 5;
 const RESET_REDIS_TIMEOUT_MS = 2000;
 
@@ -49,7 +51,7 @@ export class PasswordService {
   ) {
     this.tokenFailures = new ResetAttemptCounter(
       redis.client,
-      RESET_COUNTER_WINDOW_MS,
+      RESET_CODE_LIFETIME_MS,
       RESET_REDIS_TIMEOUT_MS,
     );
     this.issuances = new ResetAttemptCounter(
@@ -100,7 +102,7 @@ export class PasswordService {
   }
 
   private async chargeForeignToken(tokenId: string) {
-    const failures = await this.tokenFailures.recordMiss(
+    const failures = await this.tokenFailures.chargeMiss(
       this.tokenFailuresKey(tokenId),
     );
     if (failures >= RESET_MAX_FAILED_ATTEMPTS) {
@@ -164,11 +166,12 @@ export class PasswordService {
       throw new UnauthorizedException('Reset token has expired');
     }
 
-    if (
-      ownsResetToken &&
-      (await this.failuresOf(resetToken.id)) < RESET_MAX_FAILED_ATTEMPTS
-    ) {
-      return resetToken;
+    if (ownsResetToken) {
+      if ((await this.failuresOf(resetToken.id)) < RESET_MAX_FAILED_ATTEMPTS) {
+        return resetToken;
+      }
+      await this.deleteQuietly(resetToken.id, 'Failed to burn reset code');
+      throw new NotFoundException('Invalid reset token');
     }
 
     try {
@@ -185,7 +188,7 @@ export class PasswordService {
 
   private async issueResetCode(userId: string): Promise<string> {
     for (let attempt = 1; ; attempt++) {
-      const { token, expiresAt } = generateResetCode(24);
+      const { token, expiresAt } = generateResetCode(RESET_CODE_LIFETIME_HOURS);
       try {
         await this.authRepository.createToken({
           userId,
