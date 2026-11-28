@@ -8,6 +8,20 @@ export type ScratchRedisEndpoint = {
   password: string | undefined;
 };
 
+const refuse = (): never => {
+  throw new Error(
+    'Scratch Redis specs need a loopback Redis on a numbered database other than 0',
+  );
+};
+
+const decoded = (value: string) => {
+  try {
+    return decodeURIComponent(value) || undefined;
+  } catch {
+    return refuse();
+  }
+};
+
 export function scratchRedisEndpoint(url: string): ScratchRedisEndpoint {
   let parsed: URL | undefined;
   try {
@@ -24,16 +38,12 @@ export function scratchRedisEndpoint(url: string): ScratchRedisEndpoint {
     parsed.hash === '' &&
     LOOPBACK_HOSTS.has(host) &&
     /^[1-9]\d*$/.test(database);
-  if (!parsed || !isScratch) {
-    throw new Error(
-      'Scratch Redis specs need a loopback Redis on a numbered database other than 0',
-    );
-  }
+  if (!parsed || !isScratch) return refuse();
   return {
     host,
     port: Number(parsed.port || 6379),
     db: Number(database),
-    username: decodeURIComponent(parsed.username) || undefined,
-    password: decodeURIComponent(parsed.password) || undefined,
+    username: decoded(parsed.username),
+    password: decoded(parsed.password),
   };
 }

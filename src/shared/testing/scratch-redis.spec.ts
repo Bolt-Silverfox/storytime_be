@@ -56,6 +56,8 @@ describe('scratchRedisEndpoint', () => {
     ['a socket path option', 'redis://127.0.0.1:6379/3?path=/tmp/other.sock'],
     ['any query option', 'redis://127.0.0.1:6379/3?db=0'],
     ['an unparseable URL', 'not a url'],
+    ['a malformed password encoding', 'redis://:%FF@127.0.0.1:6379/3'],
+    ['a malformed username encoding', 'redis://%E0%A4%A@127.0.0.1:6379/3'],
   ])('refuses %s', (_label, url) => {
     expect(() => scratchRedisEndpoint(url)).toThrow(
       /loopback Redis on a numbered database other than 0/,
