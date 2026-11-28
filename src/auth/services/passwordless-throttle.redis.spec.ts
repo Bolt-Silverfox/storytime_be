@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Redis } from 'ioredis';
 import { PasswordlessThrottleService } from './passwordless-throttle.service';
+import { closeRedisAfter } from '@/shared/testing/close-redis';
 
 const url = process.env.PASSWORDLESS_TEST_REDIS_URL;
 const maybe = url ? describe : describe.skip;
@@ -21,13 +22,11 @@ maybe('PasswordlessThrottleService against real Redis', () => {
     throttle = new PasswordlessThrottleService({ client } as never);
   });
 
-  afterAll(async () => {
-    try {
-      if (used.size) await client.del([...used]);
-    } finally {
-      await client.quit().catch(() => client.disconnect());
-    }
-  });
+  afterAll(() =>
+    closeRedisAfter(client, () =>
+      used.size ? client.del([...used]) : Promise.resolve(),
+    ),
+  );
 
   it('counts hits and expires the window', async () => {
     const key = fixtureKey('hit');
