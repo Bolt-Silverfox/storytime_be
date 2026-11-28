@@ -787,7 +787,7 @@ describe('PasswordlessService', () => {
       ).resolves.toMatchObject({ isNewUser: true });
     });
 
-    it('answers identically for wrong, unknown-email, malformed link, suspended and deleted', async () => {
+    it('answers identically for wrong, unknown-email, unknown link, suspended and deleted', async () => {
       const { service, captured, authRepo } = build();
       await service.request('a@example.com', '1.1.1.1');
       await expectGeneric(
@@ -1862,6 +1862,9 @@ describe('PasswordlessService', () => {
         const errorSpy = quiet();
         const { service, captured, redis, throttle } = build();
         await seedFailedAttempts(throttle, 'target@example.com', 3);
+        (nodeCrypto.randomUUID as jest.Mock).mockReturnValueOnce(
+          'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee',
+        );
         await service.request('target@example.com', '1.1.1.1');
         const { challengeId, code } = captured[0];
         const hdel = jest
