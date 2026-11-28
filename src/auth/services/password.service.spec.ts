@@ -949,6 +949,33 @@ describe('PasswordService', () => {
         );
       });
 
+      it('sends the caller charge before the owner charge, so a slow owner command cannot delay the caller verdict', async () => {
+        authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
+        const keyOf = (email: string) =>
+          `password-reset:misses:${createHash('sha256').update(email).digest('hex')}`;
+        const sent: string[] = [];
+        const evalOnce = redis.eval;
+        jest.spyOn(redis, 'eval').mockImplementation((...args) => {
+          sent.push(args[2]);
+          return evalOnce(...args);
+        });
+
+        await expect(
+          service.resetPassword('raw-reset-token', 'other@example.com', 'x', {
+            token: 'raw-reset-token',
+            email: 'other@example.com',
+            newPassword: 'x',
+          }),
+        ).rejects.toThrow(NotFoundException);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(sent).toEqual([
+          keyOf('other@example.com'),
+          keyOf('other@example.com'),
+          keyOf(mockUser.email),
+        ]);
+      });
+
       it('logs a failed owner charge without the owner email', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
         authRepository.deleteToken.mockRejectedValue(
@@ -989,6 +1016,7 @@ describe('PasswordService', () => {
         const evalOnce = redis.eval;
         jest
           .spyOn(redis, 'eval')
+          .mockImplementationOnce(evalOnce)
           .mockImplementationOnce(evalOnce)
           .mockImplementationOnce(() => new Promise(() => undefined))
           .mockImplementation(evalOnce);
@@ -1673,11 +1701,12 @@ describe('PasswordService', () => {
         const evalOnce = redis.eval;
         jest
           .spyOn(redis, 'eval')
-          .mockImplementationOnce(evalOnce)
           .mockImplementationOnce((...args) => {
+            const read = evalOnce(...args);
             redis.disconnect();
-            return evalOnce(...args);
-          });
+            return read;
+          })
+          .mockImplementation(evalOnce);
 
         const status = await statusOf(
           call('validate', codeFor['foreign-live'], 'a@example.com'),

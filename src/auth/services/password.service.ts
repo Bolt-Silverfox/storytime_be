@@ -178,14 +178,17 @@ export class PasswordService {
     }
 
     if (!this.isOwnedBy(resetToken, email)) {
-      this.inBackground(
-        this.chargeTokenOwner(resetToken),
-        'Failed to charge reset token owner',
-      );
-      throw await this.chargedVerdict(
-        email,
-        new NotFoundException('Invalid reset token'),
-      );
+      try {
+        throw await this.chargedVerdict(
+          email,
+          new NotFoundException('Invalid reset token'),
+        );
+      } finally {
+        this.inBackground(
+          this.chargeTokenOwner(resetToken),
+          'Failed to charge reset token owner',
+        );
+      }
     }
 
     if (isTokenExpired(resetToken)) {
