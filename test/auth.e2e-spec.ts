@@ -852,6 +852,13 @@ function createMockPrismaService() {
           return Promise.resolve(null);
         },
       ),
+      findMany: jest.fn(
+        ({ where }: { where: { email: { equals: string } } }) => {
+          const email = where.email.equals.replace(/\\([\\%_])/g, '$1');
+          const user = users.get(email.toLowerCase());
+          return Promise.resolve(user ? [user] : []);
+        },
+      ),
       findFirst: jest.fn(({ where }: { where: { email?: string } }) => {
         if (where.email) {
           return Promise.resolve(users.get(where.email.toLowerCase()) || null);

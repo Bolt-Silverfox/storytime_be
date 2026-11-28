@@ -169,7 +169,8 @@ export class OAuthService {
 
     // 2. Try find by email
     if (!user) {
-      const existing = await this.authRepository.findUserByEmail(email);
+      const existing =
+        await this.authRepository.findUserByEmailIgnoringCase(email);
 
       if (existing) {
         if (emailVerified !== true) {

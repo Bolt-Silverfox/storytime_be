@@ -23,6 +23,8 @@ import {
   UserLinkedAccountInfo,
 } from './auth.repository.interface';
 
+const escapeLikePattern = (value: string) => value.replace(/[\\%_]/g, '\\$&');
+
 @Injectable()
 export class PrismaAuthRepository implements IAuthRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -31,6 +33,16 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async findUserByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email } });
+  }
+
+  async findUserByEmailIgnoringCase(email: string): Promise<User | null> {
+    const matches = await this.prisma.user.findMany({
+      where: {
+        email: { equals: escapeLikePattern(email), mode: 'insensitive' },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    return matches.find((user) => user.email === email) ?? matches[0] ?? null;
   }
 
   async findUserByEmailWithRelations(

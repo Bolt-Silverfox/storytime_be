@@ -217,7 +217,7 @@ export class PasswordService {
     userAgent?: string,
   ): Promise<{ message: string }> {
     const { email } = data;
-    const user = await this.authRepository.findUserByEmail(email);
+    const user = await this.authRepository.findUserByEmailIgnoringCase(email);
     if (!user) {
       throw new NotFoundException('User not found');
     }

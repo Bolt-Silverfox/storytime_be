@@ -74,6 +74,7 @@ describe('PasswordService', () => {
 
     const mockAuthRepository: Partial<jest.Mocked<IAuthRepository>> = {
       findUserByEmail: jest.fn(),
+      findUserByEmailIgnoringCase: jest.fn(),
       findUserById: jest.fn(),
       deleteUserTokensByType: jest.fn(),
       createToken: jest.fn(),
@@ -129,9 +130,24 @@ describe('PasswordService', () => {
   });
 
   describe('requestPasswordReset', () => {
+    it('issues a code to an account stored with a mixed-case form of the email', async () => {
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue({
+        ...mockUser,
+        email: 'Test@Example.com',
+      });
+      authRepository.createToken.mockResolvedValue(makeToken());
+
+      await expect(
+        service.requestPasswordReset({ email: 'test@example.com' }),
+      ).resolves.toEqual({ message: 'Password reset token sent' });
+      expect(authRepository.createToken).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: mockUser.id }),
+      );
+    });
+
     it('should create reset token and emit event for existing user', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
       authRepository.createToken.mockResolvedValue(makeToken());
 
@@ -142,7 +158,7 @@ describe('PasswordService', () => {
 
       // Assert
       expect(result).toEqual({ message: 'Password reset token sent' });
-      expect(authRepository.findUserByEmail).toHaveBeenCalledWith(
+      expect(authRepository.findUserByEmailIgnoringCase).toHaveBeenCalledWith(
         'test@example.com',
       );
       expect(authRepository.deleteUserTokensByType).toHaveBeenCalledWith(
@@ -167,7 +183,7 @@ describe('PasswordService', () => {
 
     it('should throw NotFoundException when user is not found', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(null);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
 
       // Act & Assert
       await expect(
@@ -177,7 +193,7 @@ describe('PasswordService', () => {
 
     it('should alert but NOT record IP when reset requested from an unfamiliar IP', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       authRepository.findKnownUserIP.mockResolvedValue(null);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
       authRepository.createToken.mockResolvedValue(makeToken());
@@ -209,7 +225,7 @@ describe('PasswordService', () => {
 
     it('should touch a known IP and not alert on a familiar IP', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       authRepository.findKnownUserIP.mockResolvedValue(
         makeUserIP({ ipAddress: '203.0.113.5' }),
       );
@@ -235,7 +251,7 @@ describe('PasswordService', () => {
 
     it('should still reset when the IP check throws', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       authRepository.findKnownUserIP.mockRejectedValue(new Error('db down'));
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
       authRepository.createToken.mockResolvedValue(makeToken());
@@ -258,7 +274,7 @@ describe('PasswordService', () => {
 
     it('should skip the IP check entirely when no IP is provided', async () => {
       // Arrange
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
       authRepository.createToken.mockResolvedValue(makeToken());
 
@@ -274,7 +290,7 @@ describe('PasswordService', () => {
     it('should delete existing reset tokens before creating new one', async () => {
       // Arrange
       const callOrder: string[] = [];
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       authRepository.deleteUserTokensByType.mockImplementation(() => {
         callOrder.push('deleteTokens');
         return Promise.resolve();
@@ -370,7 +386,7 @@ describe('PasswordService', () => {
 
     it('charges rotating-email guesses to the token owner and locks them out at the cap', async () => {
       authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       for (let i = 0; i < 5; i++) {
         await expect(
           service.validateResetToken('raw-reset-token', `t${i}@example.com`, {
@@ -514,7 +530,7 @@ describe('PasswordService', () => {
 
     it('does not tell the caller a fresh code unlocks them', async () => {
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       for (let i = 0; i < 5; i++) {
         await expect(
           service.validateResetToken('x', 'test@example.com', {
@@ -533,7 +549,7 @@ describe('PasswordService', () => {
 
     it('locks out after 5 failed guesses, even for the correct token', async () => {
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       for (let i = 0; i < 5; i++) {
         await expect(
           service.validateResetToken(`guess-${i}`, 'test@example.com', {
@@ -838,7 +854,7 @@ describe('PasswordService', () => {
 
       it('locks out after 5 failed guesses, even for the correct token, and keeps that code for after the lockout', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
         for (let i = 0; i < 5; i++) {
           await expect(attempt(`guess-${i}`)).rejects.toThrow(
             NotFoundException,
@@ -858,7 +874,7 @@ describe('PasswordService', () => {
 
       it('charges a mismatched-email guess against the token owner, so rotating emails cannot evade the cap', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
         for (let i = 0; i < 5; i++) {
           await expect(
             service.resetPassword(
@@ -882,7 +898,7 @@ describe('PasswordService', () => {
 
       it('revokes only the presented code once mismatched emails exceed the owner cap', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
         for (let i = 0; i < 5; i++) {
           await expect(
             service.resetPassword('raw-reset-token', `r${i}@example.com`, 'x', {
@@ -920,7 +936,7 @@ describe('PasswordService', () => {
         const expected = await unknownToken();
         redis.reset();
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
         for (let i = 0; i < 5; i++) {
           await service
             .resetPassword('raw-reset-token', `r${i}@example.com`, 'x', {
@@ -1073,7 +1089,7 @@ describe('PasswordService', () => {
 
       it('lets concurrent guesses through at most 5 times', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
 
         const results = await Promise.allSettled(
           Array.from({ length: 20 }, (_, i) => attempt(`guess-${i}`)),
@@ -1120,7 +1136,7 @@ describe('PasswordService', () => {
 
       it('clears the counter after a successful reset', async () => {
         authRepository.findTokenByHashedToken.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
         for (let i = 0; i < 4; i++) {
           await expect(attempt(`guess-${i}`)).rejects.toThrow(
             NotFoundException,
@@ -1280,7 +1296,7 @@ describe('PasswordService', () => {
         record('bcrypt.hash', () => Promise.resolve('hashed-password')),
       );
       tokenService.hashToken.mockImplementation((code: string) => `h:${code}`);
-      authRepository.findUserByEmail.mockImplementation(
+      authRepository.findUserByEmailIgnoringCase.mockImplementation(
         record('findUserByEmail', (email: string) =>
           Promise.resolve(users.find((u) => u.email === email) ?? null),
         ),

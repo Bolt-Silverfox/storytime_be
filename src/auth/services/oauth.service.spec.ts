@@ -51,6 +51,7 @@ describe('OAuthService', () => {
       findUserByGoogleId: jest.fn(),
       findUserByAppleId: jest.fn(),
       findUserByEmail: jest.fn(),
+      findUserByEmailIgnoringCase: jest.fn(),
       updateUser: jest.fn(),
       updateUserWithRelations: jest.fn(),
       createUser: jest.fn(),
@@ -145,7 +146,7 @@ describe('OAuthService', () => {
         }),
       });
       authRepository.findUserByGoogleId.mockResolvedValue(null);
-      authRepository.findUserByEmail.mockResolvedValue(null);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
       authRepository.createUser.mockResolvedValue(mockUser);
       authRepository.countKidsByParentId.mockResolvedValue(0);
       tokenService.createTokenPair.mockResolvedValue({
@@ -155,7 +156,7 @@ describe('OAuthService', () => {
 
       await service.loginWithGoogleIdToken('valid-token');
 
-      expect(authRepository.findUserByEmail).toHaveBeenCalledWith(
+      expect(authRepository.findUserByEmailIgnoringCase).toHaveBeenCalledWith(
         'new.user@example.com',
       );
       expect(authRepository.createUser).toHaveBeenCalledWith(
@@ -177,7 +178,7 @@ describe('OAuthService', () => {
           }),
         });
         authRepository.findUserByGoogleId.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
 
         await expect(
           service.loginWithGoogleIdToken('valid-token'),
@@ -197,7 +198,7 @@ describe('OAuthService', () => {
         }),
       });
       authRepository.findUserByGoogleId.mockResolvedValue(null);
-      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
       authRepository.updateUserWithRelations.mockResolvedValue(mockUser);
       authRepository.countKidsByParentId.mockResolvedValue(0);
       tokenService.createTokenPair.mockResolvedValue({
@@ -214,6 +215,43 @@ describe('OAuthService', () => {
     });
   });
 
+  describe('accounts stored with mixed-case emails', () => {
+    it('links the existing mixed-case account instead of creating a lowercase duplicate', async () => {
+      const stored = { ...mockUser, email: 'Mixed.Case@Example.com' };
+      googleClient.verifyIdToken.mockResolvedValue({
+        getPayload: () => ({
+          sub: 'google-owner',
+          email: 'mixed.case@example.com',
+          email_verified: true,
+        }),
+      });
+      authRepository.findUserByGoogleId.mockResolvedValue(null);
+      authRepository.findUserByEmail.mockImplementation((email: string) =>
+        Promise.resolve(email === stored.email ? stored : null),
+      );
+      authRepository.findUserByEmailIgnoringCase.mockImplementation(
+        (email: string) =>
+          Promise.resolve(
+            email.toLowerCase() === stored.email.toLowerCase() ? stored : null,
+          ),
+      );
+      authRepository.updateUserWithRelations.mockResolvedValue(stored);
+      authRepository.countKidsByParentId.mockResolvedValue(0);
+      tokenService.createTokenPair.mockResolvedValue({
+        jwt: 'jwt-token',
+        refreshToken: 'refresh-token',
+      });
+
+      await service.loginWithGoogleIdToken('valid-token');
+
+      expect(authRepository.updateUserWithRelations).toHaveBeenCalledWith(
+        stored.id,
+        expect.objectContaining({ googleId: 'google-owner' }),
+      );
+      expect(authRepository.createUser).not.toHaveBeenCalled();
+    });
+  });
+
   describe('loginWithAppleIdToken', () => {
     it.each([
       { label: "'false'", claim: 'false' },
@@ -227,7 +265,7 @@ describe('OAuthService', () => {
           email_verified: claim,
         });
         authRepository.findUserByAppleId.mockResolvedValue(null);
-        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+        authRepository.findUserByEmailIgnoringCase.mockResolvedValue(mockUser);
 
         await expect(
           service.loginWithAppleIdToken('valid-token'),
