@@ -1836,6 +1836,41 @@ describe('PasswordService', () => {
       expect(result.followUp).toBe(200);
     });
 
+    it('sends no counter clear while the client is reconnecting, so a stale delete cannot erase a newer count', async () => {
+      jest.useFakeTimers({ now: NOW, doNotFake: ['setImmediate', 'nextTick'] });
+      try {
+        jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        const evalOnce = redis.eval;
+        jest
+          .spyOn(redis, 'eval')
+          .mockImplementationOnce((...args) => {
+            const read = evalOnce(...args);
+            redis.disconnect();
+            return read;
+          })
+          .mockImplementation(evalOnce);
+
+        const pending = statusOf(
+          call('reset', codeFor['own-live'], 'a@example.com'),
+        );
+        await flush();
+        await jest.advanceTimersByTimeAsync(5000);
+        const status = await pending;
+        redis.seed(counterKey('a@example.com'), 3);
+        redis.reconnect();
+        await flush();
+
+        expect(status).toBe(200);
+        expect(committed).toEqual(['updateUser', 'deleteAllUserSessions']);
+        expect(redis.applied).not.toContain('del');
+        expect(redis.failures(counterKey('a@example.com'))).toBe(3);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it('keeps the background owner charge for a foreign code when the link drops before the caller is charged', async () => {
       jest.useFakeTimers({ now: NOW, doNotFake: ['setImmediate', 'nextTick'] });
       try {
