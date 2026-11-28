@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OAuthService } from './oauth.service';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
+import appleSigninAuth from 'apple-signin-auth';
 import { TokenService } from './token.service';
 import { PasswordService } from './password.service';
 import {
@@ -51,6 +52,7 @@ describe('OAuthService', () => {
       findUserByAppleId: jest.fn(),
       findUserByEmail: jest.fn(),
       updateUser: jest.fn(),
+      updateUserWithRelations: jest.fn(),
       createUser: jest.fn(),
       findAvatarByUrl: jest.fn(),
       createAvatar: jest.fn(),
@@ -160,5 +162,79 @@ describe('OAuthService', () => {
         expect.objectContaining({ email: 'new.user@example.com' }),
       );
     });
+
+    it.each([
+      { label: 'false', claim: false },
+      { label: 'missing', claim: undefined },
+    ])(
+      'refuses to link an existing account when Google reports the email as $label',
+      async ({ claim }) => {
+        googleClient.verifyIdToken.mockResolvedValue({
+          getPayload: () => ({
+            sub: 'google-attacker',
+            email: 'Test@Example.com',
+            email_verified: claim,
+          }),
+        });
+        authRepository.findUserByGoogleId.mockResolvedValue(null);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+
+        await expect(
+          service.loginWithGoogleIdToken('valid-token'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+        expect(authRepository.createUser).not.toHaveBeenCalled();
+        expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      },
+    );
+
+    it('links an existing account when Google reports the email as verified', async () => {
+      googleClient.verifyIdToken.mockResolvedValue({
+        getPayload: () => ({
+          sub: 'google-owner',
+          email: 'test@example.com',
+          email_verified: true,
+        }),
+      });
+      authRepository.findUserByGoogleId.mockResolvedValue(null);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.updateUserWithRelations.mockResolvedValue(mockUser);
+      authRepository.countKidsByParentId.mockResolvedValue(0);
+      tokenService.createTokenPair.mockResolvedValue({
+        jwt: 'jwt-token',
+        refreshToken: 'refresh-token',
+      });
+
+      await service.loginWithGoogleIdToken('valid-token');
+
+      expect(authRepository.updateUserWithRelations).toHaveBeenCalledWith(
+        mockUser.id,
+        expect.objectContaining({ googleId: 'google-owner' }),
+      );
+    });
+  });
+
+  describe('loginWithAppleIdToken', () => {
+    it.each([
+      { label: "'false'", claim: 'false' },
+      { label: 'missing', claim: undefined },
+    ])(
+      'refuses to link an existing account when Apple reports the email as $label',
+      async ({ claim }) => {
+        (appleSigninAuth.verifyIdToken as jest.Mock).mockResolvedValue({
+          sub: 'apple-attacker',
+          email: 'test@example.com',
+          email_verified: claim,
+        });
+        authRepository.findUserByAppleId.mockResolvedValue(null);
+        authRepository.findUserByEmail.mockResolvedValue(mockUser);
+
+        await expect(
+          service.loginWithAppleIdToken('valid-token'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+        expect(authRepository.updateUserWithRelations).not.toHaveBeenCalled();
+        expect(tokenService.createTokenPair).not.toHaveBeenCalled();
+      },
+    );
   });
 });
