@@ -612,9 +612,13 @@ describe('PasswordService', () => {
     const validate = (token: string, email: string) =>
       service.validateResetToken(token, email, { token, email });
 
-    const stubActiveToken = (id = 'token-1') => {
+    const stubActiveToken = (id = 'token-1', expiresAt?: Date) => {
       authRepository.findTokensByUserEmail.mockResolvedValue([
-        makeToken({ id, type: TokenType.PASSWORD_RESET }),
+        makeToken({
+          id,
+          type: TokenType.PASSWORD_RESET,
+          ...(expiresAt && { expiresAt }),
+        }),
       ]);
     };
 
@@ -887,11 +891,30 @@ describe('PasswordService', () => {
       expect(fakeRedis.applied).not.toContain('del');
     });
 
+    it('charges no counter for an expired code owned by another account', async () => {
+      authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
+      authRepository.findTokenByHashedToken.mockResolvedValue({
+        ...mockResetToken,
+        id: 'foreign-old',
+        expiresAt: new Date('2020-01-01'),
+      });
+
+      await expect(
+        validate('raw-reset-token', 'other@example.com'),
+      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(
+        fakeRedis.failures('password-reset:token-failures:foreign-old'),
+      ).toBeUndefined();
+      expect(fakeRedis.applied).not.toContain('charge');
+    });
+
     it('keeps a code locked after a lost fifth charge until just before its original expiry, with no further request', async () => {
       jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
       jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       const originalExpiry = new Date(Date.now() + 24 * 3_600_000);
-      stubActiveToken();
+      stubActiveToken('token-1', originalExpiry);
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
       for (let i = 0; i < 4; i++) {
         await expect(validate(`g${i}`, 'test@example.com')).rejects.toThrow(
@@ -929,10 +952,11 @@ describe('PasswordService', () => {
 
     it('rejects a code that expires while its failure count is being read, charging the owner and deleting the code', async () => {
       jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
-      stubActiveToken();
+      const expiresAt = new Date(Date.now() + 1000);
+      stubActiveToken('token-1', expiresAt);
       authRepository.findTokenByHashedToken.mockResolvedValue({
         ...mockResetToken,
-        expiresAt: new Date(Date.now() + 1000),
+        expiresAt,
       });
       const evalOnce = fakeRedis.eval;
       jest
@@ -1853,7 +1877,9 @@ describe('PasswordService', () => {
       const left = (codes: string[]) =>
         raced ? codes.filter((c) => c !== presentedCode) : codes;
       const foreignFailures =
-        isForeign && w.db !== 'lookup-fails' && backgroundLands(w)
+        presented === 'foreign-live' &&
+        w.db !== 'lookup-fails' &&
+        backgroundLands(w)
           ? 1
           : undefined;
       const result = (
