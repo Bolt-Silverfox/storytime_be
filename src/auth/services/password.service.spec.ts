@@ -325,9 +325,9 @@ describe('PasswordService', () => {
       it('does not reveal whether the email exists once over the cap', async () => {
         authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
         for (let i = 0; i < 5; i++) {
-          await expect(request('ghost@example.com')).rejects.toThrow(
-            NotFoundException,
-          );
+          await expect(request('ghost@example.com')).resolves.toEqual({
+            message: 'Password reset token sent',
+          });
         }
 
         authRepository.findUserByEmailIgnoringCase.mockClear();
@@ -409,14 +409,22 @@ describe('PasswordService', () => {
       });
     });
 
-    it('should throw NotFoundException when user is not found', async () => {
-      // Arrange
+    it('answers an unknown email exactly like a known one, issuing nothing and logging no email', async () => {
+      const spies = (['log', 'error', 'warn', 'debug'] as const).map((level) =>
+        jest.spyOn(Logger.prototype, level).mockImplementation(() => undefined),
+      );
       authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
 
-      // Act & Assert
       await expect(
         service.requestPasswordReset({ email: 'nonexistent@example.com' }),
-      ).rejects.toThrow(NotFoundException);
+      ).resolves.toEqual({ message: 'Password reset token sent' });
+
+      expect(authRepository.createToken).not.toHaveBeenCalled();
+      expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+      expect(JSON.stringify(spies.map((spy) => spy.mock.calls))).not.toContain(
+        'nonexistent@example.com',
+      );
     });
 
     it('should alert but NOT record IP when reset requested from an unfamiliar IP', async () => {
@@ -1387,6 +1395,9 @@ describe('PasswordService', () => {
             ),
         ).toBe(true);
         expect(authRepository.updateUser).toHaveBeenCalledTimes(1);
+        expect(fakeRedis.applied.filter((op) => op === 'charge')).toHaveLength(
+          20,
+        );
       });
 
       it('clears the counter after a successful reset', async () => {

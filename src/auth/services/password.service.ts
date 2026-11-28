@@ -230,7 +230,7 @@ export class PasswordService {
 
     const user = await this.authRepository.findUserByEmailIgnoringCase(email);
     if (!user) {
-      throw new NotFoundException('User not found');
+      return { message: 'Password reset token sent' };
     }
 
     // Security: alert the user when a reset is requested from an unfamiliar IP.
