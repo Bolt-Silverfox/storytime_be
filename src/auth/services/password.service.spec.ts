@@ -1882,6 +1882,30 @@ describe('PasswordService', () => {
       },
     );
 
+    it('keeps a wrong guess whose charge reply is lost: Redis counted it once, the caller gets 503, and the fifth such miss locks the code like any other', async () => {
+      const result = await run('validate', 'a@example.com', 'unknown', 'last', {
+        redis: 'charge-late',
+        db: 'ok',
+      });
+
+      expect(result.status).toBe(503);
+      expect(result.applied.filter((op) => op === 'charge')).toHaveLength(1);
+      expect(result.ownFailures).toBe(5);
+      expect(result.followUp).toBe(404);
+    });
+
+    it('never writes the counter for a valid code, so a lost reply cannot lock out a valid code', async () => {
+      const result = await run('reset', 'a@example.com', 'own-live', 'last', {
+        redis: 'charge-late',
+        db: 'write-fails',
+      });
+
+      expect(result.status).toBe(500);
+      expect(result.applied).toEqual(['read']);
+      expect(result.ownFailures).toBe(4);
+      expect(result.followUp).toBe(200);
+    });
+
     it('sends no counter command while the client is reconnecting, so nothing replays on reconnect', async () => {
       const result = await run('reset', 'a@example.com', 'unknown', 'last', {
         ...HEALTHY,

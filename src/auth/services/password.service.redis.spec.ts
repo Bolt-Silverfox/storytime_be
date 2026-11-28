@@ -12,7 +12,10 @@ import {
 } from '../repositories';
 import { makeToken, makeUser } from '@/shared/testing/prisma-fixtures';
 import { TokenType } from '../dto/auth.dto';
-import { assertScratchRedisUrl } from '@/shared/testing/scratch-redis';
+import {
+  ScratchRedisEndpoint,
+  scratchRedisEndpoint,
+} from '@/shared/testing/scratch-redis';
 
 jest.mock('bcryptjs', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
@@ -75,21 +78,27 @@ d('PasswordService reset attempts against a real Redis', () => {
   const runId = `${process.pid}-${Date.now()}`;
   const unrelatedKey = `unrelated:${runId}`;
   let testNumber = 0;
+  let endpoint: ScratchRedisEndpoint;
 
   beforeAll(async () => {
-    assertScratchRedisUrl(url!);
-    admin = new Redis(url!);
+    endpoint = scratchRedisEndpoint(url!);
+    admin = new Redis({ ...endpoint, commandTimeout: 2000 });
     await admin.set(unrelatedKey, 'kept', 'EX', 600);
   });
 
   afterAll(async () => {
-    await admin.del(unrelatedKey);
-    await admin.quit();
+    if (!admin) return;
+    try {
+      await admin.del(unrelatedKey);
+    } finally {
+      admin.disconnect();
+    }
   });
 
   beforeEach(async () => {
     tokenId = `tok-${runId}-${++testNumber}`;
-    client = new Redis(url!, {
+    client = new Redis({
+      ...endpoint,
       enableOfflineQueue: true,
       maxRetriesPerRequest: null,
       retryStrategy: () => 2500,
@@ -158,14 +167,13 @@ d('PasswordService reset attempts against a real Redis', () => {
   });
 
   const replyProxy = async () => {
-    const upstream = new URL(url!);
     const sockets: Socket[] = [];
     const held: Array<() => void> = [];
     const state = {
       mode: 'passed' as 'passed' | 'held' | 'dropped',
     };
     const proxy: Server = createServer((downstream) => {
-      const server = connect(Number(upstream.port || 6379), upstream.hostname);
+      const server = connect(endpoint.port, endpoint.host);
       sockets.push(downstream, server);
       downstream.on('data', (chunk) => server.write(chunk));
       server.on('data', (chunk) => {
@@ -189,9 +197,9 @@ d('PasswordService reset attempts against a real Redis', () => {
     const proxied = new Redis({
       host: '127.0.0.1',
       port,
-      username: decodeURIComponent(upstream.username) || undefined,
-      password: decodeURIComponent(upstream.password) || undefined,
-      db: Number(upstream.pathname.slice(1) || 0),
+      username: endpoint.username,
+      password: endpoint.password,
+      db: endpoint.db,
       enableOfflineQueue: true,
       maxRetriesPerRequest: null,
       retryStrategy: () => 300,
