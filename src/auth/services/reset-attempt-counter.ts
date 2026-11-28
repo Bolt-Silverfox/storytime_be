@@ -42,10 +42,6 @@ export class ResetAttemptCounter {
 
   async chargeMiss(key: string): Promise<number> {
     this.assertReady();
-    return await this.recordMiss(key);
-  }
-
-  async recordMiss(key: string): Promise<number> {
     const misses = await withHealthTimeout(
       this.client.eval(COUNT_MISS, 1, key, String(this.windowMs)),
       this.timeoutMs,
