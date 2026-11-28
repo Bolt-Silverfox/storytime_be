@@ -161,7 +161,10 @@ d('PrismaAuthRepository reset tokens (scratch DB)', () => {
       })
       .then(
         () => 'committed',
-        (error: Error) => error.message,
+        (error: Error) => {
+          firstClaimFailed(error);
+          return error.message;
+        },
       );
     let second: Promise<boolean | Error> | undefined;
     try {
