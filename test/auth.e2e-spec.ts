@@ -17,7 +17,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { EventEmitterModule } from '@nestjs/event-emitter';
+import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
 import { SuccessResponseInterceptor } from '../src/shared/interceptors/success-response.interceptor';
 import { HttpExceptionFilter } from '../src/shared/filters/http-exception.filter';
 import { PrismaExceptionFilter } from '../src/shared/filters/prisma-exception.filter';
@@ -638,13 +638,35 @@ describe('Authentication (e2e)', () => {
     it('invalidates the earlier reset code when a new one is issued', async () => {
       const email = 'e2e-reissue@example.com';
       await registerUser(email);
-      seedToken(email, '87654321', TokenType.PASSWORD_RESET);
+      const user = seedToken(email, '87654321', TokenType.PASSWORD_RESET);
+      const issued: string[] = [];
+      const capture = ({ resetToken }: { resetToken: string }) =>
+        issued.push(resetToken);
+      const events = app.get(EventEmitter2);
+      events.on('password.reset_requested', capture);
 
       const res = await request(server)
         .post('/api/v1/auth/request-password-reset')
         .send({ email });
+      events.off('password.reset_requested', capture);
 
       expectSuccessResponse(res, 200);
+      expect(issued).toHaveLength(1);
+      expect(issued[0]).not.toBe('87654321');
+      expect(
+        mockState.tokens.get(
+          createHash('sha256').update(issued[0]).digest('hex'),
+        ),
+      ).toEqual(
+        expect.objectContaining({
+          userId: user.id,
+          type: TokenType.PASSWORD_RESET,
+        }),
+      );
+      const replacement = await request(server)
+        .post('/api/v1/auth/validate-reset-token')
+        .send({ token: issued[0], email });
+      expectSuccessResponse(replacement, 201);
       expect(
         mockState.tokens.has(
           createHash('sha256').update('87654321').digest('hex'),
@@ -733,6 +755,24 @@ describe('Authentication (e2e)', () => {
 
       expectSuccessResponse(res, 200);
       expect(userSessions()).toHaveLength(0);
+    });
+
+    it('burns the code of an email with LIKE wildcards after five wrong guesses', async () => {
+      const email = 'first_last%x@example.com';
+      await registerUser(email);
+      seedToken(email, '34567890', TokenType.PASSWORD_RESET);
+
+      for (let i = 0; i < 5; i++) {
+        const miss = await request(server)
+          .post('/api/v1/auth/validate-reset-token')
+          .send({ token: `0000000${i}`, email });
+        expect(miss.status).toBe(404);
+      }
+      const valid = await request(server)
+        .post('/api/v1/auth/validate-reset-token')
+        .send({ token: '34567890', email });
+
+      expect(valid.status).toBe(404);
     });
 
     it('should reject reset with weak password', async () => {
@@ -1075,7 +1115,9 @@ function createMockPrismaService() {
         }: {
           where: { type?: string; user?: { email?: { equals: string } } };
         }) => {
-          const email = where.user?.email?.equals.toLowerCase();
+          const email = where.user?.email?.equals
+            .replace(/\\([\\%_])/g, '$1')
+            .toLowerCase();
           return Promise.resolve(
             [...tokens.values()].filter(
               (token) =>
