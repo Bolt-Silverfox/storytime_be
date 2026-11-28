@@ -4,6 +4,7 @@ import {
   buildSentryOptions,
   scrubSentryBreadcrumb,
 } from './sentry-scrub';
+import { growthRatio } from '../test/linear-growth';
 
 const PW = 'SENT_UIPASS';
 const USER = 'SENT_UIUSER';
@@ -214,24 +215,29 @@ describe.each([
 );
 
 describe('userinfo scrubbing stays linear', () => {
-  const INPUTS: Array<[string, string]> = [
-    ['scheme-like run without separator', 'a.'.repeat(9_990)],
-    ['alnum run', 'a'.repeat(19_990)],
-    ['repeated scheme separators', 'a://'.repeat(4_990)],
-    ['repeated encoded separators', 'a%3A%2F%2F'.repeat(1_990)],
-    ['one long userinfo without at-sign', `x://${'u:'.repeat(9_990)}`],
-    ['one long userinfo ending in at-sign', `x://${'u:'.repeat(9_990)}@h`],
-    ['many at-signs in one userinfo', `x://${'@'.repeat(19_990)}`],
-    ['many urls, each without at-sign', 'x://u:p '.repeat(2_490)],
-    ['many urls, each with at-sign', 'x://u:p@h '.repeat(1_990)],
-    ['encoded at-signs', `x://${'%40'.repeat(6_660)}`],
+  const INPUTS: Array<[string, (n: number) => string, number]> = [
+    ['scheme-like run without separator', (n) => 'a.'.repeat(n), 1_240],
+    ['alnum run', (n) => 'a'.repeat(n), 2_480],
+    ['repeated scheme separators', (n) => 'a://'.repeat(n), 620],
+    ['repeated encoded separators', (n) => 'a%3A%2F%2F'.repeat(n), 248],
+    [
+      'one long userinfo without at-sign',
+      (n) => `x://${'u:'.repeat(n)}`,
+      1_240,
+    ],
+    [
+      'one long userinfo ending in at-sign',
+      (n) => `x://${'u:'.repeat(n)}@h`,
+      1_240,
+    ],
+    ['many at-signs in one userinfo', (n) => `x://${'@'.repeat(n)}`, 2_480],
+    ['many urls, each without at-sign', (n) => 'x://u:p '.repeat(n), 310],
+    ['many urls, each with at-sign', (n) => 'x://u:p@h '.repeat(n), 248],
+    ['encoded at-signs', (n) => `x://${'%40'.repeat(n)}`, 820],
   ];
 
-  it.each(INPUTS)('%s', (_name, text) => {
-    scrubMessage('warm://up:pw@h');
-    const started = process.cpuUsage();
-    scrubMessage(text);
-    const spent = process.cpuUsage(started);
-    expect((spent.user + spent.system) / 1000).toBeLessThan(100);
+  it.each(INPUTS)('%s grows linearly with input size', (_name, make, n) => {
+    expect(make(n * 8).length).toBeLessThanOrEqual(20_000);
+    expect(growthRatio(scrubMessage, make, n, 8)).toBeLessThan(24);
   });
 });

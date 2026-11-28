@@ -3,6 +3,7 @@ import {
   bucketConvertedRevenue,
   summarizeConvertedRevenue,
 } from './fx-conversion.util';
+import { growthRatio } from '../../../test/linear-growth';
 
 const d = (s: string) => new Date(s);
 const NGN_OLD = {
@@ -206,15 +207,19 @@ describe('bucketConvertedRevenue', () => {
     });
   });
 
-  it('handles a huge set without per-row cost blowups', () => {
-    const rows = Array.from({ length: 200_000 }, (_, i) => ({
-      createdAt: new Date(Date.UTC(2026, 0, 1) + i * 60_000),
-      amount: 1,
-      currency: i % 2 ? 'NGN' : 'USD',
-    }));
-    const t0 = Date.now();
-    const b = bucketConvertedRevenue(rows, () => 'all', table);
-    expect(Date.now() - t0).toBeLessThan(5000);
-    expect(b.get('all')?.byCurrency).toEqual({ NGN: 100000, USD: 100000 });
+  it('costs the same per row as the set grows', () => {
+    const makeRows = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        createdAt: new Date(Date.UTC(2026, 0, 1) + i * 60_000),
+        amount: 1,
+        currency: i % 2 ? 'NGN' : 'USD',
+      }));
+    const bucket = (rows: ReturnType<typeof makeRows>) =>
+      bucketConvertedRevenue(rows, () => 'all', table);
+    expect(growthRatio(bucket, makeRows, 2_500, 8)).toBeLessThan(24);
+    expect(bucket(makeRows(20_000)).get('all')?.byCurrency).toEqual({
+      NGN: 10_000,
+      USD: 10_000,
+    });
   });
 });

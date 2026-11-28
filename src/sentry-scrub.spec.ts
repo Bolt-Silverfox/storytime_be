@@ -5,6 +5,7 @@ import {
   buildSentryOptions,
   scrubSentryBreadcrumb,
 } from './sentry-scrub';
+import { growthRatio } from '../test/linear-growth';
 
 const BEARER = 'Bearer eyJhbGciOiJIUzI1NiJ9.secret.sig';
 
@@ -276,40 +277,34 @@ describe('free-text credential scrubbing', () => {
     for (const out of messages(text)) expect(out).toBe(text);
   });
 
-  const ADVERSARIAL: Array<[string, string]> = [
-    ['token plus 20k spaces then comma', `token${' '.repeat(19_994)},`],
-    ['20k spaces', ' '.repeat(20_000)],
-    ['repeated key words', 'token '.repeat(3_300)],
-    ['repeated password colons', 'password: '.repeat(2_000)],
-    ['long key-like run', 'a'.repeat(20_000)],
-    ['long dotted run', 'a.'.repeat(10_000)],
-    ['equals runs', '='.repeat(20_000)],
-    ['quote runs', '"a'.repeat(10_000)],
+  const ADVERSARIAL: Array<[string, (n: number) => string, number]> = [
+    ['token plus spaces then comma', (n) => `token${' '.repeat(n)},`, 2_480],
+    ['spaces', (n) => ' '.repeat(n), 2_480],
+    ['repeated key words', (n) => 'token '.repeat(n), 410],
+    ['repeated password colons', (n) => 'password: '.repeat(n), 248],
+    ['long key-like run', (n) => 'a'.repeat(n), 2_480],
+    ['long dotted run', (n) => 'a.'.repeat(n), 1_240],
+    ['equals runs', (n) => '='.repeat(n), 2_480],
+    ['quote runs', (n) => '"a'.repeat(n), 1_240],
+    ['chained a=', (n) => 'a='.repeat(n), 1_240],
+    ['chained ab=', (n) => 'ab='.repeat(n), 820],
+    ['chained percent-encoded a=%3D', (n) => 'a=%3D'.repeat(n), 496],
   ];
 
-  it.each(ADVERSARIAL)('scrubs %s in a few ms', (_name, text) => {
-    const started = process.hrtime.bigint();
-    messages(text);
-    scrubSentryEvent({
-      request: { headers: { 'x-custom': text }, url: text },
-      message: text,
-    });
-    const ms = Number(process.hrtime.bigint() - started) / 1e6;
-    expect(ms).toBeLessThan(1000);
-  });
-
-  const CHAINED: Array<[string, string]> = [
-    ['chained a=', 'a='.repeat(10_000)],
-    ['chained ab=', 'ab='.repeat(6_666)],
-    ['chained percent-encoded a=%3D', 'a=%3D'.repeat(4_000)],
-  ];
-
-  it.each(CHAINED)('scrubs %s in linear time', (_name, text) => {
-    const started = process.hrtime.bigint();
-    messages(text);
-    const ms = Number(process.hrtime.bigint() - started) / 1e6;
-    expect(ms).toBeLessThan(5000);
-  });
+  it.each(ADVERSARIAL)(
+    'scrubs %s in time linear in its length',
+    (_name, make, n) => {
+      const scrubEverywhere = (text: string) => {
+        messages(text);
+        scrubSentryEvent({
+          request: { headers: { 'x-custom': text }, url: text },
+          message: text,
+        });
+      };
+      expect(make(n * 8).length).toBeLessThanOrEqual(20_000);
+      expect(growthRatio(scrubEverywhere, make, n, 8)).toBeLessThan(24);
+    },
+  );
 
   it('redacts only the secrets in a chain of key=value pairs', () => {
     const text =

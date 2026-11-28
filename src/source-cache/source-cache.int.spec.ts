@@ -381,12 +381,15 @@ describeDb('SourceCacheService (real Postgres)', () => {
           Promise.reject(new Error('boom')),
         ),
       ).rejects.toThrow('boom');
-      const t0 = Date.now();
+      await expect(
+        prisma.sourceFetchLease.count({
+          where: { sourceName: source, sourceId: 'boom' },
+        }),
+      ).resolves.toBe(0);
       const r = await svcA.getOrFetch(source, 'boom', () =>
         Promise.resolve({ httpStatus: 200, contentHash: 'h' }),
       );
       expect(r.fetched).toBe(true);
-      expect(Date.now() - t0).toBeLessThan(500);
     });
   });
 
