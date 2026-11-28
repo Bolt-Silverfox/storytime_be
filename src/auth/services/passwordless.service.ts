@@ -421,6 +421,7 @@ export class PasswordlessService {
     ip: string | undefined,
     creationReserved: boolean,
   ): Promise<VerifiedEmailResult> {
+    let charged = creationReserved;
     return findOrCreateParentByVerifiedEmail(
       {
         authRepository: this.authRepository,
@@ -434,9 +435,15 @@ export class PasswordlessService {
         matchEmailCaseInsensitively: true,
         beforeCreate: creationReserved
           ? undefined
-          : () => this.spendCreationBudget(ip),
+          : async () => {
+              await this.spendCreationBudget(ip);
+              charged = true;
+            },
       },
-    );
+    ).catch(async (error: unknown) => {
+      if (charged) await this.releaseCreationBudget(ip);
+      throw error;
+    });
   }
 
   private creationBudgets(ip: string | undefined) {

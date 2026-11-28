@@ -291,6 +291,76 @@ describe('PasswordlessService', () => {
       ).resolves.toMatchObject({ isNewUser: true });
     });
 
+    it.each(['code', 'link'] as const)(
+      'gives the creation slot back exactly once when creating the account fails after the %s is consumed',
+      async (via) => {
+        quiet();
+        const ctx = build();
+        const ip = '203.0.113.9';
+        jest
+          .spyOn(ctx.authRepo, 'createUser')
+          .mockRejectedValueOnce(new Error('db write failed'));
+        await ctx.service.request('broken@example.com', ip);
+        const { code, linkToken } = ctx.captured[0];
+
+        await expect(
+          via === 'code'
+            ? ctx.service.verify('broken@example.com', code, ip)
+            : ctx.service.consume(linkToken, ip),
+        ).rejects.toThrow('db write failed');
+
+        expect(Number((await ctx.redis.client.get(ipKey(ip))) ?? 0)).toBe(0);
+        await spend(ctx, ip);
+        expect(await ctx.redis.client.get(ipKey(ip))).toBe('3');
+        await ctx.service.request('new4@example.com', ip);
+        await expectTooMany(
+          ctx.service.verify(
+            'new4@example.com',
+            ctx.captured[ctx.captured.length - 1].code,
+            ip,
+          ),
+        );
+      },
+    );
+
+    it('gives back the slot charged at creation time when the account vanished and creating it fails', async () => {
+      quiet();
+      const ctx = build();
+      const ip = '203.0.113.9';
+      await ctx.authRepo.createUser({
+        email: 'vanished@example.com',
+        passwordHash: 'h',
+        role: 'parent',
+        isEmailVerified: true,
+      });
+      await ctx.service.request('vanished@example.com', ip);
+      const owner = await ctx.authRepo.findUserByEmailInsensitive(
+        'vanished@example.com',
+      );
+      jest
+        .spyOn(ctx.authRepo, 'findUserByEmailInsensitive')
+        .mockResolvedValueOnce(owner)
+        .mockResolvedValueOnce(null as never);
+      jest
+        .spyOn(ctx.authRepo, 'createUser')
+        .mockRejectedValueOnce(new Error('db write failed'));
+
+      await expect(
+        ctx.service.verify('vanished@example.com', ctx.captured[0].code, ip),
+      ).rejects.toThrow('db write failed');
+
+      expect(Number((await ctx.redis.client.get(ipKey(ip))) ?? 0)).toBe(0);
+    });
+
+    it('keeps the creation slot charged when the account is created', async () => {
+      const ctx = build();
+      const ip = '203.0.113.9';
+
+      await signIn(ctx, 'made@example.com', ip);
+
+      expect(await ctx.redis.client.get(ipKey(ip))).toBe('1');
+    });
+
     it('keeps the last code attempt usable when consuming the challenge fails', async () => {
       const ctx = build();
       await ctx.authRepo.createUser({
