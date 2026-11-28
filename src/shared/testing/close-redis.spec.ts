@@ -47,6 +47,17 @@ describe('closeRedisAfter', () => {
     expect(client.disconnect).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the cleanup error and still disconnects when quit throws synchronously', async () => {
+    const client = fakeClient(() => {
+      throw new Error('quit threw');
+    });
+
+    await expect(
+      closeRedisAfter(client, () => Promise.reject(new Error('DEL failed'))),
+    ).rejects.toThrow('DEL failed');
+    expect(client.disconnect).toHaveBeenCalledTimes(1);
+  });
+
   it('closes the client when only the quit never replies', async () => {
     const client = fakeClient(never);
     const outcome = closeRedisAfter(client, () => Promise.resolve(), 1_000);

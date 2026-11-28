@@ -27,9 +27,11 @@ export async function closeRedisAfter(
   try {
     await withinDeadline(cleanup(), 'cleanup', deadlineMs);
   } finally {
-    await withinDeadline(client.quit(), 'quit', deadlineMs).catch(
-      () => undefined,
-    );
+    await withinDeadline(
+      Promise.resolve().then(() => client.quit()),
+      'quit',
+      deadlineMs,
+    ).catch(() => undefined);
     client.disconnect();
   }
 }
