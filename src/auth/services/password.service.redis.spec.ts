@@ -2,6 +2,7 @@ import { HttpException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { createServer, connect, Server, Socket } from 'net';
 import { Redis } from 'ioredis';
+import { createHash } from 'crypto';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { RedisService } from '@/redis/redis.service';
@@ -12,6 +13,7 @@ import {
 } from '../repositories';
 import { makeToken, makeUser } from '@/shared/testing/prisma-fixtures';
 import { TokenType } from '../dto/auth.dto';
+import { assertScratchRedisUrl } from '@/shared/testing/scratch-redis';
 
 jest.mock('bcryptjs', () => ({
   hash: jest.fn().mockResolvedValue('hashed-password'),
@@ -22,9 +24,9 @@ const url = process.env.RESET_REDIS_SCRATCH_URL;
 const d = url ? describe : describe.skip;
 
 d('PasswordService reset attempts against a real Redis', () => {
-  const email = 'owner@rt.test';
-  const owner = makeUser({ id: 'rt-owner', email });
-  let client: Redis;
+  let email: string;
+  let owner: ReturnType<typeof makeUser>;
+  let client: Redis | undefined;
   let admin: Redis;
   let service: PasswordService;
   let tokens: Map<string, TokenWithUser>;
@@ -63,23 +65,33 @@ d('PasswordService reset attempts against a real Redis', () => {
       service.validateResetToken('nope', email, { token: 'nope', email }),
     );
 
-  const attemptKeys = () => admin.keys('password-reset:*');
+  const counterKey = () =>
+    `password-reset:misses:${createHash('sha256').update(email).digest('hex')}`;
   const waitFor = async (condition: () => boolean) => {
     for (let i = 0; i < 600 && !condition(); i++) {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
   };
 
-  beforeAll(() => {
+  const runId = `${process.pid}-${Date.now()}`;
+  const unrelatedKey = `unrelated:${runId}`;
+
+  let testNumber = 0;
+
+  beforeAll(async () => {
+    assertScratchRedisUrl(url!);
     admin = new Redis(url!);
+    await admin.set(unrelatedKey, 'kept', 'EX', 600);
   });
 
   afterAll(async () => {
+    await admin.del(unrelatedKey);
     await admin.quit();
   });
 
   beforeEach(async () => {
-    await admin.flushdb();
+    email = `owner-${runId}-${++testNumber}@rt.test`;
+    owner = makeUser({ id: 'rt-owner', email });
     client = new Redis(url!, {
       enableOfflineQueue: true,
       maxRetriesPerRequest: null,
@@ -136,8 +148,10 @@ d('PasswordService reset attempts against a real Redis', () => {
     service = serviceOn(client);
   });
 
-  afterEach(() => {
-    client.disconnect();
+  afterEach(async () => {
+    client?.disconnect();
+    client = undefined;
+    if (email) await admin.del(counterKey());
   });
 
   const replyProxy = async () => {
@@ -161,7 +175,13 @@ d('PasswordService reset attempts against a real Redis', () => {
       downstream.on('error', () => undefined);
       server.on('error', () => undefined);
     });
-    await new Promise<void>((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+    await new Promise<void>((resolve, reject) => {
+      proxy.once('error', reject);
+      proxy.listen(0, '127.0.0.1', () => {
+        proxy.off('error', reject);
+        resolve();
+      });
+    });
     const { port } = proxy.address() as { port: number };
     const proxied = new Redis({
       host: '127.0.0.1',
@@ -216,7 +236,7 @@ d('PasswordService reset attempts against a real Redis', () => {
   it('allows five attempts per window, answers 429 after, and sets the window TTL', async () => {
     for (let i = 0; i < 5; i++) expect(await guessWrong()).toBe(404);
     expect(await validate()).toBe(429);
-    const [key] = await attemptKeys();
+    const key = counterKey();
     expect(await admin.ttl(key)).toBeGreaterThan(3500);
   });
 
@@ -231,7 +251,7 @@ d('PasswordService reset attempts against a real Redis', () => {
 
   it('gives a window left without a TTL an expiry on the next attempt', async () => {
     await guessWrong();
-    const [key] = await attemptKeys();
+    const key = counterKey();
     await admin.persist(key);
 
     await guessWrong();
@@ -241,7 +261,7 @@ d('PasswordService reset attempts against a real Redis', () => {
 
   it('gives a capped window left without a TTL an expiry when the cap is read', async () => {
     await guessWrong();
-    const [key] = await attemptKeys();
+    const key = counterKey();
     await admin.set(key, '5');
 
     expect(await validate()).toBe(429);
@@ -251,7 +271,7 @@ d('PasswordService reset attempts against a real Redis', () => {
 
   it('never writes the counter for a valid code whose password write rolls back, so the same code still works', async () => {
     await fourWrongGuesses();
-    const [key] = await attemptKeys();
+    const key = counterKey();
     failWrites = true;
 
     expect(await reset()).toBe(500);
@@ -277,29 +297,30 @@ d('PasswordService reset attempts against a real Redis', () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
       expect(await reset()).toBe(200);
       expect(tokens.size).toBe(0);
-      expect(await attemptKeys()).toEqual([]);
+      expect(await admin.exists(counterKey())).toBe(0);
     } finally {
       await link.close();
     }
   }, 15_000);
 
   it('fails fast while the connection is down and lets the owner reset after reconnecting', async () => {
+    const underTest = client!;
     await fourWrongGuesses();
-    const clientId = await client.client('ID');
+    const clientId = await underTest.client('ID');
     await admin.call('CLIENT', 'KILL', 'ID', String(clientId));
-    await waitFor(() => client.status !== 'ready');
-    expect(client.status).not.toBe('ready');
+    await waitFor(() => underTest.status !== 'ready');
+    expect(underTest.status).not.toBe('ready');
 
     const started = Date.now();
     expect(await validate()).toBe(503);
     expect(Date.now() - started).toBeLessThan(500);
 
-    await waitFor(() => client.status === 'ready');
-    expect(client.status).toBe('ready');
-    await client.ping();
+    await waitFor(() => underTest.status === 'ready');
+    expect(underTest.status).toBe('ready');
+    await underTest.ping();
     expect(await reset()).toBe(200);
     expect(tokens.size).toBe(0);
-    expect(await attemptKeys()).toEqual([]);
+    expect(await admin.exists(counterKey())).toBe(0);
   }, 15_000);
 
   it('leaves the counter alone when a valid code meets lost replies, so the code works once Redis answers again', async () => {
@@ -307,7 +328,7 @@ d('PasswordService reset attempts against a real Redis', () => {
     try {
       service = serviceOn(link.client);
       await fourWrongGuesses();
-      const [key] = await attemptKeys();
+      const key = counterKey();
       link.replies = 'dropped';
 
       expect(await validate()).toBe(503);
@@ -322,9 +343,13 @@ d('PasswordService reset attempts against a real Redis', () => {
       expect(await admin.get(key)).toBe('4');
       expect(await reset()).toBe(200);
       expect(tokens.size).toBe(0);
-      expect(await attemptKeys()).toEqual([]);
+      expect(await admin.exists(counterKey())).toBe(0);
     } finally {
       await link.close();
     }
   }, 30_000);
+
+  it('leaves keys it does not own in the scratch database', async () => {
+    expect(await admin.get(unrelatedKey)).toBe('kept');
+  });
 });
