@@ -12,9 +12,13 @@ import { OAuth2Client } from 'google-auth-library';
 import { GoogleOAuthProfile } from '@/shared/types';
 import { UserDto } from '../dto/auth.dto';
 import appleSigninAuth from 'apple-signin-auth';
-import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
-import { Role } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AppEvents, UserEmailVerifiedEvent } from '@/shared/events/app-events';
+import { findOrCreateParentByVerifiedEmail } from './verified-email-user';
+import { AmbiguousEmailAccountError } from '../repositories/ambiguous-email-account.error';
+import { TakeoverTargetChangedError } from '../repositories/takeover-target-changed.error';
+import { InactiveAccountError } from '../repositories/inactive-account.error';
 import {
   AUTH_REPOSITORY,
   IAuthRepository,
@@ -41,6 +45,7 @@ export class OAuthService {
     private readonly tokenService: TokenService,
     private readonly passwordService: PasswordService,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     const clientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     if (clientId) {
@@ -158,6 +163,7 @@ export class OAuthService {
     const { googleId, appleId, email, picture, name, emailVerified } = payload;
 
     let user: UserWithProfileAndAvatar | null = null;
+    let boundEmail: string | undefined;
 
     // 1. Try find by googleId or appleId
     if (googleId) {
@@ -166,44 +172,58 @@ export class OAuthService {
       user = await this.authRepository.findUserByAppleId(appleId);
     }
 
-    // 2. Try find by email
     if (!user) {
-      const existing = await this.authRepository.findUserByEmail(email);
-
-      if (existing) {
-        user = await this.authRepository.updateUserWithRelations(existing.id, {
-          isEmailVerified: emailVerified ? true : existing.isEmailVerified,
-          googleId: googleId || existing.googleId,
-          appleId: appleId || existing.appleId,
-        });
+      if (emailVerified !== true) {
+        throw new BadRequestException(
+          'Email not verified. Please check your inbox.',
+        );
+      }
+      const resolved = await findOrCreateParentByVerifiedEmail(
+        {
+          authRepository: this.authRepository,
+          passwordService: this.passwordService,
+        },
+        {
+          email,
+          name,
+          emailVerified: true,
+          refuseInactive: true,
+          matchEmailCaseInsensitively: true,
+          googleId,
+          appleId,
+        },
+      ).catch((error: unknown) => {
+        if (
+          error instanceof AmbiguousEmailAccountError ||
+          error instanceof TakeoverTargetChangedError
+        ) {
+          throw new UnauthorizedException('This account is not available.');
+        }
+        throw error;
+      });
+      ({ user } = resolved);
+      boundEmail = email;
+      if (resolved.newlyVerified) {
+        this.eventEmitter.emit(AppEvents.USER_EMAIL_VERIFIED, {
+          userId: user.id,
+          email: user.email,
+          verifiedAt: new Date(),
+        } satisfies UserEmailVerifiedEvent);
       }
     }
 
-    // 3. Create new user
-    if (!user) {
-      const randomPassword = crypto.randomBytes(16).toString('hex');
-      const hashedPassword =
-        await this.passwordService.hashPassword(randomPassword);
-
-      user = await this.authRepository.createUser({
-        name: name || email || 'User',
-        email,
-        passwordHash: hashedPassword,
-        isEmailVerified: emailVerified === true,
-        googleId: googleId || null,
-        appleId: appleId || null,
-        role: Role.parent,
-        profile: {
-          create: {
-            country: 'NG',
-          },
-        },
-      });
-
-      // side-effects are handled by event listeners
+    if (user.isSuspended || user.isDeleted) {
+      throw new UnauthorizedException('This account is not available.');
     }
 
-    // 4. Handle avatar from OAuth picture
+    // 4. Must be verified
+    if (!user.isEmailVerified) {
+      throw new BadRequestException(
+        'Email not verified. Please check your inbox.',
+      );
+    }
+
+    // 5. Handle avatar from OAuth picture
     if (picture) {
       let avatar = await this.authRepository.findAvatarByUrl(picture);
 
@@ -222,18 +242,24 @@ export class OAuthService {
       }
     }
 
-    // 5. Must be verified
-    if (!user.isEmailVerified) {
-      throw new BadRequestException(
-        'Email not verified. Please check your inbox.',
-      );
-    }
-
     // 6. Build response
     const numberOfKids = await this.authRepository.countKidsByParentId(user.id);
 
     const userDto = new UserDto({ ...user, numberOfKids });
-    const tokenData = await this.tokenService.createTokenPair(userDto);
+    const tokenData = await this.tokenService
+      .createTokenPair(
+        userDto,
+        boundEmail ? { boundEmail } : { requireActive: true },
+      )
+      .catch((error: unknown) => {
+        if (
+          error instanceof TakeoverTargetChangedError ||
+          error instanceof InactiveAccountError
+        ) {
+          throw new UnauthorizedException('This account is not available.');
+        }
+        throw error;
+      });
 
     return {
       user: userDto,

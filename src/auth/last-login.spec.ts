@@ -45,6 +45,8 @@ describe('lastLoginAt recording across login paths', () => {
     createUser: jest.fn(),
     countKidsByParentId: jest.fn(),
     createSession: jest.fn(),
+    createSessionForUnverifiedUser: jest.fn(),
+    createSessionForActiveUser: jest.fn(),
     findSessionByToken: jest.fn(),
     recordLastLogin: jest.fn(),
   };
@@ -60,6 +62,12 @@ describe('lastLoginAt recording across login paths', () => {
     jest.resetAllMocks();
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     repo.createSession.mockResolvedValue(makeSession({ id: 'sess-1' }));
+    repo.createSessionForUnverifiedUser.mockResolvedValue(
+      makeSession({ id: 'sess-1' }),
+    );
+    repo.createSessionForActiveUser.mockResolvedValue(
+      makeSession({ id: 'sess-1' }),
+    );
     repo.recordLastLogin.mockResolvedValue(undefined);
     repo.countKidsByParentId.mockResolvedValue(0);
     googleClient = { verifyIdToken: jest.fn() };

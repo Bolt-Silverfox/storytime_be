@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   CompleteProfileDto,
@@ -13,11 +14,13 @@ import {
   LoginResponseDto,
 } from '../dto/auth.dto';
 import { AUTH_REPOSITORY, IAuthRepository } from '../repositories';
+import { AccountAlreadyVerifiedError } from '../repositories/account-already-verified.error';
+import { InactiveAccountError } from '../repositories/inactive-account.error';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
 import { EmailVerificationService } from './email-verification.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Role, OnboardingStatus } from '@prisma/client';
+import { Prisma, Role, OnboardingStatus } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import {
   ResourceAlreadyExistsException,
@@ -58,13 +61,24 @@ export class OnboardingService {
     );
 
     // Ensure transaction support in repository
-    const user = await this.authRepository.createUser({
-      name: data.fullName,
-      email: data.email,
-      passwordHash: hashedPassword,
-      role: role.toString(),
-      onboardingStatus: OnboardingStatus.account_created,
-    });
+    let user;
+    try {
+      user = await this.authRepository.createUser({
+        name: data.fullName,
+        email: data.email,
+        passwordHash: hashedPassword,
+        role: role.toString(),
+        onboardingStatus: OnboardingStatus.account_created,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ResourceAlreadyExistsException('User', 'email', data.email);
+      }
+      throw error;
+    }
 
     // side-effects (notification preferences, etc.) are handled by activity-log and notification-preference listeners
 
@@ -103,7 +117,20 @@ export class OnboardingService {
     });
     this.eventEmitter.emit('admin.sse.stats', { trigger: 'user_created' });
 
-    const tokenData = await this.tokenService.createTokenPair(user);
+    let tokenData;
+    try {
+      tokenData = await this.tokenService.createTokenPair(user, {
+        requireUnverified: true,
+      });
+    } catch (error) {
+      if (error instanceof AccountAlreadyVerifiedError) {
+        throw new ResourceAlreadyExistsException('User', 'email', data.email);
+      }
+      if (error instanceof InactiveAccountError) {
+        throw new UnauthorizedException('This account is not available.');
+      }
+      throw error;
+    }
 
     return {
       user: new UserDto({ ...user, numberOfKids: 0 }),

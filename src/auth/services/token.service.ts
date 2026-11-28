@@ -38,16 +38,33 @@ export class TokenService {
   /**
    * Create a new session and generate JWT + refresh token pair
    */
-  async createTokenPair(user: UserDto): Promise<TokenPair> {
+  async createTokenPair(
+    user: UserDto,
+    options?: {
+      requireUnverified?: boolean;
+      boundEmail?: string;
+      requireActive?: boolean;
+    },
+  ): Promise<TokenPair> {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRES_IN_DAYS);
     const refreshToken = this.generateRefreshToken();
 
-    const session = await this.authRepository.createSession({
+    const sessionData = {
       userId: user.id,
       token: this.hashToken(refreshToken),
       expiresAt,
-    });
+    };
+    const session = options?.requireUnverified
+      ? await this.authRepository.createSessionForUnverifiedUser(sessionData)
+      : options?.boundEmail !== undefined
+        ? await this.authRepository.createSessionForEmail(
+            sessionData,
+            options.boundEmail,
+          )
+        : options?.requireActive
+          ? await this.authRepository.createSessionForActiveUser(sessionData)
+          : await this.authRepository.createSession(sessionData);
 
     // Every new Session is a successful login (password, OAuth, registration
     // auto-sign-in); refresh reuses a session and never gets here.

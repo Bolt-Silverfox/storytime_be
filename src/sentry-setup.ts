@@ -33,6 +33,11 @@ if (isSentryEnabled) {
     environment: process.env.NODE_ENV || 'development',
     release:
       process.env.SENTRY_RELEASE || process.env.npm_package_version || '1.0.0',
+    integrations: [
+      Sentry.httpIntegration({
+        ignoreIncomingRequestBody: (url) => /\/auth\/passwordless\//i.test(url),
+      }),
+    ],
     // Sampling for Sentry-side performance spans. Traces themselves are exported
     // to Grafana Tempo via OTLP; keep this low/zero unless explicitly enabled.
     tracesSampleRate: Number.isFinite(tracesSampleRate) ? tracesSampleRate : 0,

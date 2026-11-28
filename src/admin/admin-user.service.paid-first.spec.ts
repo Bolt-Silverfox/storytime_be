@@ -10,9 +10,14 @@ import {
   PrismaAdminUserRepository,
 } from './repositories';
 import { UserFilterDto } from './dto/admin-filters.dto';
+import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 
 // DB-backed: needs DATABASE_URL pointing at a migrated database.
-describe('AdminUserService.getAllUsers paidFirst', () => {
+const d = isThrowawayDatabaseUrl(process.env.DATABASE_URL)
+  ? describe
+  : describe.skip;
+
+d('AdminUserService.getAllUsers paidFirst', () => {
   let prisma: PrismaService;
   let service: AdminUserService;
   const tag = `pf-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
@@ -154,19 +159,19 @@ describe('AdminUserService.getAllUsers paidFirst', () => {
     const res = await list({ paidFirst: true, hasActiveSubscription: true });
     expect(ids(res)).toEqual([id.u4, id.u1]);
   });
+});
 
-  describe('UserFilterDto.paidFirst parsing', () => {
-    it.each([
-      ['true', true],
-      ['false', false],
-      [undefined, undefined],
-    ])('query value %s -> %s', (raw, expected) => {
-      const dto = plainToInstance(
-        UserFilterDto,
-        raw === undefined ? {} : { paidFirst: raw },
-        { enableImplicitConversion: true },
-      );
-      expect(dto.paidFirst).toBe(expected);
-    });
+describe('UserFilterDto.paidFirst parsing', () => {
+  it.each([
+    ['true', true],
+    ['false', false],
+    [undefined, undefined],
+  ])('query value %s -> %s', (raw, expected) => {
+    const dto = plainToInstance(
+      UserFilterDto,
+      raw === undefined ? {} : { paidFirst: raw },
+      { enableImplicitConversion: true },
+    );
+    expect(dto.paidFirst).toBe(expected);
   });
 });

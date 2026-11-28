@@ -163,6 +163,7 @@ export class PasswordService {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await this.authRepository.updateUser(resetToken.userId, {
       passwordHash: hashedPassword,
+      hasLocalPassword: true,
     });
 
     // Clean up: delete token and invalidate all sessions
@@ -234,7 +235,17 @@ export class PasswordService {
 
     // Update password and invalidate other sessions atomically
     await this.authRepository.transaction(async (tx) => {
-      await tx.updateUser(userId, { passwordHash: hashedPassword });
+      const changed = await tx.changePasswordIfUnchanged(
+        userId,
+        user.passwordHash,
+        hashedPassword,
+        currentSessionId,
+      );
+      if (!changed) {
+        throw new UnauthorizedException(
+          'Session or credentials changed; sign in again',
+        );
+      }
       await tx.deleteOtherSessions(userId, currentSessionId);
     });
 

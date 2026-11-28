@@ -8,6 +8,9 @@ export const THROTTLE_LIMITS = {
   AUTH_OTP: { ttl: 60000, limit: 5 },
   AUTH_REGISTER: { ttl: 3600000, limit: 3 },
   AUTH_PASSWORD_RESET: { ttl: 60000, limit: 3 },
+  AUTH_PASSWORDLESS_REQUEST: { ttl: 60000, limit: 10 },
+  AUTH_PASSWORDLESS_VERIFY: { ttl: 60000, limit: 10 },
+  AUTH_PASSWORDLESS_CONSUME: { ttl: 60000, limit: 10 },
 
   // Resource creation - moderate
   RESOURCE_CREATE: { ttl: 60000, limit: 20 },

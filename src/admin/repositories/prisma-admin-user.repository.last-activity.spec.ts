@@ -1,13 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import { PrismaAdminUserRepository } from './prisma-admin-user.repository';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isThrowawayDatabaseUrl } from '@/shared/testing/throwaway-database';
 
 /**
  * Runs against a scratch Postgres (migrations applied). Opt in with
  * LAST_LOGIN_SCRATCH_DATABASE_URL; skipped otherwise so CI/unit runs stay hermetic.
  */
 const url = process.env.LAST_LOGIN_SCRATCH_DATABASE_URL;
-const d = url ? describe : describe.skip;
+const d = isThrowawayDatabaseUrl(url) ? describe : describe.skip;
 
 d('PrismaAdminUserRepository.findLastActivityByUserIds (scratch DB)', () => {
   let prisma: PrismaClient;

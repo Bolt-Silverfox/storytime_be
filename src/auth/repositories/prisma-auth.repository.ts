@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AccountAlreadyVerifiedError } from './account-already-verified.error';
+import { AmbiguousEmailAccountError } from './ambiguous-email-account.error';
+import { TakeoverTargetChangedError } from './takeover-target-changed.error';
+import { InactiveAccountError } from './inactive-account.error';
 import type {
   User,
   Profile,
@@ -9,7 +13,10 @@ import type {
   LearningExpectation,
   UserIP,
 } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { TokenType } from '../dto/auth.dto';
+
+export { AccountAlreadyVerifiedError };
 import {
   IAuthRepository,
   IAuthRepositoryTransaction,
@@ -29,6 +36,20 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async findUserByEmail(email: string): Promise<User | null> {
     return this.prisma.user.findUnique({ where: { email } });
+  }
+
+  async findUserByEmailInsensitive(email: string): Promise<User | null> {
+    const matches = await this.prisma.$queryRaw<User[]>(
+      Prisma.sql`SELECT * FROM "users" WHERE lower("email") = lower(${email}) ORDER BY "createdAt" ASC, "id" ASC`,
+    );
+    const verified = matches.filter((user) => user.isEmailVerified);
+    if (verified.length > 0) {
+      const exact = verified.find((user) => user.email === email);
+      if (exact) return exact;
+      if (verified.length > 1) throw new AmbiguousEmailAccountError();
+      return verified[0];
+    }
+    return matches.find((user) => user.email === email) ?? matches[0] ?? null;
   }
 
   async findUserByEmailWithRelations(
@@ -103,9 +124,24 @@ export class PrismaAuthRepository implements IAuthRepository {
     isEmailVerified?: boolean;
     profile?: { create: { country: string } };
   }): Promise<UserWithProfileAndAvatar> {
-    return this.prisma.user.create({
-      data: data as Parameters<typeof this.prisma.user.create>[0]['data'],
-      include: { profile: true, avatar: true },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(lower(${data.email}), 0))`;
+      const taken = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "users" WHERE lower("email") = lower(${data.email}) LIMIT 1`;
+      if (taken.length > 0) {
+        throw new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on the fields: (`email`)',
+          {
+            code: 'P2002',
+            clientVersion: Prisma.prismaVersion.client,
+            meta: { target: ['email'] },
+          },
+        );
+      }
+      return tx.user.create({
+        data: data as Parameters<typeof tx.user.create>[0]['data'],
+        include: { profile: true, avatar: true },
+      });
     });
   }
 
@@ -113,6 +149,7 @@ export class PrismaAuthRepository implements IAuthRepository {
     id: string,
     data: Partial<{
       passwordHash: string;
+      hasLocalPassword: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;
@@ -130,6 +167,9 @@ export class PrismaAuthRepository implements IAuthRepository {
     id: string,
     data: Partial<{
       passwordHash: string;
+      hasLocalPassword: boolean;
+      pinHash: string | null;
+      biometricsEnabled: boolean;
       isEmailVerified: boolean;
       onboardingStatus: string;
       googleId: string | null;
@@ -187,20 +227,62 @@ export class PrismaAuthRepository implements IAuthRepository {
   async linkGoogleAccountIfUnset(
     userId: string,
     googleId: string,
+    sessionId?: string,
+    boundEmail?: string,
   ): Promise<{ count: number }> {
-    return this.prisma.user.updateMany({
-      where: { id: userId, googleId: null, isDeleted: false },
-      data: { googleId },
-    });
+    return this.linkProviderIfUnset(
+      userId,
+      'googleId',
+      googleId,
+      sessionId,
+      boundEmail,
+    );
   }
 
   async linkAppleAccountIfUnset(
     userId: string,
     appleId: string,
+    sessionId?: string,
+    boundEmail?: string,
   ): Promise<{ count: number }> {
-    return this.prisma.user.updateMany({
-      where: { id: userId, appleId: null, isDeleted: false },
-      data: { appleId },
+    return this.linkProviderIfUnset(
+      userId,
+      'appleId',
+      appleId,
+      sessionId,
+      boundEmail,
+    );
+  }
+
+  private linkProviderIfUnset(
+    userId: string,
+    field: 'googleId' | 'appleId',
+    value: string,
+    sessionId?: string,
+    boundEmail?: string,
+  ): Promise<{ count: number }> {
+    return this.prisma.$transaction(async (tx) => {
+      const email = boundEmail ?? null;
+      const locked = await tx.$queryRaw<
+        Array<{ id: string }>
+      >`SELECT "id" FROM "users"
+        WHERE "id" = ${userId}
+          AND (${email}::text IS NULL OR lower("email") = lower(${email}::text))
+        FOR UPDATE`;
+      if (locked.length === 0) return { count: 0 };
+      return tx.user.updateMany({
+        where: {
+          id: userId,
+          [field]: null,
+          isSuspended: false,
+          isDeleted: false,
+          isEmailVerified: true,
+          ...(sessionId
+            ? { auth: { some: { id: sessionId, isDeleted: false } } }
+            : {}),
+        },
+        data: { [field]: value },
+      });
     });
   }
 
@@ -212,6 +294,55 @@ export class PrismaAuthRepository implements IAuthRepository {
     expiresAt: Date;
   }): Promise<Session> {
     return this.prisma.session.create({ data });
+  }
+
+  async createSessionForUnverifiedUser(data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<Session> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${data.userId} FOR SHARE`;
+      const row = await tx.user.findUnique({
+        where: { id: data.userId },
+        select: { isEmailVerified: true, isSuspended: true, isDeleted: true },
+      });
+      if (!row || row.isEmailVerified) throw new AccountAlreadyVerifiedError();
+      if (row.isSuspended || row.isDeleted) throw new InactiveAccountError();
+      return tx.session.create({ data });
+    });
+  }
+
+  async createSessionForEmail(
+    data: { userId: string; token: string; expiresAt: Date },
+    email: string,
+  ): Promise<Session> {
+    return this.createSessionForActiveRow(data, email);
+  }
+
+  async createSessionForActiveUser(data: {
+    userId: string;
+    token: string;
+    expiresAt: Date;
+  }): Promise<Session> {
+    return this.createSessionForActiveRow(data, null);
+  }
+
+  private createSessionForActiveRow(
+    data: { userId: string; token: string; expiresAt: Date },
+    email: string | null,
+  ): Promise<Session> {
+    return this.prisma.$transaction(async (tx) => {
+      const [row] = await tx.$queryRaw<Array<{ active: boolean }>>`
+        SELECT (NOT "isSuspended" AND NOT "isDeleted") AS "active"
+        FROM "users"
+        WHERE "id" = ${data.userId}
+          AND (${email}::text IS NULL OR lower("email") = lower(${email}::text))
+        FOR SHARE`;
+      if (!row) throw new TakeoverTargetChangedError();
+      if (!row.active) throw new InactiveAccountError();
+      return tx.session.create({ data });
+    });
   }
 
   async recordLastLogin(userId: string): Promise<void> {
@@ -247,6 +378,40 @@ export class PrismaAuthRepository implements IAuthRepository {
 
   async deleteAllUserSessions(userId: string): Promise<void> {
     await this.prisma.session.deleteMany({ where: { userId } });
+  }
+
+  async deleteAllUserDeviceTokens(userId: string): Promise<void> {
+    await this.prisma.deviceToken.deleteMany({ where: { userId } });
+  }
+
+  async takeOverUnverifiedAccount(
+    { id, email }: { id: string; email: string },
+    data: Parameters<IAuthRepository['takeOverUnverifiedAccount']>[1],
+  ): Promise<UserWithProfileAndAvatar> {
+    return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "users"
+        WHERE "id" = ${id} AND lower("email") = lower(${email})
+        FOR NO KEY UPDATE`;
+      if (locked.length === 0) throw new TakeoverTargetChangedError();
+      await tx.session.deleteMany({ where: { userId: id } });
+      await tx.deviceToken.deleteMany({ where: { userId: id } });
+      await tx.token.deleteMany({ where: { userId: id } });
+      const { count } = await tx.user.updateMany({
+        where: {
+          id,
+          isEmailVerified: false,
+          isSuspended: false,
+          isDeleted: false,
+        },
+        data: data as Parameters<typeof tx.user.updateMany>[0]['data'],
+      });
+      if (count === 0) throw new AccountAlreadyVerifiedError();
+      return tx.user.findUniqueOrThrow({
+        where: { id },
+        include: { profile: true, avatar: true },
+      });
+    });
   }
 
   async deleteOtherSessions(
@@ -428,6 +593,22 @@ export class PrismaAuthRepository implements IAuthRepository {
         updateUser: async (id, data) => {
           return prisma.user.update({ where: { id }, data });
         },
+        changePasswordIfUnchanged: async (
+          userId,
+          expectedHash,
+          newHash,
+          sessionId,
+        ) => {
+          const { count } = await prisma.user.updateMany({
+            where: {
+              id: userId,
+              passwordHash: expectedHash,
+              auth: { some: { id: sessionId, isDeleted: false } },
+            },
+            data: { passwordHash: newHash },
+          });
+          return count === 1;
+        },
         deleteOtherSessions: async (userId, exceptSessionId) => {
           await prisma.session.deleteMany({
             where: {
@@ -437,14 +618,14 @@ export class PrismaAuthRepository implements IAuthRepository {
           });
         },
         findActiveUserLinkedProviderFields: async (userId) => {
-          return prisma.user.findUnique({
-            where: { id: userId, isDeleted: false },
-            select: {
-              googleId: true,
-              appleId: true,
-              hasLocalPassword: true,
-            },
-          });
+          const rows = await prisma.$queryRaw<
+            Array<{
+              googleId: string | null;
+              appleId: string | null;
+              hasLocalPassword: boolean;
+            }>
+          >`SELECT "googleId", "appleId", "hasLocalPassword" FROM "users" WHERE "id" = ${userId} AND "isDeleted" = false FOR NO KEY UPDATE`;
+          return rows[0] ?? null;
         },
         unlinkProviderField: async (userId, field) => {
           await prisma.user.update({

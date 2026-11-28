@@ -1,13 +1,31 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  UnauthorizedException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AccountLinkingService } from './account-linking.service';
 import { AUTH_REPOSITORY } from '../repositories';
+
+jest.mock('google-auth-library', () => ({
+  OAuth2Client: jest.fn().mockImplementation(() => ({
+    verifyIdToken: jest.fn().mockResolvedValue({
+      getPayload: () => ({ sub: 'google-sub' }),
+    }),
+  })),
+}));
+jest.mock('apple-signin-auth', () => ({
+  __esModule: true,
+  default: { verifyIdToken: jest.fn().mockResolvedValue({ sub: 'apple-sub' }) },
+}));
 
 describe('AccountLinkingService', () => {
   let service: AccountLinkingService;
   let authRepository: {
     findActiveUserById: jest.Mock;
+    findSessionById: jest.Mock;
     findUserLinkedAccountInfo: jest.Mock;
     linkGoogleAccountIfUnset: jest.Mock;
     linkAppleAccountIfUnset: jest.Mock;
@@ -17,6 +35,7 @@ describe('AccountLinkingService', () => {
   beforeEach(async () => {
     const mockAuthRepository = {
       findActiveUserById: jest.fn(),
+      findSessionById: jest.fn(),
       findUserLinkedAccountInfo: jest.fn(),
       linkGoogleAccountIfUnset: jest.fn(),
       linkAppleAccountIfUnset: jest.fn(),
@@ -29,13 +48,95 @@ describe('AccountLinkingService', () => {
       providers: [
         AccountLinkingService,
         { provide: AUTH_REPOSITORY, useValue: mockAuthRepository },
-        { provide: ConfigService, useValue: { get: jest.fn() } },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn((k: string) => `cfg-${k}`) },
+        },
       ],
     }).compile();
 
     service = module.get<AccountLinkingService>(AccountLinkingService);
     authRepository = module.get(AUTH_REPOSITORY);
   });
+
+  describe.each([
+    ['google', 'linkGoogle', 'linkGoogleAccountIfUnset'],
+    ['apple', 'linkApple', 'linkAppleAccountIfUnset'],
+  ] as const)(
+    '%s linking while the email is unverified',
+    (_p, method, repoFn) => {
+      it('refuses with a 403 instead of attaching the identity', async () => {
+        authRepository[repoFn].mockResolvedValue({ count: 0 });
+        authRepository.findActiveUserById.mockResolvedValue({
+          id: 'user-1',
+          isEmailVerified: false,
+        });
+
+        await expect(service[method]('user-1', 'token')).rejects.toBeInstanceOf(
+          ForbiddenException,
+        );
+      });
+
+      it('reports an expired session instead of already linked when the caller session is gone', async () => {
+        authRepository[repoFn].mockResolvedValue({ count: 0 });
+        authRepository.findSessionById.mockResolvedValue(null);
+        authRepository.findActiveUserById.mockResolvedValue({
+          id: 'user-1',
+          isEmailVerified: true,
+        });
+
+        await expect(
+          service[method]('user-1', 'token', 'session-9'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+      });
+
+      it('reports an expired session when the caller session was soft-revoked', async () => {
+        authRepository[repoFn].mockResolvedValue({ count: 0 });
+        authRepository.findSessionById.mockResolvedValue({
+          id: 'session-9',
+          isDeleted: true,
+        });
+        authRepository.findActiveUserById.mockResolvedValue({
+          id: 'user-1',
+          isEmailVerified: true,
+        });
+
+        await expect(
+          service[method]('user-1', 'token', 'session-9'),
+        ).rejects.toBeInstanceOf(UnauthorizedException);
+      });
+
+      it('still reports an already linked provider for a verified account', async () => {
+        authRepository[repoFn].mockResolvedValue({ count: 0 });
+        authRepository.findActiveUserById.mockResolvedValue({
+          id: 'user-1',
+          isEmailVerified: true,
+        });
+
+        await expect(service[method]('user-1', 'token')).rejects.toBeInstanceOf(
+          BadRequestException,
+        );
+      });
+    },
+  );
+
+  it.each([
+    ['linkGoogle', 'linkGoogleAccountIfUnset', 'google-sub'],
+    ['linkApple', 'linkAppleAccountIfUnset', 'apple-sub'],
+  ] as const)(
+    '%s ties the write to the caller session',
+    async (method, repoFn, sub) => {
+      authRepository[repoFn].mockResolvedValue({ count: 1 });
+
+      await service[method]('user-1', 'token', 'session-9');
+
+      expect(authRepository[repoFn]).toHaveBeenCalledWith(
+        'user-1',
+        sub,
+        'session-9',
+      );
+    },
+  );
 
   describe('getLinkedAccounts', () => {
     it('should throw NotFoundException when user does not exist', async () => {

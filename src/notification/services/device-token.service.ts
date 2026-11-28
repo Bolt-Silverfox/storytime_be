@@ -4,8 +4,9 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { DeviceToken, DevicePlatform } from '@prisma/client';
+import { DeviceToken, DevicePlatform, Prisma } from '@prisma/client';
 import {
   DEVICE_TOKEN_REPOSITORY,
   IDeviceTokenRepository,
@@ -41,22 +42,47 @@ export class DeviceTokenService {
   async registerDeviceToken(
     userId: string,
     dto: RegisterDeviceDto,
+    sessionId: string | undefined,
+  ): Promise<DeviceTokenResponse> {
+    if (!sessionId) throw new UnauthorizedException('Session invalid');
+    return this.deviceTokenRepository.executeTransaction(async (tx) => {
+      if (
+        !(await this.deviceTokenRepository.lockLiveSession(
+          sessionId,
+          userId,
+          tx,
+        ))
+      ) {
+        throw new UnauthorizedException('Session invalid or expired');
+      }
+      return this.registerWithinTransaction(userId, dto, tx);
+    });
+  }
+
+  private async registerWithinTransaction(
+    userId: string,
+    dto: RegisterDeviceDto,
+    tx: Prisma.TransactionClient,
   ): Promise<DeviceTokenResponse> {
     const { token, platform, deviceName } = dto;
 
-    // Check if token already exists
-    const existingToken =
-      await this.deviceTokenRepository.findUniqueByToken(token);
+    const existingToken = await this.deviceTokenRepository.findUniqueByToken(
+      token,
+      tx,
+    );
 
     if (existingToken) {
-      // If same user, just reactivate and update
       if (existingToken.userId === userId) {
-        const updated = await this.deviceTokenRepository.updateByToken(token, {
-          isActive: true,
-          platform,
-          lastUsed: new Date(),
-          ...(deviceName !== undefined && { deviceName }),
-        });
+        const updated = await this.deviceTokenRepository.updateByToken(
+          token,
+          {
+            isActive: true,
+            platform,
+            lastUsed: new Date(),
+            ...(deviceName !== undefined && { deviceName }),
+          },
+          tx,
+        );
 
         this.logger.log(
           `Reactivated device token for user ${userId} (${platform})`,
@@ -64,15 +90,17 @@ export class DeviceTokenService {
         return this.toResponse(updated);
       }
 
-      // Token belongs to another user - reassign it
-      // (This happens when user logs out and another user logs in on same device)
-      const reassigned = await this.deviceTokenRepository.updateByToken(token, {
-        userId,
-        platform,
-        isActive: true,
-        lastUsed: new Date(),
-        ...(deviceName !== undefined && { deviceName }),
-      });
+      const reassigned = await this.deviceTokenRepository.updateByToken(
+        token,
+        {
+          userId,
+          platform,
+          isActive: true,
+          lastUsed: new Date(),
+          ...(deviceName !== undefined && { deviceName }),
+        },
+        tx,
+      );
 
       this.logger.log(
         `Reassigned device token to user ${userId} (${platform})`,
@@ -80,28 +108,22 @@ export class DeviceTokenService {
       return this.toResponse(reassigned);
     }
 
-    // Create new token (with deduplication for same device)
-    const created = await this.deviceTokenRepository.executeTransaction(
-      async (tx) => {
-        // Deactivate old tokens for same device
-        if (deviceName) {
-          await this.deviceTokenRepository.updateManyTokens(
-            {
-              userId,
-              platform,
-              deviceName,
-              isDeleted: false,
-              token: { not: token },
-            },
-            { isActive: false, isDeleted: true, deletedAt: new Date() },
-            tx,
-          );
-        }
-        return this.deviceTokenRepository.createToken(
-          { userId, token, platform, isActive: true, deviceName },
-          tx,
-        );
-      },
+    if (deviceName) {
+      await this.deviceTokenRepository.updateManyTokens(
+        {
+          userId,
+          platform,
+          deviceName,
+          isDeleted: false,
+          token: { not: token },
+        },
+        { isActive: false, isDeleted: true, deletedAt: new Date() },
+        tx,
+      );
+    }
+    const created = await this.deviceTokenRepository.createToken(
+      { userId, token, platform, isActive: true, deviceName },
+      tx,
     );
 
     this.logger.log(
