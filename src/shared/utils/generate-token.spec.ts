@@ -49,3 +49,24 @@ describe('generateResetCode', () => {
     expect(generateToken(24).token).toMatch(/^\d{6}$/);
   });
 });
+
+describe('token expiry across a daylight-saving change', () => {
+  const issuedAt = new Date('2026-03-07T17:00:00Z');
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: issuedAt });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it.each([
+    ['generateResetCode', () => generateResetCode(24)],
+    ['generateToken', () => generateToken(24)],
+  ])('%s expires exactly 24 elapsed hours after issue', (_name, issue) => {
+    expect(issue().expiresAt.getTime() - issuedAt.getTime()).toBe(
+      24 * 3_600_000,
+    );
+  });
+});
