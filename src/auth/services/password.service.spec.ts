@@ -1493,6 +1493,7 @@ describe('PasswordService', () => {
       body: unknown;
       remaining: string[];
       counter: number | undefined;
+      counterA: number | undefined;
       counterB: number | undefined;
       committed: string[];
       followUp: number;
@@ -1503,7 +1504,7 @@ describe('PasswordService', () => {
       presented: Presented,
       state: CapState,
       w: World,
-    ): Omit<Expected, 'followUp'> => {
+    ): Omit<Expected, 'followUp' | 'counterA'> => {
       if (w.db === 'cleanup-fails') {
         const healthyDb = outcomeFor(entry, presented, state, {
           ...w,
@@ -1599,7 +1600,7 @@ describe('PasswordService', () => {
           : outcome.remaining.includes('a-live')
             ? 200
             : 404;
-      return { ...outcome, followUp };
+      return { ...outcome, counterA: ownerCounter, followUp };
     };
 
     const emails = [
@@ -1706,6 +1707,7 @@ describe('PasswordService', () => {
           body: result.body,
           remaining: result.remaining,
           counter: result.counter,
+          counterA: result.counterA,
           counterB: result.counterB,
           committed: result.committed,
           followUp: result.followUp,
