@@ -549,6 +549,19 @@ describe('Authentication (e2e)', () => {
       expect([200, 404, 500]).toContain(res.status);
     });
 
+    it('answers an unknown email exactly as it answers a registered one', async () => {
+      const known = await request(server)
+        .post('/api/v1/auth/send-verification')
+        .send({ email: testUser.email });
+      const unknown = await request(server)
+        .post('/api/v1/auth/send-verification')
+        .send({ email: 'never-registered@example.com' });
+
+      expect(known.status).toBe(200);
+      expect(unknown.status).toBe(known.status);
+      expect(unknown.body).toEqual(known.body);
+    });
+
     it('should reject with invalid email format', async () => {
       const res = await request(server)
         .post('/api/v1/auth/send-verification')

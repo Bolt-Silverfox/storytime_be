@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { EmailVerificationService } from './email-verification.service';
 import { TokenService } from './token.service';
 import {
@@ -10,7 +11,6 @@ import { makeToken, makeUser } from '@/shared/testing/prisma-fixtures';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { TokenType } from '../dto/auth.dto';
 import {
-  ResourceNotFoundException,
   InvalidTokenException,
   TokenExpiredException,
 } from '@/shared/exceptions';
@@ -91,6 +91,7 @@ describe('EmailVerificationService', () => {
 
       // Act
       const result = await service.sendEmailVerification('test@example.com');
+      await new Promise(setImmediate);
 
       // Assert
       expect(result).toEqual({ message: 'Verification email sent' });
@@ -120,14 +121,63 @@ describe('EmailVerificationService', () => {
       );
     });
 
-    it('should throw ResourceNotFoundException when user is not found', async () => {
-      // Arrange
+    it('answers an unknown email exactly as it answers a known one', async () => {
+      authRepository.findUserByEmail.mockResolvedValueOnce(mockUser);
+      authRepository.deleteUserTokensByType.mockResolvedValue(undefined);
+      authRepository.createToken.mockResolvedValue(makeToken());
+      const known = await service.sendEmailVerification('test@example.com');
+
+      authRepository.findUserByEmail.mockResolvedValueOnce(null);
+      const unknown = await service.sendEmailVerification(
+        'nonexistent@example.com',
+      );
+
+      expect(unknown).toEqual(known);
+    });
+
+    it('does nothing beyond the lookup for an unknown email', async () => {
       authRepository.findUserByEmail.mockResolvedValue(null);
 
-      // Act & Assert
+      await service.sendEmailVerification('nonexistent@example.com');
+      await new Promise(setImmediate);
+
+      expect(authRepository.findUserByEmail).toHaveBeenCalledTimes(1);
+      expect(authRepository.deleteUserTokensByType).not.toHaveBeenCalled();
+      expect(authRepository.createToken).not.toHaveBeenCalled();
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('answers a known email before the token is written', async () => {
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.deleteUserTokensByType.mockReturnValue(
+        new Promise<void>(() => undefined),
+      );
+
       await expect(
-        service.sendEmailVerification('nonexistent@example.com'),
-      ).rejects.toThrow(ResourceNotFoundException);
+        service.sendEmailVerification('test@example.com'),
+      ).resolves.toEqual({ message: 'Verification email sent' });
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+    });
+
+    it('logs and swallows a failure in the background send', async () => {
+      const errorSpy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation(() => undefined);
+      authRepository.findUserByEmail.mockResolvedValue(mockUser);
+      authRepository.deleteUserTokensByType.mockRejectedValue(
+        new Error('db down for test@example.com'),
+      );
+
+      await expect(
+        service.sendEmailVerification('test@example.com'),
+      ).resolves.toEqual({ message: 'Verification email sent' });
+      await new Promise(setImmediate);
+
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+        'test@example.com',
+      );
+      errorSpy.mockRestore();
     });
 
     it('should delete existing verification tokens before creating new one', async () => {
@@ -145,6 +195,7 @@ describe('EmailVerificationService', () => {
 
       // Act
       await service.sendEmailVerification('test@example.com');
+      await new Promise(setImmediate);
 
       // Assert
       expect(callOrder).toEqual(['deleteTokens', 'createToken']);
