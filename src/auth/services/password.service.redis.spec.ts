@@ -80,9 +80,35 @@ d('PasswordService reset attempts against a real Redis', () => {
   let testNumber = 0;
   let endpoint: ScratchRedisEndpoint;
 
+  const withinDeadline = async <T>(work: Promise<T>, what: string) => {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        work,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`${what} did not answer within 2s`)),
+            2000,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const assertOnScratchDb = async (connection: Redis, what: string) => {
+    const info = String(
+      await withinDeadline(connection.call('CLIENT', 'INFO'), what),
+    );
+    if (/(?:^| )db=(\d+)/.exec(info)?.[1] !== String(endpoint.db)) {
+      throw new Error(`${what} is not on the scratch database`);
+    }
+  };
+
   beforeAll(async () => {
     endpoint = scratchRedisEndpoint(url!);
     admin = new Redis({ ...endpoint, commandTimeout: 2000 });
+    await assertOnScratchDb(admin, 'Admin connection');
     await admin.set(unrelatedKey, 'kept', 'EX', 600);
   });
 
@@ -104,7 +130,7 @@ d('PasswordService reset attempts against a real Redis', () => {
       retryStrategy: () => 2500,
       connectionName: 'rt-reset-under-test',
     });
-    await client.ping();
+    await assertOnScratchDb(client, 'Client under test');
     failWrites = false;
     tokens = new Map([
       [
@@ -209,22 +235,11 @@ d('PasswordService reset attempts against a real Redis', () => {
       sockets.forEach((socket) => socket.destroy());
       await new Promise((resolve) => proxy.close(resolve));
     };
-    let startup: NodeJS.Timeout | undefined;
     try {
-      await Promise.race([
-        proxied.ping(),
-        new Promise((_, reject) => {
-          startup = setTimeout(
-            () => reject(new Error('Reply proxy did not start')),
-            2000,
-          );
-        }),
-      ]);
+      await assertOnScratchDb(proxied, 'Reply proxy');
     } catch (error) {
       await close();
       throw error;
-    } finally {
-      clearTimeout(startup);
     }
     return {
       client: proxied,
@@ -250,6 +265,7 @@ d('PasswordService reset attempts against a real Redis', () => {
     expect(await validate()).toBe(404);
     const key = counterKey();
     expect(await admin.ttl(key)).toBeGreaterThan(3500);
+    expect(await admin.ttl(key)).toBeLessThanOrEqual(3600);
   });
 
   it('counts every one of twenty concurrent wrong guesses against the code and burns it', async () => {
@@ -271,6 +287,7 @@ d('PasswordService reset attempts against a real Redis', () => {
     await guessWrong();
 
     expect(await admin.pttl(key)).toBeGreaterThan(3_500_000);
+    expect(await admin.pttl(key)).toBeLessThanOrEqual(3_600_000);
   });
 
   it('gives a window left without a TTL an expiry when a valid code reads it', async () => {
@@ -282,6 +299,7 @@ d('PasswordService reset attempts against a real Redis', () => {
     expect(await reset()).toBe(500);
 
     expect(await admin.pttl(key)).toBeGreaterThan(3_500_000);
+    expect(await admin.pttl(key)).toBeLessThanOrEqual(3_600_000);
   });
 
   it('never writes the counter for a valid code whose password write rolls back, so the same code still works', async () => {
@@ -332,7 +350,7 @@ d('PasswordService reset attempts against a real Redis', () => {
 
     await waitFor(() => underTest.status === 'ready');
     expect(underTest.status).toBe('ready');
-    await underTest.ping();
+    await assertOnScratchDb(underTest, 'Reconnected client');
     expect(await reset()).toBe(200);
     expect(tokens.size).toBe(0);
     expect(await admin.exists(counterKey())).toBe(0);
@@ -353,7 +371,7 @@ d('PasswordService reset attempts against a real Redis', () => {
       link.reset();
       await waitFor(() => link.client.status !== 'ready');
       await waitFor(() => link.client.status === 'ready');
-      await link.client.ping();
+      await assertOnScratchDb(link.client, 'Reconnected proxy client');
 
       expect(await admin.get(key)).toBe('4');
       expect(await reset()).toBe(200);

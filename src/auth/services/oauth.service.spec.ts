@@ -31,6 +31,10 @@ jest.mock('apple-signin-auth', () => ({
 }));
 
 describe('OAuthService', () => {
+  afterEach(() => {
+    (appleSigninAuth.verifyIdToken as jest.Mock).mockReset();
+  });
+
   let service: OAuthService;
   let authRepository: jest.Mocked<IAuthRepository>;
   let tokenService: jest.Mocked<TokenService>;

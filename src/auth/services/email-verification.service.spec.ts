@@ -27,6 +27,11 @@ jest.mock('@/shared/utils/generate-token', () => ({
 }));
 
 describe('EmailVerificationService', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
   let service: EmailVerificationService;
   let authRepository: jest.Mocked<IAuthRepository>;
   let tokenService: jest.Mocked<TokenService>;

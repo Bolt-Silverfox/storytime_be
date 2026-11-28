@@ -1420,6 +1420,7 @@ describe('PasswordService', () => {
       'foreign-live': 'b-live',
       'foreign-expired': 'b-old',
     };
+    const DB_DOWN = 'db unavailable for a@example.com and b@example.com';
     const failuresKey = (code: string) =>
       `password-reset:token-failures:id-${code}`;
 
@@ -1495,7 +1496,7 @@ describe('PasswordService', () => {
           }
         return removed;
       };
-      const dbDown = () => Promise.reject(new Error('db unavailable'));
+      const dbDown = () => Promise.reject(new Error(DB_DOWN));
       (bcrypt.hash as jest.Mock).mockImplementation(
         record('bcrypt.hash', () => Promise.resolve('hashed-password')),
       );
@@ -1746,7 +1747,7 @@ describe('PasswordService', () => {
 
       if (w.db === 'lookup-fails') {
         return {
-          ...result(500, 'db unavailable', all, prior),
+          ...result(500, DB_DOWN, all, prior),
           foreignFailures: undefined,
         };
       }
@@ -1772,7 +1773,7 @@ describe('PasswordService', () => {
       }
       if (raced) return result(404, NOT_FOUND, [foreign], prior);
       if (w.db === 'write-fails' || w.db === 'sessions-fail') {
-        return result(500, 'db unavailable', all, prior);
+        return result(500, DB_DOWN, all, prior);
       }
       return result(
         200,
