@@ -683,7 +683,7 @@ describe('PasswordService', () => {
       expect(authRepository.deleteToken).toHaveBeenCalledWith('token-1');
     });
 
-    it('does not charge anything for an email with no active reset token', async () => {
+    it('charges no reset code for an email with no active reset token, only the shared unowned-miss counter', async () => {
       authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
       authRepository.findTokenByHashedToken.mockResolvedValue(null);
       for (let i = 0; i < 20; i++) {
@@ -692,7 +692,7 @@ describe('PasswordService', () => {
         );
       }
 
-      expect(counterKeys()).toHaveLength(0);
+      expect(counterKeys()).toEqual(['password-reset:unowned-misses']);
       expect(authRepository.deleteToken).not.toHaveBeenCalled();
     });
 
@@ -891,6 +891,36 @@ describe('PasswordService', () => {
       expect(fakeRedis.applied).not.toContain('del');
     });
 
+    it.each(['disconnected', 'charge-down', 'charge-late'] as const)(
+      'answers an unknown code identically whether or not the email has reset codes while redis is %s',
+      async (outage) => {
+        jest.useFakeTimers({ doNotFake: ['setImmediate', 'nextTick'] });
+        jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        authRepository.findTokenByHashedToken.mockResolvedValue(null);
+        if (outage === 'disconnected') fakeRedis.disconnect();
+        if (outage === 'charge-down') fakeRedis.chargeReply = 'down';
+        if (outage === 'charge-late') fakeRedis.chargeReply = 'late';
+        const outcome = async (codes: ReturnType<typeof makeToken>[]) => {
+          authRepository.findTokensByUserEmail.mockResolvedValue(codes);
+          const pending = validate('wrong', 'test@example.com').catch(
+            (e: HttpException) => [e.getStatus(), e.getResponse()],
+          );
+          await jest.advanceTimersByTimeAsync(5000);
+          return pending;
+        };
+
+        const withCodes = await outcome([
+          makeToken({ type: TokenType.PASSWORD_RESET }),
+        ]);
+        const withoutCodes = await outcome([]);
+
+        expect(withCodes).toEqual([503, expect.anything()]);
+        expect(withoutCodes).toEqual(withCodes);
+      },
+    );
+
     it('charges no counter for an expired code owned by another account', async () => {
       authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
       authRepository.findTokenByHashedToken.mockResolvedValue({
@@ -907,7 +937,7 @@ describe('PasswordService', () => {
       expect(
         fakeRedis.failures('password-reset:token-failures:foreign-old'),
       ).toBeUndefined();
-      expect(fakeRedis.applied).not.toContain('charge');
+      expect(counterKeys()).toEqual(['password-reset:unowned-misses']);
     });
 
     it('keeps a code locked after a lost fifth charge until just before its original expiry, with no further request', async () => {
@@ -1039,7 +1069,7 @@ describe('PasswordService', () => {
 
       await expect(
         validate('raw-reset-token', 'other@example.com'),
-      ).rejects.toThrow(new NotFoundException('Invalid reset token'));
+      ).rejects.toThrow(ServiceUnavailableException);
       fakeRedis.reconnect();
       await new Promise((resolve) => setImmediate(resolve));
 
@@ -1422,7 +1452,15 @@ describe('PasswordService', () => {
           .mockImplementation(() => undefined);
         authRepository.findUserByEmailIgnoringCase.mockResolvedValue(null);
         authRepository.findTokenByHashedToken.mockResolvedValue(mockResetToken);
-        fakeRedis.chargeReply = 'slow';
+        const ownerKey = `password-reset:token-failures:${mockResetToken.id}`;
+        const evalOnce = fakeRedis.eval;
+        jest
+          .spyOn(fakeRedis, 'eval')
+          .mockImplementation((...args) =>
+            args.includes(ownerKey)
+              ? new Promise(() => undefined)
+              : evalOnce(...args),
+          );
 
         await expect(
           attempt('raw-reset-token', 'other@example.com'),
@@ -1897,17 +1935,18 @@ describe('PasswordService', () => {
         committed,
       });
       const missed = (status: number, body: unknown, ownListed: boolean) => {
-        if (!emailOwnsA || !ownListed) {
-          return result(status, body, left(all), prior);
-        }
+        const chargesOwn = emailOwnsA && ownListed;
         const charge = chargeOutcome(w);
         if (charge !== 'ok') {
           return result(
             503,
             UNAVAILABLE,
             left(all),
-            charge === 'late' ? prior + 1 : prior,
+            charge === 'late' && chargesOwn ? prior + 1 : prior,
           );
+        }
+        if (!chargesOwn) {
+          return result(status, body, left(all), prior);
         }
         const failures = prior + 1;
         return result(

@@ -33,6 +33,7 @@ const RESET_CODE_LIFETIME_HOURS = 24;
 const RESET_CODE_LIFETIME_MS = RESET_CODE_LIFETIME_HOURS * 60 * 60 * 1000;
 const RESET_CODE_MAX_COLLISION_RETRIES = 5;
 const RESET_REDIS_TIMEOUT_MS = 2000;
+const RESET_UNOWNED_MISS_KEY = 'password-reset:unowned-misses';
 
 const normalizeEmail = (email: string) => email.toLowerCase().trim();
 
@@ -115,12 +116,14 @@ export class PasswordService {
       normalizeEmail(email),
       TokenType.PASSWORD_RESET,
     );
+    const chargedKeys =
+      ownedTokens.length > 0
+        ? ownedTokens.map((owned) => this.tokenFailuresKey(owned.id))
+        : [RESET_UNOWNED_MISS_KEY];
     let failures: number[];
     try {
       failures = await Promise.all(
-        ownedTokens.map((owned) =>
-          this.tokenFailures.chargeMiss(this.tokenFailuresKey(owned.id)),
-        ),
+        chargedKeys.map((key) => this.tokenFailures.chargeMiss(key)),
       );
     } catch (error) {
       throw this.unavailable('Failed to count reset attempt', error);
