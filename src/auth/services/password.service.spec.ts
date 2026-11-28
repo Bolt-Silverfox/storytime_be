@@ -417,6 +417,49 @@ describe('PasswordService', () => {
       expect(redis.values.size).toBe(0);
     });
 
+    it.each([
+      { label: '401', prior: 0, status: 401 },
+      { label: '429 for a miss counted past the cap', prior: 5, status: 429 },
+    ])(
+      'keeps the $label answer for an expired code when deleting it fails, and logs the failure by class only',
+      async ({ prior, status }) => {
+        const errorSpy = jest
+          .spyOn(Logger.prototype, 'error')
+          .mockImplementation(() => undefined);
+        authRepository.findTokenByHashedToken.mockResolvedValue({
+          ...mockResetToken,
+          expiresAt: new Date('2020-01-01'),
+        });
+        authRepository.deleteToken.mockRejectedValue(
+          new Error(`db down for ${mockUser.email}`),
+        );
+        redis.seed(
+          `password-reset:misses:${createHash('sha256').update(mockUser.email).digest('hex')}`,
+          prior,
+        );
+        const evalOnce = redis.eval;
+        jest
+          .spyOn(redis, 'eval')
+          .mockImplementationOnce(() => Promise.resolve(null))
+          .mockImplementation(evalOnce);
+
+        await expect(
+          service.validateResetToken('raw-reset-token', mockUser.email, {
+            token: 'raw-reset-token',
+            email: mockUser.email,
+          }),
+        ).rejects.toMatchObject({ status });
+
+        expect(errorSpy).toHaveBeenCalledWith(
+          'Failed to delete expired reset code (Error)',
+        );
+        expect(JSON.stringify(errorSpy.mock.calls)).not.toContain(
+          mockUser.email,
+        );
+        errorSpy.mockRestore();
+      },
+    );
+
     it('treats an expired token with a wrong email as unknown and keeps the token', async () => {
       authRepository.findTokenByHashedToken.mockResolvedValue({
         ...mockResetToken,
@@ -1089,7 +1132,12 @@ describe('PasswordService', () => {
       | 'clear-down'
       | 'clear-slow';
     type DbMode =
-      'ok' | 'lookup-fails' | 'write-fails' | 'sessions-fail' | 'raced';
+      | 'ok'
+      | 'lookup-fails'
+      | 'write-fails'
+      | 'sessions-fail'
+      | 'cleanup-fails'
+      | 'raced';
     type World = { redis: RedisMode; db: DbMode };
 
     const HEALTHY: World = { redis: 'up', db: 'ok' };
@@ -1220,6 +1268,7 @@ describe('PasswordService', () => {
       );
       authRepository.deleteToken.mockImplementation(
         record('deleteToken', (id: string) => {
+          if (world.db === 'cleanup-fails') return dbDown();
           removeWhere((t) => t.id === id);
           return Promise.resolve();
         }),
@@ -1388,6 +1437,14 @@ describe('PasswordService', () => {
       state: CapState,
       w: World,
     ): Omit<Expected, 'followUp'> => {
+      if (w.db === 'cleanup-fails') {
+        const healthyDb = outcomeFor(entry, presented, state, {
+          ...w,
+          db: 'ok',
+        });
+        const consumed = healthyDb.committed.length > 0 ? ['a-live'] : [];
+        return { ...healthyDb, remaining: without(...consumed) };
+      }
       const prior = priorFailures[state];
       const code = codeFor[presented];
       const foreign = presented.startsWith('foreign');
@@ -1511,6 +1568,7 @@ describe('PasswordService', () => {
       'lookup-fails',
       'write-fails',
       'sessions-fail',
+      'cleanup-fails',
       'raced',
     ];
     const redisModes: RedisMode[] = [

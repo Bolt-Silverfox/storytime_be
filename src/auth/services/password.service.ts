@@ -193,7 +193,11 @@ export class PasswordService {
         email,
         new UnauthorizedException('Reset token has expired'),
       );
-      await this.authRepository.deleteToken(resetToken.id);
+      try {
+        await this.authRepository.deleteToken(resetToken.id);
+      } catch (error) {
+        this.logFailure('Failed to delete expired reset code', error);
+      }
       throw verdict;
     }
 
